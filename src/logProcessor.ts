@@ -227,6 +227,61 @@ export class LogProcessor {
     }
 
     /**
+     * 查找第一个大于或等于指定时间的日志行
+     * 返回: { lineNumber, line, timestamp }
+     */
+    async findLineByTime(timeStr: string): Promise<{ lineNumber: number; line: LogLine } | null> {
+        const targetTime = this.parseTimeString(timeStr);
+        if (!targetTime) {
+            throw new Error('无法解析时间格式');
+        }
+
+        return new Promise((resolve, reject) => {
+            let currentLine = 0;
+            let found = false;
+
+            const stream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            rl.on('line', (line) => {
+                if (found) {
+                    return; // 已经找到，跳过后续行
+                }
+                
+                const timestamp = this.extractTimestamp(line);
+                if (timestamp && timestamp >= targetTime) {
+                    found = true;
+                    const level = this.extractLogLevel(line);
+                    resolve({
+                        lineNumber: currentLine + 1,
+                        line: {
+                            lineNumber: currentLine + 1,
+                            content: line,
+                            timestamp: timestamp,
+                            level: level
+                        }
+                    });
+                    stream.destroy(); // 停止读取
+                }
+                currentLine++;
+            });
+
+            rl.on('close', () => {
+                if (!found) {
+                    resolve(null); // 未找到
+                }
+            });
+
+            rl.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+
+    /**
      * 按行号过滤（不修改文件）
      */
     async filterByLineNumber(lineNumber: number, mode: string, keep: boolean): Promise<LogLine[]> {

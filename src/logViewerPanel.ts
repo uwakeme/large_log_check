@@ -81,6 +81,9 @@ export class LogViewerPanel {
                     case 'deleteByLine':
                         await this.deleteByLineOptions(message.lineNumber, message.mode);
                         break;
+                    case 'jumpToTime':
+                        await this.jumpToTime(message.timeStr);
+                        break;
                     case 'showMessage':
                         if (message.type === 'warning') {
                             vscode.window.showWarningMessage(message.message);
@@ -308,6 +311,49 @@ export class LogViewerPanel {
             await this.loadFile(this._fileUri);
         } catch (error) {
             vscode.window.showErrorMessage(`删除失败: ${error}`);
+        }
+    }
+
+    private async jumpToTime(timeStr: string) {
+        try {
+            vscode.window.showInformationMessage(`正在查找时间 ${timeStr} 的日志...`);
+            const result = await this._logProcessor.findLineByTime(timeStr);
+            
+            if (result) {
+                // 找到了，加载该行及周围的日志
+                const startLine = Math.max(0, result.lineNumber - 500);
+                const count = 1000; // 加载1000行
+                const lines = await this._logProcessor.readLines(startLine, count);
+                
+                this._panel.webview.postMessage({
+                    command: 'jumpToTimeResult',
+                    data: {
+                        success: true,
+                        targetLineNumber: result.lineNumber,
+                        lines: lines,
+                        startLine: startLine
+                    }
+                });
+                
+                vscode.window.showInformationMessage(`已定位到第 ${result.lineNumber} 行`);
+            } else {
+                this._panel.webview.postMessage({
+                    command: 'jumpToTimeResult',
+                    data: {
+                        success: false,
+                        message: `未找到大于或等于 ${timeStr} 的日志`
+                    }
+                });
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`定位失败: ${error}`);
+            this._panel.webview.postMessage({
+                command: 'jumpToTimeResult',
+                data: {
+                    success: false,
+                    message: `定位失败: ${error}`
+                }
+            });
         }
     }
 

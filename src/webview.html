@@ -29,7 +29,7 @@
             margin-bottom: 10px;
             display: flex;
             gap: 10px;
-            align-items: center;
+            align-items: flex-start;
             flex-wrap: wrap;
         }
         
@@ -44,27 +44,32 @@
             display: flex;
             gap: 5px;
             flex: 1;
-            min-width: 200px;
+            min-width: 100%;
+            flex-wrap: wrap;
+            align-items: center;
         }
         
         input[type="text"] {
             flex: 1;
+            min-width: 200px;
             padding: 5px 10px;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
             border-radius: 3px;
-            font-size: 13px;
+            font-size: 12px;
         }
         
         button {
-            padding: 5px 15px;
+            padding: 5px 12px;
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
             border-radius: 3px;
             cursor: pointer;
-            font-size: 13px;
+            font-size: 12px;
+            white-space: nowrap;
+            transition: background-color 0.2s;
         }
         
         button:hover {
@@ -170,6 +175,57 @@
         .log-line.debug {
             border-left: 3px solid #b267e6;
             padding-left: 5px;
+        }
+        
+        .log-line.highlight-target {
+            background-color: rgba(255, 193, 7, 0.3);
+            border-left: 3px solid #ffc107;
+            animation: highlight-pulse 0.5s ease-in-out;
+        }
+        
+        @keyframes highlight-pulse {
+            0%, 100% { background-color: rgba(255, 193, 7, 0.3); }
+            50% { background-color: rgba(255, 193, 7, 0.6); }
+        }
+        
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-10px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+        
+        /* 右键菜单样式 */
+        .context-menu {
+            position: fixed;
+            background-color: var(--vscode-menu-background);
+            border: 1px solid var(--vscode-menu-border);
+            border-radius: 3px;
+            padding: 4px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 10000;
+            min-width: 180px;
+        }
+        
+        .context-menu-item {
+            padding: 6px 16px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--vscode-menu-foreground);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .context-menu-item:hover {
+            background-color: var(--vscode-menu-selectionBackground);
+            color: var(--vscode-menu-selectionForeground);
+        }
+        
+        .context-menu-separator {
+            height: 1px;
+            background-color: var(--vscode-menu-separatorBackground);
+            margin: 4px 0;
         }
         
         .modal {
@@ -344,6 +400,21 @@
             border-radius: 2px;
             font-weight: bold;
         }
+        
+        /* 通用 select 和 option 样式 */
+        select {
+            background-color: var(--vscode-dropdown-background);
+            color: var(--vscode-dropdown-foreground);
+            border: 1px solid var(--vscode-dropdown-border);
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        select option {
+            background-color: var(--vscode-dropdown-background);
+            color: var(--vscode-dropdown-foreground);
+            padding: 5px;
+        }
     </style>
 </head>
 <body>
@@ -363,10 +434,12 @@
                 <span>正则</span>
             </label>
             <button onclick="search()">🔍 搜索</button>
-            <button onclick="showDeleteByTimeDialog()" style="background-color: #d97706;">⏰ 按时间删除</button>
-            <button onclick="showDeleteByLineDialog()" style="background-color: #dc2626;">📊 按行数删除</button>
+            <button onclick="showAdvancedSearchModal()" style="background-color: #0e7490;">🔍 高级搜索</button>
+            <button onclick="showJumpDialog()" style="background-color: #0e7490;">🎯 定位</button>
+            <button onclick="showBookmarksModal()" style="background-color: #7c3aed;">📌 书签</button>
             <button onclick="showStats()">📈 统计</button>
             <button onclick="exportLogs()">💾 导出</button>
+            <button onclick="showDeleteModal()" style="background-color: #dc2626;">🗑️ 删除</button>
             <button onclick="refresh()">🔄 刷新</button>
         </div>
     </div>
@@ -379,12 +452,25 @@
                 <span>✔️ 全选</span>
             </label>
             <span style="width: 1px; height: 20px; background-color: var(--vscode-panel-border); margin: 0 5px;"></span>
-            <label><input type="checkbox" id="filterError" checked onchange="applyFilter()"> ERROR</label>
-            <label><input type="checkbox" id="filterWarn" checked onchange="applyFilter()"> WARN</label>
-            <label><input type="checkbox" id="filterInfo" checked onchange="applyFilter()"> INFO</label>
-            <label><input type="checkbox" id="filterDebug" checked onchange="applyFilter()"> DEBUG</label>
+            <label>
+                <input type="checkbox" id="filterError" checked onchange="applyFilter()">
+                <span style="color: #f14c4c; font-weight: bold;">■</span> ERROR
+            </label>
+            <label>
+                <input type="checkbox" id="filterWarn" checked onchange="applyFilter()">
+                <span style="color: #cca700; font-weight: bold;">■</span> WARN
+            </label>
+            <label>
+                <input type="checkbox" id="filterInfo" checked onchange="applyFilter()">
+                <span style="color: #4fc1ff; font-weight: bold;">■</span> INFO
+            </label>
+            <label>
+                <input type="checkbox" id="filterDebug" checked onchange="applyFilter()">
+                <span style="color: #b267e6; font-weight: bold;">■</span> DEBUG
+            </label>
             <label><input type="checkbox" id="filterOther" checked onchange="applyFilter()"> 其他</label>
         </div>
+        <button onclick="showLegendModal()" style="margin-left: auto; padding: 3px 10px; font-size: 12px;">🎨 颜色图例</button>
     </div>
     
     <div class="log-container" id="logContainer">
@@ -460,6 +546,34 @@
         </div>
     </div>
     
+    <!-- 删除方式选择弹窗 -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>🗑️ 删除日志</h2>
+                <span class="modal-close" onclick="closeDeleteModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="display: grid; gap: 15px;">
+                    <button onclick="selectDeleteByTime()" style="padding: 15px; background-color: #d97706; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                        <span style="font-size: 20px;">⏰</span>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold;">按时间删除</div>
+                            <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">删除指定时间之前/之后的日志</div>
+                        </div>
+                    </button>
+                    <button onclick="selectDeleteByLine()" style="padding: 15px; background-color: #dc2626; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                        <span style="font-size: 20px;">📊</span>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold;">按行数删除</div>
+                            <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">删除指定行之前/之后的日志</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- 按行数删除弹窗 -->
     <div id="deleteByLineModal" class="modal">
         <div class="modal-content">
@@ -488,12 +602,167 @@
         </div>
     </div>
     
+    <!-- 快速定位弹窗 -->
+    <div id="jumpModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>🎯 快速定位</h2>
+                <span class="modal-close" onclick="closeJumpModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">定位方式：</label>
+                    <select id="jumpMode" onchange="switchJumpMode()" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 13px;">
+                        <option value="line">📍 按行号定位</option>
+                        <option value="time">⏰ 按时间定位</option>
+                    </select>
+                </div>
+                <div id="jumpByLineSection">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">行号（从1开始）：</label>
+                        <input type="number" id="jumpLineInput" placeholder="例如：1000" min="1" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                    </div>
+                </div>
+                <div id="jumpByTimeSection" style="display: none;">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">时间（支持格式：2024-01-01 12:00:00 或 2024-01-01）：</label>
+                        <input type="text" id="jumpTimeInput" placeholder="例如：2025-11-14 09:00:00" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                    </div>
+                </div>
+                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #0e7490;">
+                    <strong>💡 提示：</strong>定位后将自动跳转到对应的页面并高亮显示
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeJumpModal()">取消</button>
+                    <button onclick="confirmJump()" style="background-color: #0e7490;">定位</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 颜色图例弹窗 -->
+    <div id="legendModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>🎨 日志级别颜色图例</h2>
+                <span class="modal-close" onclick="closeLegendModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="display: grid; gap: 15px;">
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #f14c4c;">
+                        <span style="font-size: 24px; color: #f14c4c; font-weight: bold;">■</span>
+                        <div>
+                            <div style="font-weight: bold; font-size: 14px;">ERROR / FATAL / SEVERE</div>
+                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">错误级别，表示系统出现严重问题</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #cca700;">
+                        <span style="font-size: 24px; color: #cca700; font-weight: bold;">■</span>
+                        <div>
+                            <div style="font-weight: bold; font-size: 14px;">WARN / WARNING</div>
+                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">警告级别，表示潜在问题或需要关注的情况</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #4fc1ff;">
+                        <span style="font-size: 24px; color: #4fc1ff; font-weight: bold;">■</span>
+                        <div>
+                            <div style="font-weight: bold; font-size: 14px;">INFO / INFORMATION</div>
+                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">信息级别，记录正常的业务流程和状态</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #b267e6;">
+                        <span style="font-size: 24px; color: #b267e6; font-weight: bold;">■</span>
+                        <div>
+                            <div style="font-weight: bold; font-size: 14px;">DEBUG / TRACE / VERBOSE</div>
+                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">调试级别，用于详细的调试信息</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid var(--vscode-panel-border);">
+                        <span style="font-size: 24px; color: var(--vscode-descriptionForeground); font-weight: bold;">■</span>
+                        <div>
+                            <div style="font-weight: bold; font-size: 14px;">其他</div>
+                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">无法识别级别的日志行</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #ffc107;">
+                    <div style="font-weight: bold; margin-bottom: 5px;">💡 快捷键提示：</div>
+                    <div style="font-size: 12px; color: var(--vscode-descriptionForeground); line-height: 1.6;">
+                        • 右键点击日志行可复制内容/添加书签<br>
+                        • 双击日志行可快速添加书签<br>
+                        • 选中文本后右键可复制选中部分<br>
+                        • 使用过滤面板快速筛选日志级别
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 书签管理弹窗 -->
+    <div id="bookmarksModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>📌 书签列表</h2>
+                <span class="modal-close" onclick="closeBookmarksModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- 书签将动态生成 -->
+                </div>
+                <div style="margin-top: 15px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px;">
+                    💡 提示：双击日志行可添加/移除书签
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 高级搜索弹窗 -->
+    <div id="advancedSearchModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>🔍 高级搜索</h2>
+                <span class="modal-close" onclick="closeAdvancedSearchModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">关键词：</label>
+                    <input type="text" id="advSearchKeyword" placeholder="输入搜索关键词" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">时间范围：</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <input type="text" id="advSearchStartTime" placeholder="开始时间 (2024-01-01 10:00:00)" style="padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                        <input type="text" id="advSearchEndTime" placeholder="结束时间 (2024-01-01 18:00:00)" style="padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                    </div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">日志级别：</label>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <label><input type="checkbox" id="advSearchError" checked> <span style="color: #f14c4c;">■</span> ERROR</label>
+                        <label><input type="checkbox" id="advSearchWarn" checked> <span style="color: #cca700;">■</span> WARN</label>
+                        <label><input type="checkbox" id="advSearchInfo" checked> <span style="color: #4fc1ff;">■</span> INFO</label>
+                        <label><input type="checkbox" id="advSearchDebug" checked> <span style="color: #b267e6;">■</span> DEBUG</label>
+                        <label><input type="checkbox" id="advSearchOther" checked> 其他</label>
+                    </div>
+                </div>
+                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #0e7490;">
+                    <strong>💡 提示：</strong>可以单独使用关键词、时间范围或级别，也可以组合使用
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeAdvancedSearchModal()">取消</button>
+                    <button onclick="confirmAdvancedSearch()" style="background-color: #0e7490;">搜索</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script>
         const vscode = acquireVsCodeApi();
         let allLines = [];
         let currentSearchKeyword = '';
         let originalLines = []; // 保存原始数据用于过滤
         let isFiltering = false; // 标记是否在过滤模式下
+        let bookmarks = new Set(); // 书签集合，存储行号
         
         // 分页参数
         let currentPage = 1;
@@ -522,6 +791,9 @@
                     break;
                 case 'statisticsResults':
                     handleStatisticsResults(message.data);
+                    break;
+                case 'jumpToTimeResult':
+                    handleJumpToTimeResult(message.data);
                     break;
             }
         });
@@ -614,14 +886,27 @@
                 const lineDiv = document.createElement('div');
                 lineDiv.className = 'log-line';
                 
+                const actualLineNumber = line.lineNumber || startIndex + index + 1;
+                
                 // 根据日志级别添加样式
                 if (line.level) {
                     lineDiv.classList.add(line.level.toLowerCase());
                 }
                 
+                // 如果是书签行，添加书签标记
+                if (bookmarks.has(actualLineNumber)) {
+                    lineDiv.style.backgroundColor = 'rgba(255, 193, 7, 0.1)';
+                    lineDiv.style.borderRight = '3px solid #ffc107';
+                }
+                
                 const lineNumber = document.createElement('span');
                 lineNumber.className = 'log-line-number';
-                lineNumber.textContent = (line.lineNumber || startIndex + index + 1).toString();
+                lineNumber.textContent = actualLineNumber.toString();
+                
+                // 如果是书签，显示书签图标
+                if (bookmarks.has(actualLineNumber)) {
+                    lineNumber.textContent = '📌 ' + lineNumber.textContent;
+                }
                 
                 const lineContent = document.createElement('span');
                 lineContent.className = 'log-line-content';
@@ -631,6 +916,18 @@
                 // 增强高亮功能
                 let highlightedContent = highlightKeywords(content, currentSearchKeyword);
                 lineContent.innerHTML = highlightedContent;
+                
+                // 添加右键菜单复制功能
+                lineDiv.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    showContextMenu(e, content, actualLineNumber);
+                };
+                
+                // 添加双击书签功能
+                lineDiv.ondblclick = (e) => {
+                    e.stopPropagation();
+                    toggleBookmark(actualLineNumber);
+                };
                 
                 lineDiv.appendChild(lineNumber);
                 lineDiv.appendChild(lineContent);
@@ -899,6 +1196,276 @@
             document.getElementById('statsModal').style.display = 'none';
         }
         
+        // ========== 颜色图例弹窗 ==========
+        function showLegendModal() {
+            document.getElementById('legendModal').style.display = 'block';
+        }
+        
+        function closeLegendModal() {
+            document.getElementById('legendModal').style.display = 'none';
+        }
+        
+        // ========== 书签功能 ==========
+        function toggleBookmark(lineNumber) {
+            if (bookmarks.has(lineNumber)) {
+                bookmarks.delete(lineNumber);
+                console.log('➖ 移除书签:', lineNumber);
+            } else {
+                bookmarks.add(lineNumber);
+                console.log('➕ 添加书签:', lineNumber);
+            }
+            renderLines(); // 重新渲染以显示书签标记
+        }
+        
+        function showBookmarksModal() {
+            const modal = document.getElementById('bookmarksModal');
+            const list = document.getElementById('bookmarksList');
+            
+            if (bookmarks.size === 0) {
+                list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无书签<br>双击日志行可添加书签</div>';
+            } else {
+                const bookmarkArray = Array.from(bookmarks).sort((a, b) => a - b);
+                list.innerHTML = bookmarkArray.map(lineNum => {
+                    const line = allLines.find(l => l.lineNumber === lineNum);
+                    const content = line ? (line.content || line) : '（已不存在）';
+                    const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+                    
+                    return `
+                        <div style="padding: 10px; margin-bottom: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #ffc107; cursor: pointer; transition: background-color 0.2s;"
+                             onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'"
+                             onmouseout="this.style.backgroundColor='var(--vscode-editorWidget-background)'"
+                             onclick="jumpToBookmark(${lineNum})">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">📌 行 ${lineNum}</span>
+                                <button onclick="event.stopPropagation(); removeBookmark(${lineNum})" style="padding: 2px 8px; font-size: 11px; background-color: #dc2626;">删除</button>
+                            </div>
+                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                ${escapeHtml(preview)}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            modal.style.display = 'block';
+        }
+        
+        function closeBookmarksModal() {
+            document.getElementById('bookmarksModal').style.display = 'none';
+        }
+        
+        function jumpToBookmark(lineNumber) {
+            closeBookmarksModal();
+            jumpToLine(lineNumber);
+        }
+        
+        function removeBookmark(lineNumber) {
+            bookmarks.delete(lineNumber);
+            showBookmarksModal(); // 刷新书签列表
+            renderLines(); // 重新渲染
+        }
+        
+        // ========== 复制功能 ==========
+        let currentContextMenu = null;
+        
+        function showContextMenu(event, content, lineNumber) {
+            // 移除旧的菜单
+            if (currentContextMenu) {
+                document.body.removeChild(currentContextMenu);
+            }
+            
+            // 获取选中的文本
+            const selectedText = window.getSelection().toString();
+            
+            // 创建菜单
+            const menu = document.createElement('div');
+            menu.className = 'context-menu';
+            
+            // 复制选中文本
+            if (selectedText) {
+                const copySelectedItem = document.createElement('div');
+                copySelectedItem.className = 'context-menu-item';
+                copySelectedItem.innerHTML = '<span>📋</span><span>复制选中内容</span>';
+                copySelectedItem.onclick = () => {
+                    copyToClipboard(selectedText);
+                    closeContextMenu();
+                };
+                menu.appendChild(copySelectedItem);
+                
+                // 分隔线
+                const separator1 = document.createElement('div');
+                separator1.className = 'context-menu-separator';
+                menu.appendChild(separator1);
+            }
+            
+            // 复制整行
+            const copyLineItem = document.createElement('div');
+            copyLineItem.className = 'context-menu-item';
+            copyLineItem.innerHTML = '<span>📄</span><span>复制整行</span>';
+            copyLineItem.onclick = () => {
+                copyToClipboard(content);
+                closeContextMenu();
+            };
+            menu.appendChild(copyLineItem);
+            
+            // 分隔线
+            const separator2 = document.createElement('div');
+            separator2.className = 'context-menu-separator';
+            menu.appendChild(separator2);
+            
+            // 添加/移除书签
+            const bookmarkItem = document.createElement('div');
+            bookmarkItem.className = 'context-menu-item';
+            const isBookmarked = bookmarks.has(lineNumber);
+            bookmarkItem.innerHTML = isBookmarked 
+                ? '<span>❌</span><span>移除书签</span>' 
+                : '<span>📌</span><span>添加书签</span>';
+            bookmarkItem.onclick = () => {
+                toggleBookmark(lineNumber);
+                closeContextMenu();
+            };
+            menu.appendChild(bookmarkItem);
+            
+            // 定位到此行
+            const jumpItem = document.createElement('div');
+            jumpItem.className = 'context-menu-item';
+            jumpItem.innerHTML = '<span>🎯</span><span>定位到第 ' + lineNumber + ' 行</span>';
+            jumpItem.onclick = () => {
+                jumpToLine(lineNumber);
+                closeContextMenu();
+            };
+            menu.appendChild(jumpItem);
+            
+            // 设置位置
+            menu.style.left = event.pageX + 'px';
+            menu.style.top = event.pageY + 'px';
+            
+            document.body.appendChild(menu);
+            currentContextMenu = menu;
+            
+            // 点击其他地方关闭菜单
+            setTimeout(() => {
+                document.addEventListener('click', closeContextMenu);
+            }, 0);
+        }
+        
+        function closeContextMenu() {
+            if (currentContextMenu) {
+                document.body.removeChild(currentContextMenu);
+                currentContextMenu = null;
+            }
+            document.removeEventListener('click', closeContextMenu);
+        }
+        
+        function copyToClipboard(text) {
+            // 使用 Clipboard API
+            navigator.clipboard.writeText(text).then(() => {
+                // 显示复制成功提示
+                showCopyToast();
+            }).catch(err => {
+                console.error('复制失败:', err);
+            });
+        }
+        
+        function showCopyToast() {
+            const toast = document.createElement('div');
+            toast.textContent = '✅ 已复制到剪贴板';
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background-color: #10b981;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+                z-index: 10000;
+                animation: fadeInOut 2s ease-in-out;
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                document.body.removeChild(toast);
+            }, 2000);
+        }
+        
+        // ========== 高级搜索 ==========
+        function showAdvancedSearchModal() {
+            document.getElementById('advancedSearchModal').style.display = 'block';
+        }
+        
+        function closeAdvancedSearchModal() {
+            document.getElementById('advancedSearchModal').style.display = 'none';
+        }
+        
+        function confirmAdvancedSearch() {
+            const keyword = document.getElementById('advSearchKeyword').value.trim();
+            const startTime = document.getElementById('advSearchStartTime').value.trim();
+            const endTime = document.getElementById('advSearchEndTime').value.trim();
+            
+            const levels = [];
+            if (document.getElementById('advSearchError').checked) levels.push('ERROR');
+            if (document.getElementById('advSearchWarn').checked) levels.push('WARN');
+            if (document.getElementById('advSearchInfo').checked) levels.push('INFO');
+            if (document.getElementById('advSearchDebug').checked) levels.push('DEBUG');
+            if (document.getElementById('advSearchOther').checked) levels.push('OTHER');
+            
+            console.log('🔍 高级搜索:', { keyword, startTime, endTime, levels });
+            
+            // 在已加载的数据中进行过滤
+            let results = [...allLines];
+            
+            // 过滤关键词
+            if (keyword) {
+                results = results.filter(line => {
+                    const content = line.content || line;
+                    return content.includes(keyword);
+                });
+            }
+            
+            // 过滤时间范围
+            if (startTime || endTime) {
+                results = results.filter(line => {
+                    if (!line.timestamp) return false;
+                    const lineTime = new Date(line.timestamp);
+                    
+                    if (startTime) {
+                        const start = new Date(startTime);
+                        if (lineTime < start) return false;
+                    }
+                    
+                    if (endTime) {
+                        const end = new Date(endTime);
+                        if (lineTime > end) return false;
+                    }
+                    
+                    return true;
+                });
+            }
+            
+            // 过滤级别
+            if (levels.length > 0 && levels.length < 5) {
+                results = results.filter(line => {
+                    const level = line.level ? line.level.toUpperCase() : 'OTHER';
+                    return levels.includes(level);
+                });
+            }
+            
+            console.log('✅ 搜索结果:', results.length, '条');
+            
+            allLines = results;
+            currentPage = 1;
+            isFiltering = true;
+            updatePagination();
+            renderLines();
+            
+            closeAdvancedSearchModal();
+            
+            if (results.length === 0) {
+                alert('未找到符合条件的日志！');
+            }
+        }
+        
         // 按类名筛选
         function filterByClassName(className) {
             console.log('🔍 按类名筛选:', className);
@@ -944,6 +1511,25 @@
             document.getElementById('deleteTimeInput').value = '';
         }
         
+        // ========== 删除方式选择 ==========
+        function showDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'block';
+        }
+        
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+        }
+        
+        function selectDeleteByTime() {
+            closeDeleteModal();
+            showDeleteByTimeDialog();
+        }
+        
+        function selectDeleteByLine() {
+            closeDeleteModal();
+            showDeleteByLineDialog();
+        }
+        
         function confirmDeleteByTime() {
             const timeStr = document.getElementById('deleteTimeInput').value.trim();
             const mode = document.getElementById('deleteTimeMode').value;
@@ -975,6 +1561,144 @@
         function closeDeleteByLineModal() {
             document.getElementById('deleteByLineModal').style.display = 'none';
             document.getElementById('deleteLineInput').value = '';
+        }
+        
+        function showJumpDialog() {
+            document.getElementById('jumpModal').style.display = 'block';
+            document.getElementById('jumpLineInput').focus();
+        }
+        
+        function closeJumpModal() {
+            document.getElementById('jumpModal').style.display = 'none';
+            document.getElementById('jumpLineInput').value = '';
+            document.getElementById('jumpTimeInput').value = '';
+        }
+        
+        function switchJumpMode() {
+            const mode = document.getElementById('jumpMode').value;
+            const lineSection = document.getElementById('jumpByLineSection');
+            const timeSection = document.getElementById('jumpByTimeSection');
+            
+            if (mode === 'line') {
+                lineSection.style.display = 'block';
+                timeSection.style.display = 'none';
+                document.getElementById('jumpLineInput').focus();
+            } else {
+                lineSection.style.display = 'none';
+                timeSection.style.display = 'block';
+                document.getElementById('jumpTimeInput').focus();
+            }
+        }
+        
+        function confirmJump() {
+            const mode = document.getElementById('jumpMode').value;
+            
+            if (mode === 'line') {
+                const lineNumber = parseInt(document.getElementById('jumpLineInput').value);
+                if (!lineNumber || lineNumber < 1) {
+                    alert('请输入有效的行号（大于0的整数）！');
+                    return;
+                }
+                if (lineNumber > allLines.length) {
+                    alert(`行号超出范围！当前总行数：${allLines.length}`);
+                    return;
+                }
+                jumpToLine(lineNumber);
+            } else {
+                const timeStr = document.getElementById('jumpTimeInput').value.trim();
+                if (!timeStr) {
+                    alert('请输入时间！');
+                    return;
+                }
+                if (!/^\d{4}-\d{2}-\d{2}/.test(timeStr)) {
+                    alert('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
+                    return;
+                }
+                jumpToTime(timeStr);
+            }
+            
+            closeJumpModal();
+        }
+        
+        function jumpToLine(lineNumber) {
+            console.log('🎯 定位到行号:', lineNumber);
+            
+            // 计算目标行所在的页面
+            const targetPage = Math.ceil(lineNumber / pageSize);
+            currentPage = targetPage;
+            updatePagination();
+            renderLines();
+            
+            // 等待渲染完成后高亮目标行
+            setTimeout(() => {
+                highlightTargetLine(lineNumber);
+            }, 100);
+        }
+        
+        function jumpToTime(timeStr) {
+            console.log('🎯 定位到时间:', timeStr);
+            
+            // 直接请求后端查找
+            vscode.postMessage({
+                command: 'jumpToTime',
+                timeStr: timeStr
+            });
+        }
+        
+        function handleJumpToTimeResult(data) {
+            if (data.success) {
+                console.log('✅ 找到目标时间的日志，行号:', data.targetLineNumber);
+                
+                // 合并新加载的数据
+                const newLines = data.lines;
+                const startLine = data.startLine;
+                
+                // 更新 allLines：如果新数据覆盖了已加载的范围，则合并
+                if (allLines.length === 0 || startLine >= allLines.length) {
+                    // 新数据在已加载数据之后，直接追加
+                    allLines = allLines.concat(newLines);
+                } else {
+                    // 替换或插入新数据
+                    for (let i = 0; i < newLines.length; i++) {
+                        const globalIndex = startLine + i;
+                        if (globalIndex < allLines.length) {
+                            allLines[globalIndex] = newLines[i];
+                        } else {
+                            allLines.push(newLines[i]);
+                        }
+                    }
+                }
+                
+                // 跳转到目标行
+                jumpToLine(data.targetLineNumber);
+            } else {
+                console.error('❌ 未找到目标时间的日志');
+                alert(data.message || '未找到大于或等于该时间的日志！');
+            }
+        }
+        
+        function highlightTargetLine(lineNumber) {
+            // 移除之前的高亮
+            document.querySelectorAll('.log-line.highlight-target').forEach(el => {
+                el.classList.remove('highlight-target');
+            });
+            
+            // 查找目标行
+            const logLines = document.querySelectorAll('.log-line');
+            const startIndex = (currentPage - 1) * pageSize;
+            const indexInPage = lineNumber - startIndex - 1;
+            
+            if (indexInPage >= 0 && indexInPage < logLines.length) {
+                const targetLine = logLines[indexInPage];
+                targetLine.classList.add('highlight-target');
+                // 滚动到可见区域
+                targetLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // 3秒后移除高亮
+                setTimeout(() => {
+                    targetLine.classList.remove('highlight-target');
+                }, 3000);
+            }
         }
         
         function confirmDeleteByLine() {
