@@ -1,0 +1,69 @@
+{
+  "name": "big-log-viewer",
+  "displayName": "大日志文件查看器",
+  "description": "专业的大日志文件查看和处理工具，支持按时间、行数删除日志",
+  "version": "1.0.0",
+  "publisher": "your-publisher-name",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:big-log-viewer.openLogFile",
+    "onLanguage:log"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "big-log-viewer.openLogFile",
+        "title": "打开大日志文件",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.deleteByTime",
+        "title": "按时间删除日志",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.deleteByLine",
+        "title": "按行数删除日志",
+        "category": "日志查看器"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .log || resourceExtname == .txt",
+          "command": "big-log-viewer.openLogFile",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "when": "resourceExtname == .log || resourceExtname == .txt",
+          "command": "big-log-viewer.openLogFile",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {}
+}

@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日志查看器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            padding: 10px;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .toolbar {
+            background-color: var(--vscode-editorWidget-background);
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .file-info {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 5px;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 5px 10px;
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        
+        button {
+            padding: 5px 15px;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        
+        .log-container {
+            flex: 1;
+            overflow-y: auto;
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 5px;
+            padding: 10px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        
+        .log-line {
+            padding: 2px 0;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .log-line:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+        
+        .log-line-number {
+            display: inline-block;
+            width: 60px;
+            color: var(--vscode-editorLineNumber-foreground);
+            user-select: none;
+            text-align: right;
+            padding-right: 10px;
+        }
+        
+        .log-line-content {
+            display: inline;
+        }
+        
+        .highlight {
+            background-color: var(--vscode-editor-findMatchHighlightBackground);
+            color: var(--vscode-editor-findMatchHighlightForeground);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--vscode-descriptionForeground);
+        }
+        
+        .stats {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+        
+        .filter-panel {
+            background-color: var(--vscode-editorWidget-background);
+            padding: 8px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            cursor: pointer;
+        }
+        
+        .log-line.error {
+            border-left: 3px solid #f14c4c;
+            padding-left: 5px;
+        }
+        
+        .log-line.warn {
+            border-left: 3px solid #cca700;
+            padding-left: 5px;
+        }
+        
+        .log-line.info {
+            border-left: 3px solid #4fc1ff;
+            padding-left: 5px;
+        }
+        
+        .log-line.debug {
+            border-left: 3px solid #b267e6;
+            padding-left: 5px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-content {
+            background-color: var(--vscode-editor-background);
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 5px;
+            width: 60%;
+            max-width: 600px;
+        }
+        
+        .modal-close {
+            color: var(--vscode-foreground);
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stats-card {
+            background-color: var(--vscode-editorWidget-background);
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid var(--vscode-panel-border);
+        }
+        
+        .stats-card h3 {
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: var(--vscode-descriptionForeground);
+        }
+        
+        .stats-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--vscode-foreground);
+        }
+        
+        /* 分页样式 */
+        .pagination {
+            background-color: var(--vscode-editorWidget-background);
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .pagination button {
+            min-width: 35px;
+            padding: 5px 10px;
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .pagination .page-info {
+            font-size: 13px;
+            color: var(--vscode-descriptionForeground);
+            margin: 0 10px;
+            font-weight: 500;
+        }
+        
+        .pagination input[type="number"] {
+            width: 60px;
+            padding: 3px 5px;
+            text-align: center;
+        }
+        
+        .pagination select {
+            padding: 6px 8px;
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .pagination select option {
+            background-color: var(--vscode-dropdown-background);
+            color: var(--vscode-dropdown-foreground);
+            padding: 5px;
+        }
+        
+        /* 增强高亮样式 */
+        .highlight {
+            background-color: #fbbf24;
+            color: #000;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: bold;
+        }
+        
+        .highlight-error {
+            background-color: #f14c4c;
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: bold;
+        }
+        
+        .highlight-warn {
+            background-color: #cca700;
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: bold;
+        }
+        
+        .highlight-info {
+            background-color: #4fc1ff;
+            color: #000;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: bold;
+        }
+        
+        .highlight-time {
+            background-color: #b267e6;
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div class="file-info">
+            <div><strong>文件:</strong> <span id="fileName">未加载</span></div>
+            <div class="stats">
+                <span><strong>大小:</strong> <span id="fileSize">0</span>MB</span>
+                <span style="margin-left: 15px;"><strong>总行数:</strong> <span id="totalLines">0</span></span>
+                <span style="margin-left: 15px;"><strong>已加载:</strong> <span id="loadedLines">0</span></span>
+            </div>
+        </div>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="搜索日志内容...">
+            <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="regexMode">
+                <span>正则</span>
+            </label>
+            <button onclick="search()">🔍 搜索</button>
+            <button onclick="showDeleteByTimeDialog()" style="background-color: #d97706;">⏰ 按时间删除</button>
+            <button onclick="showDeleteByLineDialog()" style="background-color: #dc2626;">📊 按行数删除</button>
+            <button onclick="showStats()">📈 统计</button>
+            <button onclick="exportLogs()">💾 导出</button>
+            <button onclick="refresh()">🔄 刷新</button>
+        </div>
+    </div>
+    
+    <div class="filter-panel">
+        <span style="font-size: 12px; font-weight: bold;">日志级别:</span>
+        <div class="checkbox-group">
+            <label style="font-weight: bold; color: var(--vscode-button-background);">
+                <input type="checkbox" id="filterAll" checked onchange="toggleAll()">
+                <span>✔️ 全选</span>
+            </label>
+            <span style="width: 1px; height: 20px; background-color: var(--vscode-panel-border); margin: 0 5px;"></span>
+            <label><input type="checkbox" id="filterError" checked onchange="applyFilter()"> ERROR</label>
+            <label><input type="checkbox" id="filterWarn" checked onchange="applyFilter()"> WARN</label>
+            <label><input type="checkbox" id="filterInfo" checked onchange="applyFilter()"> INFO</label>
+            <label><input type="checkbox" id="filterDebug" checked onchange="applyFilter()"> DEBUG</label>
+            <label><input type="checkbox" id="filterOther" checked onchange="applyFilter()"> 其他</label>
+        </div>
+    </div>
+    
+    <div class="log-container" id="logContainer">
+        <div class="loading">等待加载日志文件...</div>
+    </div>
+    
+    <!-- 分页控件 -->
+    <div class="pagination" id="pagination" style="display: none;">
+        <button onclick="goToFirstPage()" id="firstPageBtn">⏮️ 首页</button>
+        <button onclick="goToPrevPage()" id="prevPageBtn">◀️ 上一页</button>
+        <span class="page-info">
+            第 <input type="number" id="currentPageInput" min="1" value="1" onchange="goToPage(this.value)"> 
+            / <span id="totalPages">1</span> 页
+        </span>
+        <button onclick="goToNextPage()" id="nextPageBtn">下一页 ▶️</button>
+        <button onclick="goToLastPage()" id="lastPageBtn">末页 ⏭️</button>
+        <span class="page-info" style="margin-left: 20px;">
+            <span style="font-size: 14px; font-weight: 600;">每页显示：</span>
+            <select id="pageSizeSelect" onchange="changePageSize(this.value)">
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+            </select>
+            <span style="font-size: 14px; font-weight: 600;">行</span>
+        </span>
+        <span class="page-info">
+            共 <span id="totalLinesInPage">0</span> 行
+        </span>
+    </div>
+    
+    <!-- 统计弹窗 -->
+    <div id="statsModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeStatsModal()">&times;</span>
+            <h2>日志统计信息</h2>
+            <div class="stats-grid" id="statsGrid">
+                <!-- 统计信息将动态生成 -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- 按时间删除弹窗 -->
+    <div id="deleteByTimeModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeDeleteByTimeModal()">&times;</span>
+            <h2>⏰ 按时间删除日志</h2>
+            <div style="margin-top: 20px;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">删除模式：</label>
+                    <select id="deleteTimeMode" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                        <option value="before">删除指定时间之前的日志</option>
+                        <option value="after">删除指定时间之后的日志</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">时间（支持格式：2024-01-01 12:00:00 或 2024-01-01）：</label>
+                    <input type="text" id="deleteTimeInput" placeholder="例如：2024-01-01 12:00:00" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #d97706;">
+                    <strong>⚠️ 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeDeleteByTimeModal()">取消</button>
+                    <button onclick="confirmDeleteByTime()" style="background-color: #d97706;">确认删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 按行数删除弹窗 -->
+    <div id="deleteByLineModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeDeleteByLineModal()">&times;</span>
+            <h2>📊 按行数删除日志</h2>
+            <div style="margin-top: 20px;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">删除模式：</label>
+                    <select id="deleteLineMode" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                        <option value="before">删除指定行之前的日志</option>
+                        <option value="after">删除指定行之后的日志</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">行号（从1开始）：</label>
+                    <input type="number" id="deleteLineInput" placeholder="例如：1000" min="1" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #dc2626;">
+                    <strong>⚠️ 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeDeleteByLineModal()">取消</button>
+                    <button onclick="confirmDeleteByLine()" style="background-color: #dc2626;">确认删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const vscode = acquireVsCodeApi();
+        let allLines = [];
+        let currentSearchKeyword = '';
+        let originalLines = []; // 保存原始数据用于过滤
+        
+        // 分页参数
+        let currentPage = 1;
+        let pageSize = 100;
+        let totalPages = 1;
+        
+        // 数据加载状态
+        let totalLinesInFile = 0;
+        let allDataLoaded = false;
+        
+        window.addEventListener('message', event => {
+            const message = event.data;
+            
+            switch (message.command) {
+                case 'fileLoaded':
+                    handleFileLoaded(message.data);
+                    break;
+                case 'moreLines':
+                    handleMoreLines(message.data);
+                    break;
+                case 'searchResults':
+                    handleSearchResults(message.data);
+                    break;
+                case 'filterResults':
+                    handleFilterResults(message.data);
+                    break;
+                case 'statisticsResults':
+                    handleStatisticsResults(message.data);
+                    break;
+            }
+        });
+        
+        function handleFileLoaded(data) {
+            document.getElementById('fileName').textContent = data.fileName;
+            document.getElementById('fileSize').textContent = data.fileSize;
+            document.getElementById('totalLines').textContent = data.totalLines;
+            
+            totalLinesInFile = data.totalLines;
+            allDataLoaded = data.allLoaded || false;
+            
+            allLines = data.lines;
+            originalLines = [...data.lines];
+            currentPage = 1;
+            updatePagination();
+            renderLines();
+            
+            // 如果数据未全部加载，显示提示
+            if (!allDataLoaded && allLines.length < totalLinesInFile) {
+                showLoadMoreHint();
+            }
+        }
+        
+        function handleMoreLines(data) {
+            allLines = allLines.concat(data.lines);
+            originalLines = originalLines.concat(data.lines);
+            
+            // 检查是否已加载全部数据
+            if (allLines.length >= totalLinesInFile) {
+                allDataLoaded = true;
+            }
+            
+            updatePagination();
+            renderLines();
+        }
+        
+        function handleSearchResults(data) {
+            currentSearchKeyword = data.keyword;
+            allLines = data.results;
+            currentPage = 1;
+            updatePagination();
+            renderLines();
+        }
+        
+        function handleFilterResults(data) {
+            allLines = data.results;
+            currentPage = 1;
+            updatePagination();
+            renderLines();
+        }
+        
+        function handleStatisticsResults(data) {
+            showStatsModal(data);
+        }
+        
+        function renderLines() {
+            const container = document.getElementById('logContainer');
+            container.innerHTML = '';
+            
+            if (allLines.length === 0) {
+                container.innerHTML = '<div class="loading">没有日志数据</div>';
+                document.getElementById('pagination').style.display = 'none';
+                return;
+            }
+            
+            // 计算分页
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, allLines.length);
+            const pageLines = allLines.slice(startIndex, endIndex);
+            
+            pageLines.forEach((line, index) => {
+                const lineDiv = document.createElement('div');
+                lineDiv.className = 'log-line';
+                
+                // 根据日志级别添加样式
+                if (line.level) {
+                    lineDiv.classList.add(line.level.toLowerCase());
+                }
+                
+                const lineNumber = document.createElement('span');
+                lineNumber.className = 'log-line-number';
+                lineNumber.textContent = (line.lineNumber || startIndex + index + 1).toString();
+                
+                const lineContent = document.createElement('span');
+                lineContent.className = 'log-line-content';
+                
+                const content = line.content || line;
+                
+                // 增强高亮功能
+                let highlightedContent = highlightKeywords(content, currentSearchKeyword);
+                lineContent.innerHTML = highlightedContent;
+                
+                lineDiv.appendChild(lineNumber);
+                lineDiv.appendChild(lineContent);
+                container.appendChild(lineDiv);
+            });
+            
+            document.getElementById('loadedLines').textContent = allLines.length;
+            document.getElementById('pagination').style.display = 'flex';
+        }
+        
+        // 增强的关键词高亮功能
+        function highlightKeywords(content, keyword) {
+            if (!content) return '';
+            
+            let result = escapeHtml(content);
+            
+            // 高亮日志级别
+            result = result.replace(/\b(ERROR)\b/gi, '<span class="highlight-error">$1</span>');
+            result = result.replace(/\b(WARN|WARNING)\b/gi, '<span class="highlight-warn">$1</span>');
+            result = result.replace(/\b(INFO)\b/gi, '<span class="highlight-info">$1</span>');
+            
+            // 高亮时间戳
+            result = result.replace(/(\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?)/g, '<span class="highlight-time">$1</span>');
+            result = result.replace(/(\[\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?\])/g, '<span class="highlight-time">$1</span>');
+            
+            // 高亮搜索关键词
+            if (keyword) {
+                const regex = new RegExp('(' + escapeRegex(keyword) + ')', 'gi');
+                result = result.replace(regex, '<span class="highlight">$1</span>');
+            }
+            
+            return result;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function escapeRegex(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        
+        function search() {
+            const keyword = document.getElementById('searchInput').value;
+            const isRegex = document.getElementById('regexMode').checked;
+            
+            if (!keyword) {
+                vscode.postMessage({
+                    command: 'refresh'
+                });
+                currentSearchKeyword = '';
+                return;
+            }
+            
+            if (isRegex) {
+                vscode.postMessage({
+                    command: 'regexSearch',
+                    pattern: keyword,
+                    flags: 'gi'
+                });
+            } else {
+                vscode.postMessage({
+                    command: 'search',
+                    keyword: keyword
+                });
+            }
+        }
+        
+        function applyFilter() {
+            const levels = [];
+            const errorChecked = document.getElementById('filterError').checked;
+            const warnChecked = document.getElementById('filterWarn').checked;
+            const infoChecked = document.getElementById('filterInfo').checked;
+            const debugChecked = document.getElementById('filterDebug').checked;
+            const otherChecked = document.getElementById('filterOther').checked;
+            
+            if (errorChecked) { levels.push('ERROR'); }
+            if (warnChecked) { levels.push('WARN'); }
+            if (infoChecked) { levels.push('INFO'); }
+            if (debugChecked) { levels.push('DEBUG'); }
+            
+            console.log('Filter applied:', levels);
+            console.log('Checkboxes:', { errorChecked, warnChecked, infoChecked, debugChecked, otherChecked });
+            
+            // 更新全选框状态
+            const allChecked = errorChecked && warnChecked && infoChecked && debugChecked && otherChecked;
+            const allUnchecked = !errorChecked && !warnChecked && !infoChecked && !debugChecked && !otherChecked;
+            const filterAllCheckbox = document.getElementById('filterAll');
+            
+            if (allChecked) {
+                filterAllCheckbox.checked = true;
+                filterAllCheckbox.indeterminate = false;
+            } else if (allUnchecked) {
+                filterAllCheckbox.checked = false;
+                filterAllCheckbox.indeterminate = false;
+            } else {
+                filterAllCheckbox.indeterminate = true;
+            }
+            
+            // 如果全部选中或全部不选，刷新显示所有数据
+            if (allChecked) {
+                console.log('All checked, refreshing...');
+                if (!currentSearchKeyword) {
+                    vscode.postMessage({ command: 'refresh' });
+                }
+                return;
+            }
+            
+            // 如果全部不选，显示空
+            if (levels.length === 0) {
+                console.log('No levels selected');
+                allLines = [];
+                renderLines();
+                return;
+            }
+            
+            // 发送筛选请求
+            console.log('Sending filter request:', levels);
+            vscode.postMessage({
+                command: 'filterByLevel',
+                levels: levels
+            });
+        }
+        
+        function toggleAll() {
+            const filterAll = document.getElementById('filterAll');
+            const checked = filterAll.checked;
+            
+            document.getElementById('filterError').checked = checked;
+            document.getElementById('filterWarn').checked = checked;
+            document.getElementById('filterInfo').checked = checked;
+            document.getElementById('filterDebug').checked = checked;
+            document.getElementById('filterOther').checked = checked;
+            
+            filterAll.indeterminate = false;
+            applyFilter();
+        }
+        
+        function showStats() {
+            vscode.postMessage({
+                command: 'getStatistics'
+            });
+        }
+        
+        function showStatsModal(stats) {
+            const grid = document.getElementById('statsGrid');
+            grid.innerHTML = `
+                <div class="stats-card">
+                    <h3>总行数</h3>
+                    <div class="value">${stats.totalLines}</div>
+                </div>
+                <div class="stats-card">
+                    <h3>ERROR</h3>
+                    <div class="value" style="color: #f14c4c;">${stats.errorCount}</div>
+                </div>
+                <div class="stats-card">
+                    <h3>WARN</h3>
+                    <div class="value" style="color: #cca700;">${stats.warnCount}</div>
+                </div>
+                <div class="stats-card">
+                    <h3>INFO</h3>
+                    <div class="value" style="color: #4fc1ff;">${stats.infoCount}</div>
+                </div>
+                <div class="stats-card">
+                    <h3>DEBUG</h3>
+                    <div class="value" style="color: #b267e6;">${stats.debugCount}</div>
+                </div>
+                <div class="stats-card">
+                    <h3>其他</h3>
+                    <div class="value">${stats.otherCount}</div>
+                </div>
+            `;
+            
+            if (stats.timeRange && stats.timeRange.start) {
+                grid.innerHTML += `
+                    <div class="stats-card" style="grid-column: 1 / -1;">
+                        <h3>时间范围</h3>
+                        <div style="font-size: 14px;">
+                            ${new Date(stats.timeRange.start).toLocaleString()} - 
+                            ${new Date(stats.timeRange.end).toLocaleString()}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('statsModal').style.display = 'block';
+        }
+        
+        function closeStatsModal() {
+            document.getElementById('statsModal').style.display = 'none';
+        }
+        
+        function showDeleteByTimeDialog() {
+            document.getElementById('deleteByTimeModal').style.display = 'block';
+        }
+        
+        function closeDeleteByTimeModal() {
+            document.getElementById('deleteByTimeModal').style.display = 'none';
+            document.getElementById('deleteTimeInput').value = '';
+        }
+        
+        function confirmDeleteByTime() {
+            const timeStr = document.getElementById('deleteTimeInput').value.trim();
+            const mode = document.getElementById('deleteTimeMode').value;
+            
+            if (!timeStr) {
+                alert('请输入时间！');
+                return;
+            }
+            
+            // 简单验证时间格式
+            if (!/^\d{4}-\d{2}-\d{2}/.test(timeStr)) {
+                alert('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
+                return;
+            }
+            
+            vscode.postMessage({
+                command: 'deleteByTime',
+                timeStr: timeStr,
+                mode: mode
+            });
+            
+            closeDeleteByTimeModal();
+        }
+        
+        function showDeleteByLineDialog() {
+            document.getElementById('deleteByLineModal').style.display = 'block';
+        }
+        
+        function closeDeleteByLineModal() {
+            document.getElementById('deleteByLineModal').style.display = 'none';
+            document.getElementById('deleteLineInput').value = '';
+        }
+        
+        function confirmDeleteByLine() {
+            const lineNumber = parseInt(document.getElementById('deleteLineInput').value);
+            const mode = document.getElementById('deleteLineMode').value;
+            
+            if (!lineNumber || lineNumber < 1) {
+                alert('请输入有效的行号（大于0的整数）！');
+                return;
+            }
+            
+            vscode.postMessage({
+                command: 'deleteByLine',
+                lineNumber: lineNumber,
+                mode: mode
+            });
+            
+            closeDeleteByLineModal();
+        }
+        
+        function exportLogs() {
+            vscode.postMessage({
+                command: 'exportLogs',
+                lines: allLines
+            });
+        }
+        
+        function refresh() {
+            currentSearchKeyword = '';
+            document.getElementById('searchInput').value = '';
+            currentPage = 1;
+            vscode.postMessage({
+                command: 'refresh'
+            });
+        }
+        
+        // 分页功能
+        function updatePagination() {
+            totalPages = Math.ceil(allLines.length / pageSize);
+            if (totalPages < 1) totalPages = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            
+            document.getElementById('currentPageInput').value = currentPage;
+            document.getElementById('totalPages').textContent = totalPages;
+            document.getElementById('totalLinesInPage').textContent = allLines.length;
+            
+            // 更新按钮状态
+            document.getElementById('firstPageBtn').disabled = currentPage === 1;
+            document.getElementById('prevPageBtn').disabled = currentPage === 1;
+            document.getElementById('nextPageBtn').disabled = currentPage === totalPages;
+            document.getElementById('lastPageBtn').disabled = currentPage === totalPages;
+            
+            // 检查是否需要加载更多数据
+            checkAndLoadMore();
+        }
+        
+        function checkAndLoadMore() {
+            // 如果已加载全部数据，不再加载
+            if (allDataLoaded) return;
+            
+            // 如果当前页接近已加载数据的末尾，自动加载更多
+            const loadedLines = allLines.length;
+            const currentMaxLine = currentPage * pageSize;
+            
+            if (currentMaxLine >= loadedLines - 500 && loadedLines < totalLinesInFile) {
+                loadMoreData();
+            }
+        }
+        
+        function loadMoreData() {
+            if (allDataLoaded) return;
+            
+            const currentLoaded = allLines.length;
+            const remaining = totalLinesInFile - currentLoaded;
+            const toLoad = Math.min(remaining, 10000); // 每次加载10000行
+            
+            vscode.postMessage({
+                command: 'loadMore',
+                startLine: currentLoaded,
+                count: toLoad
+            });
+        }
+        
+        function showLoadMoreHint() {
+            // 在页面底部显示加载更多按钮
+            const pagination = document.getElementById('pagination');
+            let loadMoreBtn = document.getElementById('loadMoreBtn');
+            
+            if (!loadMoreBtn) {
+                loadMoreBtn = document.createElement('button');
+                loadMoreBtn.id = 'loadMoreBtn';
+                loadMoreBtn.style.backgroundColor = '#0e7490';
+                loadMoreBtn.style.marginLeft = '20px';
+                loadMoreBtn.innerHTML = '📂 加载更多数据';
+                loadMoreBtn.onclick = function() {
+                    loadAllRemainingData();
+                };
+                pagination.appendChild(loadMoreBtn);
+            }
+            
+            loadMoreBtn.style.display = allDataLoaded ? 'none' : 'inline-block';
+        }
+        
+        function loadAllRemainingData() {
+            if (allDataLoaded) return;
+            
+            const remaining = totalLinesInFile - allLines.length;
+            if (remaining <= 0) {
+                allDataLoaded = true;
+                return;
+            }
+            
+            vscode.postMessage({
+                command: 'loadMore',
+                startLine: allLines.length,
+                count: remaining
+            });
+            
+            // 隐藏加载按钮
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            if (loadMoreBtn) {
+                loadMoreBtn.style.display = 'none';
+            }
+        }
+        
+        function goToFirstPage() {
+            currentPage = 1;
+            updatePagination();
+            renderLines();
+        }
+        
+        function goToPrevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                updatePagination();
+                renderLines();
+            }
+        }
+        
+        function goToNextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                updatePagination();
+                renderLines();
+            }
+        }
+        
+        function goToLastPage() {
+            currentPage = totalPages;
+            updatePagination();
+            renderLines();
+        }
+        
+        function goToPage(page) {
+            page = parseInt(page);
+            if (page >= 1 && page <= totalPages) {
+                currentPage = page;
+                updatePagination();
+                renderLines();
+            } else {
+                document.getElementById('currentPageInput').value = currentPage;
+            }
+        }
+        
+        function changePageSize(size) {
+            pageSize = parseInt(size);
+            currentPage = 1;
+            updatePagination();
+            renderLines();
+        }
+        
+        // 搜索框回车搜索
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                search();
+            }
+        });
+        
+        // 键盘快捷键支持
+        document.addEventListener('keydown', function(e) {
+            // 不在输入框中时才响应
+            if (e.target.tagName === 'INPUT') return;
+            
+            if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                e.preventDefault();
+                goToPrevPage();
+            } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+                e.preventDefault();
+                goToNextPage();
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                goToFirstPage();
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                goToLastPage();
+            }
+        });
+    </script>
+</body>
+</html>
