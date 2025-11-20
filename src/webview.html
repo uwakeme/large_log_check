@@ -185,12 +185,36 @@
         
         .modal-content {
             background-color: var(--vscode-editor-background);
-            margin: 10% auto;
-            padding: 20px;
+            margin: 5% auto;
             border: 1px solid var(--vscode-panel-border);
             border-radius: 5px;
-            width: 60%;
-            max-width: 600px;
+            width: 80%;
+            max-width: 900px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+        
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex: 1;
         }
         
         .modal-close {
@@ -396,10 +420,14 @@
     <!-- 统计弹窗 -->
     <div id="statsModal" class="modal">
         <div class="modal-content">
-            <span class="modal-close" onclick="closeStatsModal()">&times;</span>
-            <h2>日志统计信息</h2>
-            <div class="stats-grid" id="statsGrid">
-                <!-- 统计信息将动态生成 -->
+            <div class="modal-header">
+                <h2>日志统计信息</h2>
+                <span class="modal-close" onclick="closeStatsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid" id="statsGrid">
+                    <!-- 统计信息将动态生成 -->
+                </div>
             </div>
         </div>
     </div>
@@ -465,6 +493,7 @@
         let allLines = [];
         let currentSearchKeyword = '';
         let originalLines = []; // 保存原始数据用于过滤
+        let isFiltering = false; // 标记是否在过滤模式下
         
         // 分页参数
         let currentPage = 1;
@@ -504,6 +533,7 @@
             
             totalLinesInFile = data.totalLines;
             allDataLoaded = data.allLoaded || false;
+            isFiltering = false; // 重置过滤状态
             
             allLines = data.lines;
             originalLines = [...data.lines];
@@ -539,10 +569,22 @@
         }
         
         function handleFilterResults(data) {
+            console.log('📥 收到过滤结果:', data.results.length, '条');
             allLines = data.results;
+            isFiltering = true; // 设置为过滤模式
             currentPage = 1;
             updatePagination();
             renderLines();
+            
+            // 如果过滤结果为空，给出友好提示
+            if (data.results.length === 0) {
+                const levelText = data.levels.join('、');
+                vscode.postMessage({
+                    command: 'showMessage',
+                    type: 'warning',
+                    message: `未找到 ${levelText} 级别的日志，请尝试其他级别或查看统计信息`
+                });
+            }
         }
         
         function handleStatisticsResults(data) {
@@ -553,9 +595,13 @@
             const container = document.getElementById('logContainer');
             container.innerHTML = '';
             
+            console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length);
+            
             if (allLines.length === 0) {
                 container.innerHTML = '<div class="loading">没有日志数据</div>';
                 document.getElementById('pagination').style.display = 'none';
+                document.getElementById('loadedLines').textContent = '0';
+                console.log('⚠️ 渲染结果: 显示"没有日志数据"');
                 return;
             }
             
@@ -676,6 +722,8 @@
             const allUnchecked = !errorChecked && !warnChecked && !infoChecked && !debugChecked && !otherChecked;
             const filterAllCheckbox = document.getElementById('filterAll');
             
+            console.log('🔵 检查全选状态 - allChecked:', allChecked, 'allUnchecked:', allUnchecked);
+            
             if (allChecked) {
                 filterAllCheckbox.checked = true;
                 filterAllCheckbox.indeterminate = false;
@@ -686,9 +734,9 @@
                 filterAllCheckbox.indeterminate = true;
             }
             
-            // 如果全部选中或全部不选，刷新显示所有数据
+            // 如果全部选中，刷新显示所有数据
             if (allChecked) {
-                console.log('All checked, refreshing...');
+                console.log('⚠️ 全部选中，刷新...');
                 if (!currentSearchKeyword) {
                     vscode.postMessage({ command: 'refresh' });
                 }
@@ -697,14 +745,14 @@
             
             // 如果全部不选，显示空
             if (levels.length === 0) {
-                console.log('No levels selected');
+                console.log('⚠️ 没有选择任何级别');
                 allLines = [];
                 renderLines();
                 return;
             }
             
             // 发送筛选请求
-            console.log('Sending filter request:', levels);
+            console.log('📤 发送过滤请求:', levels);
             vscode.postMessage({
                 command: 'filterByLevel',
                 levels: levels
@@ -733,6 +781,15 @@
         
         function showStatsModal(stats) {
             const grid = document.getElementById('statsGrid');
+            
+            // 转换 Map 为数组并排序
+            const classStats = stats.classCounts ? 
+                Array.from(Object.entries(stats.classCounts)).sort((a, b) => b[1] - a[1]).slice(0, 10) : [];
+            const methodStats = stats.methodCounts ? 
+                Array.from(Object.entries(stats.methodCounts)).sort((a, b) => b[1] - a[1]).slice(0, 10) : [];
+            const threadStats = stats.threadCounts ? 
+                Array.from(Object.entries(stats.threadCounts)).sort((a, b) => b[1] - a[1]).slice(0, 10) : [];
+            
             grid.innerHTML = `
                 <div class="stats-card">
                     <h3>总行数</h3>
@@ -772,11 +829,110 @@
                 `;
             }
             
+            // 添加类名统计
+            if (classStats.length > 0) {
+                grid.innerHTML += `
+                    <div class="stats-card" style="grid-column: 1 / -1;">
+                        <h3>📊 最活跃的类 (Top 10)</h3>
+                        <div style="font-size: 13px; margin-top: 10px;">
+                            ${classStats.map(([name, count]) => 
+                                `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
+                                      onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
+                                      onmouseout="this.style.backgroundColor='transparent'"
+                                      onclick="filterByClassName('${name.replace(/'/g, "\\'")}')"
+                                      title="点击筛选包含此类的日志">
+                                    <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
+                                    <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
+                                </div>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // 添加方法名统计
+            if (methodStats.length > 0) {
+                grid.innerHTML += `
+                    <div class="stats-card" style="grid-column: 1 / -1;">
+                        <h3>🔧 最常调用的方法 (Top 10)</h3>
+                        <div style="font-size: 13px; margin-top: 10px;">
+                            ${methodStats.map(([name, count]) => 
+                                `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
+                                      onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
+                                      onmouseout="this.style.backgroundColor='transparent'"
+                                      onclick="filterByMethodName('${name.replace(/'/g, "\\'")}')"
+                                      title="点击筛选包含此方法的日志">
+                                    <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
+                                    <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
+                                </div>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // 添加线程名统计
+            if (threadStats.length > 0) {
+                grid.innerHTML += `
+                    <div class="stats-card" style="grid-column: 1 / -1;">
+                        <h3>🧵 最活跃的线程 (Top 10)</h3>
+                        <div style="font-size: 13px; margin-top: 10px;">
+                            ${threadStats.map(([name, count]) => 
+                                `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
+                                      onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
+                                      onmouseout="this.style.backgroundColor='transparent'"
+                                      onclick="filterByThreadName('${name.replace(/'/g, "\\'")}')"
+                                      title="点击筛选包含此线程的日志">
+                                    <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
+                                    <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
+                                </div>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
             document.getElementById('statsModal').style.display = 'block';
         }
         
         function closeStatsModal() {
             document.getElementById('statsModal').style.display = 'none';
+        }
+        
+        // 按类名筛选
+        function filterByClassName(className) {
+            console.log('🔍 按类名筛选:', className);
+            closeStatsModal();
+            // 使用正则搜索
+            vscode.postMessage({
+                command: 'regexSearch',
+                pattern: className.replace(/\./g, '\\.'),  // 转义点号
+                flags: 'i'
+            });
+        }
+        
+        // 按方法名筛选
+        function filterByMethodName(methodName) {
+            console.log('🔧 按方法名筛选:', methodName);
+            closeStatsModal();
+            // 搜索 <方法名> 或 方法名接口
+            vscode.postMessage({
+                command: 'regexSearch',
+                pattern: `(<${methodName}>|${methodName}接口)`,
+                flags: 'i'
+            });
+        }
+        
+        // 按线程名筛选
+        function filterByThreadName(threadName) {
+            console.log('🧵 按线程名筛选:', threadName);
+            closeStatsModal();
+            // 搜索 [线程名]
+            vscode.postMessage({
+                command: 'regexSearch',
+                pattern: `\\[${threadName}\\]`,
+                flags: 'i'
+            });
         }
         
         function showDeleteByTimeDialog() {
@@ -850,6 +1006,7 @@
             currentSearchKeyword = '';
             document.getElementById('searchInput').value = '';
             currentPage = 1;
+            isFiltering = false; // 退出过滤模式
             vscode.postMessage({
                 command: 'refresh'
             });
@@ -878,6 +1035,12 @@
         function checkAndLoadMore() {
             // 如果已加载全部数据，不再加载
             if (allDataLoaded) return;
+            
+            // 如果处于过滤模式，不自动加载更多数据
+            if (isFiltering) {
+                console.log('🚫 处于过滤模式，不加载更多数据');
+                return;
+            }
             
             // 如果当前页接近已加载数据的末尾，自动加载更多
             const loadedLines = allLines.length;

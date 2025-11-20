@@ -66,7 +66,7 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         if (timeInput) {
-            panel.deleteByTime(timeInput, options.value);
+            panel.deleteByTimeOptions(timeInput, options.value);
         }
     });
 
@@ -105,7 +105,7 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         if (lineInput) {
-            panel.deleteByLine(parseInt(lineInput), options.value);
+            panel.deleteByLineOptions(parseInt(lineInput), options.value);
         }
     });
 

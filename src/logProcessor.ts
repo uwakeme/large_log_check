@@ -19,6 +19,12 @@ export interface LogStats {
         start?: Date;
         end?: Date;
     };
+    // 新增：按类名统计
+    classCounts?: Map<string, number>;
+    // 新增：按方法名统计
+    methodCounts?: Map<string, number>;
+    // 新增：按线程名统计
+    threadCounts?: Map<string, number>;
 }
 
 export class LogProcessor {
@@ -39,12 +45,12 @@ export class LogProcessor {
         /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/
     ];
 
-    // 日志级别匹配模式
+    // 日志级别匹配模式（按优先级从高到低排序）
     private logLevelPatterns = [
-        { level: 'ERROR', pattern: /\b(ERROR|FATAL|SEVERE)\b/i },
-        { level: 'WARN', pattern: /\b(WARN|WARNING)\b/i },
-        { level: 'INFO', pattern: /\b(INFO|INFORMATION)\b/i },
-        { level: 'DEBUG', pattern: /\b(DEBUG|TRACE|VERBOSE)\b/i }
+        { level: 'ERROR', pattern: /\[(ERROR|FATAL|SEVERE)\]|\b(ERROR|FATAL|SEVERE)\s/i },
+        { level: 'WARN', pattern: /\[(WARN|WARNING)\]|\b(WARN|WARNING)\s/i },
+        { level: 'INFO', pattern: /\[(INFO|INFORMATION)\]|\b(INFO|INFORMATION)\s/i },
+        { level: 'DEBUG', pattern: /\[(DEBUG|TRACE|VERBOSE)\]|\b(DEBUG|TRACE|VERBOSE)\s/i }
     ];
 
     constructor(filePath: string) {
@@ -163,7 +169,113 @@ export class LogProcessor {
     }
 
     /**
-     * 按时间删除日志
+     * 按时间过滤（不修改文件）
+     */
+    async filterByTime(timeStr: string, mode: string, keep: boolean): Promise<LogLine[]> {
+        const targetTime = this.parseTimeString(timeStr);
+        if (!targetTime) {
+            throw new Error('无法解析时间格式');
+        }
+
+        return new Promise((resolve, reject) => {
+            const results: LogLine[] = [];
+            let currentLine = 0;
+
+            const stream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            rl.on('line', (line) => {
+                const timestamp = this.extractTimestamp(line);
+                let shouldKeep = false;
+
+                if (!timestamp) {
+                    // 如果无法提取时间戳，默认保留
+                    shouldKeep = keep;
+                } else {
+                    if (mode === 'before') {
+                        // keep=true: 保留指定时间及之后的日志
+                        shouldKeep = keep ? (timestamp >= targetTime) : (timestamp < targetTime);
+                    } else {
+                        // keep=true: 保留指定时间之前的日志
+                        shouldKeep = keep ? (timestamp <= targetTime) : (timestamp > targetTime);
+                    }
+                }
+
+                if (shouldKeep) {
+                    const level = this.extractLogLevel(line);
+                    results.push({
+                        lineNumber: currentLine + 1,
+                        content: line,
+                        timestamp: timestamp,
+                        level: level
+                    });
+                }
+                currentLine++;
+            });
+
+            rl.on('close', () => {
+                resolve(results);
+            });
+
+            rl.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+
+    /**
+     * 按行号过滤（不修改文件）
+     */
+    async filterByLineNumber(lineNumber: number, mode: string, keep: boolean): Promise<LogLine[]> {
+        return new Promise((resolve, reject) => {
+            const results: LogLine[] = [];
+            let currentLine = 0;
+
+            const stream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            rl.on('line', (line) => {
+                currentLine++;
+                let shouldKeep = false;
+
+                if (mode === 'before') {
+                    // keep=true: 保留指定行及之后的日志
+                    shouldKeep = keep ? (currentLine >= lineNumber) : (currentLine < lineNumber);
+                } else {
+                    // keep=true: 保留指定行之前的日志
+                    shouldKeep = keep ? (currentLine <= lineNumber) : (currentLine > lineNumber);
+                }
+
+                if (shouldKeep) {
+                    const timestamp = this.extractTimestamp(line);
+                    const level = this.extractLogLevel(line);
+                    results.push({
+                        lineNumber: currentLine,
+                        content: line,
+                        timestamp: timestamp,
+                        level: level
+                    });
+                }
+            });
+
+            rl.on('close', () => {
+                resolve(results);
+            });
+
+            rl.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+
+    /**
+     * 按时间删除日志（修改原文件）
      */
     async deleteByTime(timeStr: string, mode: string): Promise<number> {
         const targetTime = this.parseTimeString(timeStr);
@@ -321,9 +433,66 @@ export class LogProcessor {
     }
 
     /**
+     * 从日志行中提取类名
+     * 格式：2025-11-14 09:27:02.820  INFO 3262876 [http-nio-16710-exec-8] data.access.filter.DataAccessFilter
+     */
+    private extractClassName(line: string): string | undefined {
+        // 匹配 Java 包名.类名 格式
+        const match = line.match(/\]\s+([a-z][a-z0-9_.]*[A-Z][a-zA-Z0-9_]*)/);
+        if (match) {
+            const fullClassName = match[1];
+            // 返回完整类名
+            return fullClassName;
+        }
+        return undefined;
+    }
+
+    /**
+     * 从日志行中提取方法名
+     * 格式：<objStatusSelect> 或 queryClassObjectsFun接口
+     */
+    private extractMethodName(line: string): string | undefined {
+        // 匹配 <方法名> 格式
+        let match = line.match(/<([a-zA-Z_][a-zA-Z0-9_]*)>/);
+        if (match) {
+            return match[1];
+        }
+        // 匹配方法名接口 格式
+        match = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)接口/);
+        if (match) {
+            return match[1];
+        }
+        return undefined;
+    }
+
+    /**
+     * 从日志行中提取线程名
+     * 格式：[scheduling-1] 或 [http-nio-16710-exec-8]
+     */
+    private extractThreadName(line: string): string | undefined {
+        const match = line.match(/\[([a-zA-Z0-9-_]+)\]/);
+        if (match) {
+            return match[1];
+        }
+        return undefined;
+    }
+
+    /**
      * 从日志行中提取日志级别
      */
     private extractLogLevel(line: string): string | undefined {
+        // 优先匹配常见的日志格式：时间戳后跟级别
+        // 例如：2025-11-14 08:48:39.308  INFO 3261008 [main]
+        const quickMatch = line.match(/\d{2}:\d{2}:\d{2}[^\w]+(ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE)\s/i);
+        if (quickMatch) {
+            const level = quickMatch[1].toUpperCase();
+            if (level === 'ERROR' || level === 'FATAL' || level === 'SEVERE') return 'ERROR';
+            if (level === 'WARN' || level === 'WARNING') return 'WARN';
+            if (level === 'INFO' || level === 'INFORMATION') return 'INFO';
+            if (level === 'DEBUG' || level === 'TRACE' || level === 'VERBOSE') return 'DEBUG';
+        }
+        
+        // 使用原有的模式匹配作为后备
         for (const levelPattern of this.logLevelPatterns) {
             if (levelPattern.pattern.test(line)) {
                 return levelPattern.level;
@@ -344,7 +513,10 @@ export class LogProcessor {
                 infoCount: 0,
                 debugCount: 0,
                 otherCount: 0,
-                timeRange: {}
+                timeRange: {},
+                classCounts: new Map<string, number>(),
+                methodCounts: new Map<string, number>(),
+                threadCounts: new Map<string, number>()
             };
 
             const stream = fs.createReadStream(this.filePath);
@@ -380,6 +552,27 @@ export class LogProcessor {
                         stats.timeRange!.end = timestamp;
                     }
                 }
+
+                // 统计类名
+                const className = this.extractClassName(line);
+                if (className) {
+                    const count = stats.classCounts!.get(className) || 0;
+                    stats.classCounts!.set(className, count + 1);
+                }
+
+                // 统计方法名
+                const methodName = this.extractMethodName(line);
+                if (methodName) {
+                    const count = stats.methodCounts!.get(methodName) || 0;
+                    stats.methodCounts!.set(methodName, count + 1);
+                }
+
+                // 统计线程名
+                const threadName = this.extractThreadName(line);
+                if (threadName) {
+                    const count = stats.threadCounts!.get(threadName) || 0;
+                    stats.threadCounts!.set(threadName, count + 1);
+                }
             });
 
             rl.on('close', () => {
@@ -400,6 +593,7 @@ export class LogProcessor {
             const results: LogLine[] = [];
             let currentLine = 0;
             const levelsSet = new Set(levels.map(l => l.toUpperCase()));
+            console.log('🔍 正在查找的级别:', Array.from(levelsSet));
 
             const stream = fs.createReadStream(this.filePath);
             const rl = readline.createInterface({
@@ -407,8 +601,17 @@ export class LogProcessor {
                 crlfDelay: Infinity
             });
 
+            let matchCount = 0;
+            let sampleLines = 0;
             rl.on('line', (line) => {
                 const level = this.extractLogLevel(line);
+                
+                // 输出前5条日志的级别提取结果
+                if (sampleLines < 5) {
+                    console.log(`第 ${currentLine + 1} 行: 提取到的级别='${level}' 内容:`, line.substring(0, 100));
+                    sampleLines++;
+                }
+                
                 if (level && levelsSet.has(level)) {
                     const timestamp = this.extractTimestamp(line);
                     results.push({
@@ -417,11 +620,16 @@ export class LogProcessor {
                         timestamp: timestamp,
                         level: level
                     });
+                    matchCount++;
+                    if (matchCount <= 3) {
+                        console.log(`✅ 匹配 ${matchCount}: 级别='${level}'`);
+                    }
                 }
                 currentLine++;
             });
 
             rl.on('close', () => {
+                console.log(`📊 过滤完成 - 总共匹配: ${results.length} 条`);
                 resolve(results);
             });
 

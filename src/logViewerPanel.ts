@@ -76,10 +76,17 @@ export class LogViewerPanel {
                         await this.exportCurrentView(message.lines);
                         break;
                     case 'deleteByTime':
-                        await this.deleteByTime(message.timeStr, message.mode);
+                        await this.deleteByTimeOptions(message.timeStr, message.mode);
                         break;
                     case 'deleteByLine':
-                        await this.deleteByLine(message.lineNumber, message.mode);
+                        await this.deleteByLineOptions(message.lineNumber, message.mode);
+                        break;
+                    case 'showMessage':
+                        if (message.type === 'warning') {
+                            vscode.window.showWarningMessage(message.message);
+                        } else if (message.type === 'info') {
+                            vscode.window.showInformationMessage(message.message);
+                        }
                         break;
                 }
             },
@@ -164,11 +171,111 @@ export class LogViewerPanel {
         }
     }
 
-    public async deleteByTime(timeStr: string, mode: string) {
+    public async deleteByTimeOptions(timeStr: string, mode: string) {
+        // 让用户选择操作方式
+        const action = await vscode.window.showWarningMessage(
+            `如何处理${mode === 'before' ? '之前' : '之后'}的日志？`,
+            { modal: true },
+            '仅隐藏（不修改文件）',
+            '导出到新文件',
+            '修改原文件（危险）'
+        );
+
+        if (!action) {
+            return; // 用户取消
+        }
+
+        try {
+            if (action === '仅隐藏（不修改文件）') {
+                // 过滤显示
+                const results = await this._logProcessor.filterByTime(timeStr, mode, true);
+                this._panel.webview.postMessage({
+                    command: 'filterResults',
+                    data: {
+                        levels: [],
+                        results: results
+                    }
+                });
+                vscode.window.showInformationMessage(`已隐藏 ${mode === 'before' ? '之前' : '之后'} 的日志，显示 ${results.length} 行`);
+            } else if (action === '导出到新文件') {
+                // 导出到新文件
+                const results = await this._logProcessor.filterByTime(timeStr, mode, true);
+                const uri = await vscode.window.showSaveDialog({
+                    filters: {
+                        '日志文件': ['log', 'txt'],
+                        '所有文件': ['*']
+                    },
+                    defaultUri: vscode.Uri.file(path.join(path.dirname(this._fileUri.fsPath), `filtered_${path.basename(this._fileUri.fsPath)}`))
+                });
+                
+                if (uri) {
+                    await this._logProcessor.exportLogs(results, uri.fsPath);
+                    vscode.window.showInformationMessage(`成功导出 ${results.length} 行日志到: ${uri.fsPath}`);
+                }
+            } else if (action === '修改原文件（危险）') {
+                // 修改原文件
+                await this.deleteByTime(timeStr, mode);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`操作失败: ${error}`);
+        }
+    }
+
+    public async deleteByLineOptions(lineNumber: number, mode: string) {
+        // 让用户选择操作方式
+        const action = await vscode.window.showWarningMessage(
+            `如何处理第${lineNumber}行${mode === 'before' ? '之前' : '之后'}的日志？`,
+            { modal: true },
+            '仅隐藏（不修改文件）',
+            '导出到新文件',
+            '修改原文件（危险）'
+        );
+
+        if (!action) {
+            return; // 用户取消
+        }
+
+        try {
+            if (action === '仅隐藏（不修改文件）') {
+                // 过滤显示
+                const results = await this._logProcessor.filterByLineNumber(lineNumber, mode, true);
+                this._panel.webview.postMessage({
+                    command: 'filterResults',
+                    data: {
+                        levels: [],
+                        results: results
+                    }
+                });
+                vscode.window.showInformationMessage(`已隐藏 ${mode === 'before' ? '之前' : '之后'} 的日志，显示 ${results.length} 行`);
+            } else if (action === '导出到新文件') {
+                // 导出到新文件
+                const results = await this._logProcessor.filterByLineNumber(lineNumber, mode, true);
+                const uri = await vscode.window.showSaveDialog({
+                    filters: {
+                        '日志文件': ['log', 'txt'],
+                        '所有文件': ['*']
+                    },
+                    defaultUri: vscode.Uri.file(path.join(path.dirname(this._fileUri.fsPath), `filtered_${path.basename(this._fileUri.fsPath)}`))
+                });
+                
+                if (uri) {
+                    await this._logProcessor.exportLogs(results, uri.fsPath);
+                    vscode.window.showInformationMessage(`成功导出 ${results.length} 行日志到: ${uri.fsPath}`);
+                }
+            } else if (action === '修改原文件（危险）') {
+                // 修改原文件
+                await this.deleteByLine(lineNumber, mode);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`操作失败: ${error}`);
+        }
+    }
+
+    private async deleteByTime(timeStr: string, mode: string) {
         const result = await vscode.window.showWarningMessage(
             `确定要删除${mode === 'before' ? '之前' : '之后'}的日志吗？此操作会修改原文件！`,
             { modal: true },
-            '确定', '取消'
+            '确定'
         );
 
         if (result !== '确定') {
@@ -184,11 +291,11 @@ export class LogViewerPanel {
         }
     }
 
-    public async deleteByLine(lineNumber: number, mode: string) {
+    private async deleteByLine(lineNumber: number, mode: string) {
         const result = await vscode.window.showWarningMessage(
             `确定要删除第${lineNumber}行${mode === 'before' ? '之前' : '之后'}的日志吗？此操作会修改原文件！`,
             { modal: true },
-            '确定', '取消'
+            '确定'
         );
 
         if (result !== '确定') {
@@ -206,9 +313,12 @@ export class LogViewerPanel {
 
     private async filterByLevel(levels: string[]) {
         try {
-            console.log('Filtering by levels:', levels);
+            console.log('📤 前端发送过滤请求 - 级别:', levels);
             const results = await this._logProcessor.filterByLevel(levels);
-            console.log('Filter results count:', results.length);
+            console.log('📥 后端返回结果数量:', results.length);
+            if (results.length > 0) {
+                console.log('👀 第一条结果 - 级别:', results[0].level, '内容:', results[0].content.substring(0, 100));
+            }
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
@@ -224,9 +334,18 @@ export class LogViewerPanel {
     private async getStatistics() {
         try {
             const stats = await this._logProcessor.getStatistics();
+            
+            // 将 Map 转换为普通对象，以便通过 postMessage 传输
+            const serializedStats = {
+                ...stats,
+                classCounts: stats.classCounts ? Object.fromEntries(stats.classCounts) : {},
+                methodCounts: stats.methodCounts ? Object.fromEntries(stats.methodCounts) : {},
+                threadCounts: stats.threadCounts ? Object.fromEntries(stats.threadCounts) : {}
+            };
+            
             this._panel.webview.postMessage({
                 command: 'statisticsResults',
-                data: stats
+                data: serializedStats
             });
         } catch (error) {
             vscode.window.showErrorMessage(`统计失败: ${error}`);
