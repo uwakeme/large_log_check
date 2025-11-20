@@ -139,6 +139,39 @@
             flex-wrap: wrap;
         }
         
+        /* 时间线面板样式 */
+        .timeline-panel {
+            background-color: var(--vscode-editorWidget-background);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        
+        .timeline-header {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        
+        .timeline-header:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+        
+        .timeline-content {
+            padding: 10px;
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+        
+        #timelineCanvas {
+            width: 100%;
+            height: 80px;
+            cursor: pointer;
+        }
+        
         .checkbox-group {
             display: flex;
             gap: 15px;
@@ -415,6 +448,125 @@
             color: var(--vscode-dropdown-foreground);
             padding: 5px;
         }
+        
+        /* 注释样式 */
+        .comment-badge {
+            display: inline-block;
+            background-color: #10b981;
+            color: #fff;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .comment-badge:hover {
+            background-color: #059669;
+        }
+        
+        .log-comment {
+            display: block;
+            background-color: rgba(16, 185, 129, 0.1);
+            border-left: 3px solid #10b981;
+            padding: 5px 10px;
+            margin-top: 3px;
+            font-size: 11px;
+            font-style: italic;
+            color: var(--vscode-descriptionForeground);
+        }
+        
+        /* JSON/XML 树状结构样式 */
+        .json-tree, .xml-tree {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            margin: 5px 0;
+            padding: 8px;
+            background-color: rgba(107, 114, 128, 0.05);
+            border-radius: 4px;
+            border-left: 3px solid #8b5cf6;
+        }
+        
+        .json-tree-item, .xml-tree-item {
+            margin-left: 15px;
+            position: relative;
+        }
+        
+        .json-tree-toggle, .xml-tree-toggle {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+            user-select: none;
+            margin-right: 4px;
+            color: var(--vscode-textLink-foreground);
+            font-weight: bold;
+            vertical-align: middle;
+        }
+        
+        .json-tree-toggle:hover, .xml-tree-toggle:hover {
+            background-color: var(--vscode-list-hoverBackground);
+            border-radius: 2px;
+        }
+        
+        .json-key {
+            color: #9cdcfe;
+            font-weight: 500;
+        }
+        
+        .json-string {
+            color: #ce9178;
+        }
+        
+        .json-number {
+            color: #b5cea8;
+        }
+        
+        .json-boolean {
+            color: #569cd6;
+            font-weight: bold;
+        }
+        
+        .json-null {
+            color: #808080;
+            font-style: italic;
+        }
+        
+        .xml-tag {
+            color: #4ec9b0;
+        }
+        
+        .xml-attr-name {
+            color: #9cdcfe;
+        }
+        
+        .xml-attr-value {
+            color: #ce9178;
+        }
+        
+        .json-tree-collapsed, .xml-tree-collapsed {
+            display: none;
+        }
+        
+        .json-expand-btn {
+            display: inline-block;
+            margin-left: 5px;
+            padding: 2px 6px;
+            font-size: 10px;
+            background-color: #8b5cf6;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .json-expand-btn:hover {
+            background-color: #7c3aed;
+        }
+        
+
     </style>
 </head>
 <body>
@@ -433,10 +585,15 @@
                 <input type="checkbox" id="regexMode">
                 <span>正则</span>
             </label>
+            <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="reverseMode">
+                <span>反向搜索</span>
+            </label>
             <button onclick="search()">🔍 搜索</button>
             <button onclick="showAdvancedSearchModal()" style="background-color: #0e7490;">🔍 高级搜索</button>
             <button onclick="showJumpDialog()" style="background-color: #0e7490;">🎯 定位</button>
             <button onclick="showBookmarksModal()" style="background-color: #7c3aed;">📌 书签</button>
+            <button onclick="showCommentsModal()" style="background-color: #10b981;">📝 注释</button>
             <button onclick="showStats()">📈 统计</button>
             <button onclick="exportLogs()">💾 导出</button>
             <button onclick="showDeleteModal()" style="background-color: #dc2626;">🗑️ 删除</button>
@@ -471,6 +628,20 @@
             <label><input type="checkbox" id="filterOther" checked onchange="applyFilter()"> 其他</label>
         </div>
         <button onclick="showLegendModal()" style="margin-left: auto; padding: 3px 10px; font-size: 12px;">🎨 颜色图例</button>
+    </div>
+    
+    <!-- 时间线导航 -->
+    <div class="timeline-panel" id="timelinePanel" style="display: none;">
+        <div class="timeline-header" onclick="toggleTimeline()">
+            <span style="font-weight: bold; font-size: 12px;">📈 时间线导航</span>
+            <span id="timelineToggleIcon" style="font-size: 12px;">▼</span>
+        </div>
+        <div class="timeline-content" id="timelineContent">
+            <canvas id="timelineCanvas" width="100%" height="80"></canvas>
+            <div id="timelineInfo" style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px; text-align: center;">
+                <!-- 时间范围信息 -->
+            </div>
+        </div>
     </div>
     
     <div class="log-container" id="logContainer">
@@ -716,6 +887,74 @@
         </div>
     </div>
     
+    <!-- 注释管理弹窗 -->
+    <div id="commentsModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>📝 注释列表</h2>
+                <span class="modal-close" onclick="closeCommentsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="commentsList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- 注释将动态生成 -->
+                </div>
+                <div style="margin-top: 15px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px;">
+                    💡 提示：右键点击日志行可添加注释
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 添加/编辑注释弹窗 -->
+    <div id="commentInputModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 id="commentInputTitle">📝 添加注释</h2>
+                <span class="modal-close" onclick="closeCommentInputModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <div style="font-weight: bold; margin-bottom: 5px;">行号：<span id="commentInputLineNumber"></span></div>
+                    <div style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; background-color: var(--vscode-editorWidget-background); padding: 8px; border-radius: 3px; margin-bottom: 10px; max-height: 60px; overflow-y: auto;" id="commentInputPreview"></div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">注释内容：</label>
+                    <textarea id="commentInputText" rows="4" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-family: inherit; resize: vertical;" placeholder="请输入注释内容..." onkeydown="if(event.ctrlKey && event.key === 'Enter') confirmCommentInput();"></textarea>
+                    <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px;">💡 提示：按 Ctrl+Enter 快速保存</div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeCommentInputModal()">取消</button>
+                    <button onclick="confirmCommentInput()" style="background-color: #10b981;">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 去重统计弹窗 -->
+    <div id="deduplicationModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px; max-height: 85vh;">
+            <div class="modal-header">
+                <h2>🔍 相似日志聚合分析</h2>
+                <span class="modal-close" onclick="closeDeduplicationModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+                    <span style="font-weight: bold;">相似度阈值：</span>
+                    <input type="range" id="similarityThreshold" min="50" max="100" value="85" 
+                           oninput="document.getElementById('thresholdValue').textContent = this.value + '%'" 
+                           style="width: 200px;">
+                    <span id="thresholdValue" style="min-width: 40px; font-weight: bold; color: #8b5cf6;">85%</span>
+                    <button onclick="reanalyzeDeduplication()" style="background-color: #8b5cf6; padding: 5px 15px;">🔄 重新分析</button>
+                </div>
+                <div id="deduplicationResult" style="max-height: 60vh; overflow-y: auto;">
+                    <div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">
+                        🔍 正在分析日志模式...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- 高级搜索弹窗 -->
     <div id="advancedSearchModal" class="modal">
         <div class="modal-content" style="max-width: 600px;">
@@ -756,6 +995,7 @@
         </div>
     </div>
     
+
     <script>
         const vscode = acquireVsCodeApi();
         let allLines = [];
@@ -763,6 +1003,9 @@
         let originalLines = []; // 保存原始数据用于过滤
         let isFiltering = false; // 标记是否在过滤模式下
         let bookmarks = new Set(); // 书签集合，存储行号
+        let comments = new Map(); // 注释集合，key为行号，value为注释内容
+        let timelineData = null; // 时间线数据
+        let isTimelineExpanded = true; // 时间线是否展开
         
         // 分页参数
         let currentPage = 1;
@@ -795,6 +1038,9 @@
                 case 'jumpToTimeResult':
                     handleJumpToTimeResult(message.data);
                     break;
+                case 'jumpToLineInFullLogResult':
+                    handleJumpToLineInFullLogResult(message.data);
+                    break;
             }
         });
         
@@ -806,12 +1052,16 @@
             totalLinesInFile = data.totalLines;
             allDataLoaded = data.allLoaded || false;
             isFiltering = false; // 重置过滤状态
+            currentSearchKeyword = ''; // 重置搜索关键词
             
             allLines = data.lines;
             originalLines = [...data.lines];
             currentPage = 1;
             updatePagination();
             renderLines();
+            
+            // 生成时间线
+            generateTimeline();
             
             // 如果数据未全部加载，显示提示
             if (!allDataLoaded && allLines.length < totalLinesInFile) {
@@ -861,6 +1111,30 @@
         
         function handleStatisticsResults(data) {
             showStatsModal(data);
+        }
+        
+        function handleJumpToLineInFullLogResult(data) {
+            // 重新加载完整日志数据
+            document.getElementById('fileName').textContent = data.fileName;
+            document.getElementById('fileSize').textContent = data.fileSize;
+            document.getElementById('totalLines').textContent = data.totalLines;
+            
+            totalLinesInFile = data.totalLines;
+            allDataLoaded = data.allLoaded || false;
+            isFiltering = false; // 重置过滤状态
+            currentSearchKeyword = ''; // 重置搜索关键词
+            
+            allLines = data.lines;
+            originalLines = [...data.lines];
+            
+            // 跳转到目标行
+            jumpToLine(data.targetLineNumber);
+            
+            // 生成时间线
+            generateTimeline();
+            
+            // 显示成功提示
+            showToast('✅ 已跳转到完整日志');
         }
         
         function renderLines() {
@@ -913,8 +1187,17 @@
                 
                 const content = line.content || line;
                 
+                // 尝试解析JSON/XML并添加到日志内容后面
+                const parsedStructure = detectAndParseStructuredData(content);
+                
                 // 增强高亮功能
                 let highlightedContent = highlightKeywords(content, currentSearchKeyword);
+                
+                // 如果有注释，添加注释徽章
+                if (comments.has(actualLineNumber)) {
+                    highlightedContent += `<span class="comment-badge" onclick="event.stopPropagation(); editComment(${actualLineNumber})" title="点击编辑注释">📝 有注释</span>`;
+                }
+                
                 lineContent.innerHTML = highlightedContent;
                 
                 // 添加右键菜单复制功能
@@ -929,8 +1212,37 @@
                     toggleBookmark(actualLineNumber);
                 };
                 
+                // 添加点击跳转功能（仅在搜索模式下）
+                if (currentSearchKeyword || isFiltering) {
+                    lineDiv.onclick = (e) => {
+                        // 如果点击的是注释徽章，不跳转
+                        if (e.target.classList.contains('comment-badge')) {
+                            return;
+                        }
+                        jumpToLineInFullLog(actualLineNumber);
+                    };
+                    lineDiv.style.cursor = 'pointer';
+                    lineDiv.title = '点击跳转到完整日志中的此行';
+                }
+                
                 lineDiv.appendChild(lineNumber);
                 lineDiv.appendChild(lineContent);
+                
+                // 如果解析出JSON/XML结构，添加到下方
+                if (parsedStructure) {
+                    const structDiv = document.createElement('div');
+                    structDiv.innerHTML = parsedStructure;
+                    lineDiv.appendChild(structDiv);
+                }
+                
+                // 如果有注释，在下方显示注释内容
+                if (comments.has(actualLineNumber)) {
+                    const commentDiv = document.createElement('div');
+                    commentDiv.className = 'log-comment';
+                    commentDiv.textContent = '📝 ' + comments.get(actualLineNumber);
+                    lineDiv.appendChild(commentDiv);
+                }
+                
                 container.appendChild(lineDiv);
             });
             
@@ -975,6 +1287,7 @@
         function search() {
             const keyword = document.getElementById('searchInput').value;
             const isRegex = document.getElementById('regexMode').checked;
+            const isReverse = document.getElementById('reverseMode').checked;
             
             if (!keyword) {
                 vscode.postMessage({
@@ -984,17 +1297,26 @@
                 return;
             }
             
+            // 保存搜索关键词用于高亮
+            currentSearchKeyword = keyword;
+            
             if (isRegex) {
                 vscode.postMessage({
                     command: 'regexSearch',
                     pattern: keyword,
-                    flags: 'gi'
+                    flags: 'gi',
+                    reverse: isReverse
                 });
             } else {
                 vscode.postMessage({
                     command: 'search',
-                    keyword: keyword
+                    keyword: keyword,
+                    reverse: isReverse
                 });
+            }
+            
+            if (isReverse) {
+                showToast('🔽 反向搜索中...');
             }
         }
         
@@ -1189,6 +1511,20 @@
                 `;
             }
             
+            // 添加去重统计按钮
+            grid.innerHTML += `
+                <div class="stats-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; cursor: pointer;" 
+                     onclick="showDeduplicationStats()">
+                    <h3 style="color: white; display: flex; align-items: center; gap: 10px;">
+                        <span>🔍</span>
+                        <span>相似日志聚合分析</span>
+                    </h3>
+                    <div style="font-size: 13px; opacity: 0.95; margin-top: 5px;">
+                        点击查看重复日志模式统计 →
+                    </div>
+                </div>
+            `;
+            
             document.getElementById('statsModal').style.display = 'block';
         }
         
@@ -1265,10 +1601,167 @@
             renderLines(); // 重新渲染
         }
         
+        // ==========  注释功能 ==========
+        let currentCommentLineNumber = null; // 当前正在编辑注释的行号
+        
+        function addOrEditComment(lineNumber) {
+            console.log('📝 addOrEditComment 被调用，行号:', lineNumber);
+            
+            currentCommentLineNumber = lineNumber;
+            const existingComment = comments.get(lineNumber) || '';
+            const line = allLines.find(l => l.lineNumber === lineNumber);
+            const content = line ? (line.content || line) : '';
+            const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+            
+            // 设置弹窗内容
+            document.getElementById('commentInputTitle').textContent = existingComment ? '✏️ 编辑注释' : '📝 添加注释';
+            document.getElementById('commentInputLineNumber').textContent = lineNumber;
+            document.getElementById('commentInputPreview').textContent = content;
+            document.getElementById('commentInputText').value = existingComment;
+            
+            // 显示弹窗
+            document.getElementById('commentInputModal').style.display = 'block';
+            
+            // 自动聚焦到输入框
+            setTimeout(() => {
+                const textarea = document.getElementById('commentInputText');
+                textarea.focus();
+                textarea.select();
+            }, 100);
+            
+            console.log('✅ 注释输入弹窗已显示');
+        }
+        
+        function closeCommentInputModal() {
+            document.getElementById('commentInputModal').style.display = 'none';
+            currentCommentLineNumber = null;
+        }
+        
+        function confirmCommentInput() {
+            if (currentCommentLineNumber === null) {
+                console.log('⚠️ 没有当前编辑的行号');
+                return;
+            }
+            
+            const lineNumber = currentCommentLineNumber;
+            const commentText = document.getElementById('commentInputText').value;
+            const existingComment = comments.get(lineNumber) || '';
+            
+            console.log('📝 确认注释输入，行号:', lineNumber, '，内容:', commentText);
+            
+            if (commentText.trim()) {
+                comments.set(lineNumber, commentText.trim());
+                console.log('✅ 添加注释:', lineNumber, '-', commentText.trim());
+                showToast(`✅ 注释已${existingComment ? '更新' : '添加'}`);
+            } else if (existingComment) {
+                // 如果输入空白且原来有注释，则删除
+                comments.delete(lineNumber);
+                console.log('❌ 删除注释:', lineNumber);
+                showToast('❌ 注释已删除');
+            }
+            
+            renderLines();
+            closeCommentInputModal();
+        }
+        
+        function editComment(lineNumber) {
+            addOrEditComment(lineNumber);
+        }
+        
+        function deleteComment(lineNumber) {
+            if (confirm('确定要删除这条注释吗？')) {
+                comments.delete(lineNumber);
+                console.log('❌ 删除注释:', lineNumber);
+                showToast('❌ 注释已删除');
+                renderLines();
+            }
+        }
+        
+        function showCommentsModal() {
+            const modal = document.getElementById('commentsModal');
+            const list = document.getElementById('commentsList');
+            
+            if (comments.size === 0) {
+                list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无注释<br>右键点击日志行可添加注释</div>';
+            } else {
+                // 将Map转为数组并按行号排序
+                const commentArray = Array.from(comments.entries()).sort((a, b) => a[0] - b[0]);
+                list.innerHTML = commentArray.map(([lineNum, comment]) => {
+                    const line = allLines.find(l => l.lineNumber === lineNum);
+                    const content = line ? (line.content || line) : '（已不存在）';
+                    const preview = content.substring(0, 80) + (content.length > 80 ? '...' : '');
+                    
+                    return `
+                        <div style="padding: 12px; margin-bottom: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #10b981;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-weight: bold; color: var(--vscode-textLink-foreground); cursor: pointer;" onclick="jumpToComment(${lineNum})">📝 行 ${lineNum}</span>
+                                <div style="display: flex; gap: 5px;">
+                                    <button onclick="editComment(${lineNum})" style="padding: 2px 8px; font-size: 11px; background-color: #0e7490;">编辑</button>
+                                    <button onclick="deleteCommentFromList(${lineNum})" style="padding: 2px 8px; font-size: 11px; background-color: #dc2626;">删除</button>
+                                </div>
+                            </div>
+                            <div style="font-size: 11px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                ${escapeHtml(preview)}
+                            </div>
+                            <div style="background-color: rgba(16, 185, 129, 0.1); padding: 8px; border-radius: 3px; font-size: 12px; font-style: italic; color: var(--vscode-editor-foreground);">
+                                ${escapeHtml(comment)}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            modal.style.display = 'block';
+        }
+        
+        function closeCommentsModal() {
+            document.getElementById('commentsModal').style.display = 'none';
+        }
+        
+        function jumpToComment(lineNumber) {
+            closeCommentsModal();
+            jumpToLine(lineNumber);
+        }
+        
+        function deleteCommentFromList(lineNumber) {
+            if (confirm('确定要删除这条注释吗？')) {
+                comments.delete(lineNumber);
+                showCommentsModal(); // 刷新注释列表
+                renderLines(); // 重新渲染
+                showToast('❌ 注释已删除');
+            }
+        }
+        
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background-color: #10b981;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+                z-index: 10000;
+                animation: fadeInOut 2s ease-in-out;
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                if (document.body.contains(toast)) {
+                    document.body.removeChild(toast);
+                }
+            }, 2000);
+        }
+        
         // ========== 复制功能 ==========
         let currentContextMenu = null;
         
         function showContextMenu(event, content, lineNumber) {
+            console.log('🖱️ showContextMenu 被调用，行号:', lineNumber);
+            
             // 移除旧的菜单
             if (currentContextMenu) {
                 document.body.removeChild(currentContextMenu);
@@ -1286,7 +1779,8 @@
                 const copySelectedItem = document.createElement('div');
                 copySelectedItem.className = 'context-menu-item';
                 copySelectedItem.innerHTML = '<span>📋</span><span>复制选中内容</span>';
-                copySelectedItem.onclick = () => {
+                copySelectedItem.onclick = (e) => {
+                    e.stopPropagation();
                     copyToClipboard(selectedText);
                     closeContextMenu();
                 };
@@ -1302,7 +1796,8 @@
             const copyLineItem = document.createElement('div');
             copyLineItem.className = 'context-menu-item';
             copyLineItem.innerHTML = '<span>📄</span><span>复制整行</span>';
-            copyLineItem.onclick = () => {
+            copyLineItem.onclick = (e) => {
+                e.stopPropagation();
                 copyToClipboard(content);
                 closeContextMenu();
             };
@@ -1320,17 +1815,57 @@
             bookmarkItem.innerHTML = isBookmarked 
                 ? '<span>❌</span><span>移除书签</span>' 
                 : '<span>📌</span><span>添加书签</span>';
-            bookmarkItem.onclick = () => {
+            bookmarkItem.onclick = (e) => {
+                e.stopPropagation();
                 toggleBookmark(lineNumber);
                 closeContextMenu();
             };
             menu.appendChild(bookmarkItem);
             
+            // 添加/编辑注释
+            const commentItem = document.createElement('div');
+            commentItem.className = 'context-menu-item';
+            const hasComment = comments.has(lineNumber);
+            commentItem.innerHTML = hasComment
+                ? '<span>✏️</span><span>编辑注释</span>'
+                : '<span>📝</span><span>添加注释</span>';
+            commentItem.onclick = (e) => {
+                console.log('🖱️ 点击了添加注释菜单项，行号:', lineNumber);
+                e.stopPropagation();
+                e.preventDefault();
+                closeContextMenu();
+                // 延迟执行，确保菜单先关闭
+                setTimeout(() => {
+                    console.log('⏰ 准备调用 addOrEditComment，行号:', lineNumber);
+                    addOrEditComment(lineNumber);
+                }, 100);
+            };
+            menu.appendChild(commentItem);
+            
+            // 如果已有注释，显示删除注释选项
+            if (hasComment) {
+                const deleteCommentItem = document.createElement('div');
+                deleteCommentItem.className = 'context-menu-item';
+                deleteCommentItem.innerHTML = '<span>🗑️</span><span>删除注释</span>';
+                deleteCommentItem.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteComment(lineNumber);
+                    closeContextMenu();
+                };
+                menu.appendChild(deleteCommentItem);
+            }
+            
+            // 分隔线
+            const separator3 = document.createElement('div');
+            separator3.className = 'context-menu-separator';
+            menu.appendChild(separator3);
+            
             // 定位到此行
             const jumpItem = document.createElement('div');
             jumpItem.className = 'context-menu-item';
             jumpItem.innerHTML = '<span>🎯</span><span>定位到第 ' + lineNumber + ' 行</span>';
-            jumpItem.onclick = () => {
+            jumpItem.onclick = (e) => {
+                e.stopPropagation();
                 jumpToLine(lineNumber);
                 closeContextMenu();
             };
@@ -1464,6 +1999,192 @@
             if (results.length === 0) {
                 alert('未找到符合条件的日志！');
             }
+        }
+        
+        
+        // ========== 时间线功能 ==========
+        function toggleTimeline() {
+            isTimelineExpanded = !isTimelineExpanded;
+            const content = document.getElementById('timelineContent');
+            const icon = document.getElementById('timelineToggleIcon');
+            
+            if (isTimelineExpanded) {
+                content.style.display = 'block';
+                icon.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▶';
+            }
+        }
+        
+        function generateTimeline() {
+            // 提取所有带时间戳的日志
+            const logsWithTime = allLines.filter(line => line.timestamp);
+            
+            if (logsWithTime.length === 0) {
+                document.getElementById('timelinePanel').style.display = 'none';
+                return;
+            }
+            
+            // 显示时间线面板
+            document.getElementById('timelinePanel').style.display = 'block';
+            
+            // 获取时间范围
+            const timestamps = logsWithTime.map(line => new Date(line.timestamp).getTime());
+            const minTime = Math.min(...timestamps);
+            const maxTime = Math.max(...timestamps);
+            const timeRange = maxTime - minTime;
+            
+            // 分成20个时间段
+            const bucketCount = 20;
+            const bucketSize = timeRange / bucketCount;
+            const buckets = new Array(bucketCount).fill(0).map(() => ({
+                count: 0,
+                error: 0,
+                warn: 0,
+                info: 0,
+                debug: 0,
+                lines: []
+            }));
+            
+            // 统计每个时间段的日志数量
+            logsWithTime.forEach(line => {
+                const time = new Date(line.timestamp).getTime();
+                const bucketIndex = Math.min(Math.floor((time - minTime) / bucketSize), bucketCount - 1);
+                
+                buckets[bucketIndex].count++;
+                buckets[bucketIndex].lines.push(line);
+                
+                const level = (line.level || 'OTHER').toUpperCase();
+                if (level === 'ERROR') buckets[bucketIndex].error++;
+                else if (level === 'WARN') buckets[bucketIndex].warn++;
+                else if (level === 'INFO') buckets[bucketIndex].info++;
+                else if (level === 'DEBUG') buckets[bucketIndex].debug++;
+            });
+            
+            timelineData = {
+                buckets,
+                minTime,
+                maxTime,
+                bucketSize
+            };
+            
+            // 绘制时间线
+            drawTimeline();
+            
+            // 显示时间范围
+            const startDate = new Date(minTime);
+            const endDate = new Date(maxTime);
+            const info = document.getElementById('timelineInfo');
+            info.innerHTML = `<span>时间范围: ${formatDate(startDate)} 至 ${formatDate(endDate)}</span> <span style="margin-left: 20px;">总计: ${logsWithTime.length} 条日志</span>`;
+        }
+        
+        function drawTimeline() {
+            if (!timelineData) return;
+            
+            const canvas = document.getElementById('timelineCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // 设置画布大小
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = 80;
+            
+            // 清空画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const { buckets } = timelineData;
+            const maxCount = Math.max(...buckets.map(b => b.count));
+            
+            const barWidth = canvas.width / buckets.length;
+            const maxHeight = canvas.height - 20;
+            
+            // 绘制柱状图
+            buckets.forEach((bucket, i) => {
+                const x = i * barWidth;
+                const heightRatio = bucket.count / maxCount;
+                
+                // 绘制分层柱状图（按级别）
+                let currentY = canvas.height - 20;
+                
+                // ERROR (红色)
+                if (bucket.error > 0) {
+                    const h = (bucket.error / bucket.count) * heightRatio * maxHeight;
+                    ctx.fillStyle = '#f14c4c';
+                    ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
+                    currentY -= h;
+                }
+                
+                // WARN (橙色)
+                if (bucket.warn > 0) {
+                    const h = (bucket.warn / bucket.count) * heightRatio * maxHeight;
+                    ctx.fillStyle = '#cca700';
+                    ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
+                    currentY -= h;
+                }
+                
+                // INFO (蓝色)
+                if (bucket.info > 0) {
+                    const h = (bucket.info / bucket.count) * heightRatio * maxHeight;
+                    ctx.fillStyle = '#4fc1ff';
+                    ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
+                    currentY -= h;
+                }
+                
+                // DEBUG (紫色)
+                if (bucket.debug > 0) {
+                    const h = (bucket.debug / bucket.count) * heightRatio * maxHeight;
+                    ctx.fillStyle = '#b267e6';
+                    ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
+                }
+            });
+            
+            // 添加点击事件
+            canvas.onclick = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const bucketIndex = Math.floor(x / barWidth);
+                
+                if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+                    const bucket = buckets[bucketIndex];
+                    if (bucket.lines.length > 0) {
+                        // 跳转到该时间段的第一条日志
+                        const targetLine = bucket.lines[0];
+                        jumpToLine(targetLine.lineNumber);
+                    }
+                }
+            };
+            
+            // 添加鼠标悬停提示
+            canvas.onmousemove = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const bucketIndex = Math.floor(x / barWidth);
+                
+                if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+                    const bucket = buckets[bucketIndex];
+                    const startTime = new Date(timelineData.minTime + bucketIndex * timelineData.bucketSize);
+                    canvas.title = `${formatTime(startTime)}\n总计: ${bucket.count} 条\nERROR: ${bucket.error} | WARN: ${bucket.warn} | INFO: ${bucket.info} | DEBUG: ${bucket.debug}`;
+                }
+            };
+        }
+        
+        function formatDate(date) {
+            return date.toLocaleString('zh-CN', { 
+                year: 'numeric', 
+                month: '2-digit', 
+                day: '2-digit', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+        
+        function formatTime(date) {
+            return date.toLocaleString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit'
+            });
         }
         
         // 按类名筛选
@@ -1633,6 +2354,25 @@
             setTimeout(() => {
                 highlightTargetLine(lineNumber);
             }, 100);
+        }
+        
+        // 从搜索结果跳转到完整日志的指定行
+        function jumpToLineInFullLog(lineNumber) {
+            console.log('🚀 跳转到完整日志的行:', lineNumber);
+            
+            // 清除搜索关键词和过滤状态
+            currentSearchKeyword = '';
+            document.getElementById('searchInput').value = '';
+            isFiltering = false;
+            
+            // 显示加载提示
+            showToast('📦 正在加载完整日志...');
+            
+            // 请求后端重新加载完整日志，并跳转到指定行
+            vscode.postMessage({
+                command: 'jumpToLineInFullLog',
+                lineNumber: lineNumber
+            });
         }
         
         function jumpToTime(timeStr) {
@@ -1877,12 +2617,704 @@
             renderLines();
         }
         
+        // ========== 时间线导航功能 ==========
+        
+        function toggleTimeline() {
+            isTimelineExpanded = !isTimelineExpanded;
+            const content = document.getElementById('timelineContent');
+            const icon = document.getElementById('timelineToggleIcon');
+            
+            if (isTimelineExpanded) {
+                content.style.display = 'block';
+                icon.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▶';
+            }
+        }
+        
+        function generateTimeline() {
+            console.log('📊 开始生成时间线，allLines 数量:', allLines.length);
+            
+            // 从allLines中提取时间戳
+            const timestamps = [];
+            const levelCounts = { ERROR: [], WARN: [], INFO: [], DEBUG: [], OTHER: [] };
+            
+            for (let line of allLines) {
+                if (line.timestamp) {
+                    timestamps.push(new Date(line.timestamp));
+                }
+            }
+            
+            console.log('📊 提取到的时间戳数量:', timestamps.length);
+            
+            // 如果没有时间戳，隐藏时间线
+            if (timestamps.length === 0) {
+                console.log('⚠️ 没有找到时间戳，隐藏时间线');
+                document.getElementById('timelinePanel').style.display = 'none';
+                return;
+            }
+            
+            // 找出时间范围
+            timestamps.sort((a, b) => a - b);
+            const startTime = timestamps[0];
+            const endTime = timestamps[timestamps.length - 1];
+            const timeRange = endTime - startTime;
+            
+            console.log('📊 时间范围:', startTime.toLocaleString(), '-', endTime.toLocaleString(), '，范围:', timeRange, 'ms');
+            
+            // 如果时间范围太小（比如都是同一秒），不显示时间线
+            if (timeRange < 1000) { // 小于1秒
+                console.log('⚠️ 时间范围太小，隐藏时间线');
+                document.getElementById('timelinePanel').style.display = 'none';
+                return;
+            }
+            
+            // 将时间分成若干个桶（bucket）
+            const bucketCount = 50; // 时间线分成50段
+            const bucketSize = timeRange / bucketCount;
+            const buckets = new Array(bucketCount).fill(0);
+            const bucketLevels = new Array(bucketCount).fill(null).map(() => ({ ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0, OTHER: 0 }));
+            
+            // 统计每个桶的日志数量和级别分布
+            for (let line of allLines) {
+                if (line.timestamp) {
+                    const time = new Date(line.timestamp);
+                    const bucketIndex = Math.min(Math.floor((time - startTime) / bucketSize), bucketCount - 1);
+                    buckets[bucketIndex]++;
+                    
+                    const level = (line.level || 'OTHER').toUpperCase();
+                    if (bucketLevels[bucketIndex][level] !== undefined) {
+                        bucketLevels[bucketIndex][level]++;
+                    } else {
+                        bucketLevels[bucketIndex]['OTHER']++;
+                    }
+                }
+            }
+            
+            // 保存时间线数据
+            timelineData = {
+                startTime,
+                endTime,
+                timeRange,
+                buckets,
+                bucketLevels,
+                bucketSize,
+                bucketCount
+            };
+            
+            console.log('✅ 时间线数据生成完成，准备绘制');
+            
+            // 显示时间线面板
+            document.getElementById('timelinePanel').style.display = 'block';
+            
+            // 更新时间信息
+            const info = document.getElementById('timelineInfo');
+            info.innerHTML = `📅 ${startTime.toLocaleString()} — ${endTime.toLocaleString()} <span style="margin-left: 15px;">📊 共 ${timestamps.length} 条有时间戳的日志</span>`;
+            
+            // 延迟绘制，确保Canvas元素已经渲染好
+            setTimeout(() => {
+                drawTimeline();
+            }, 100);
+        }
+        
+        function drawTimeline() {
+            if (!timelineData) {
+                console.log('⚠️ drawTimeline: timelineData 为空');
+                return;
+            }
+            
+            const canvas = document.getElementById('timelineCanvas');
+            if (!canvas) {
+                console.log('⚠️ drawTimeline: 找不到 canvas 元素');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.log('⚠️ drawTimeline: 无法获取 2d context');
+                return;
+            }
+            
+            // 设置canvas实际尺寸（高分辨率）
+            const rect = canvas.getBoundingClientRect();
+            
+            // 确保canvas有有效尺寸
+            if (rect.width === 0 || rect.height === 0) {
+                console.log('⚠️ drawTimeline: canvas 尺寸为0，等待渲染...');
+                // 再次延迟尝试
+                setTimeout(() => drawTimeline(), 200);
+                return;
+            }
+            
+            console.log('🎨 开始绘制时间线，canvas 尺寸:', rect.width, 'x', rect.height);
+            
+            canvas.width = rect.width * 2;
+            canvas.height = 160;
+            ctx.scale(2, 2);
+            
+            const width = rect.width;
+            const height = 80;
+            
+            // 清空画布
+            ctx.clearRect(0, 0, width, height);
+            
+            // 找出最大值用于归一化
+            const maxCount = Math.max(...timelineData.buckets, 1);
+            
+            // 计算每个柱子的宽度
+            const barWidth = width / timelineData.bucketCount;
+            
+            console.log('🎨 绘制参数 - 最大值:', maxCount, '，柱宽:', barWidth);
+            
+            // 绘制柱状图
+            for (let i = 0; i < timelineData.bucketCount; i++) {
+                const count = timelineData.buckets[i];
+                const barHeight = (count / maxCount) * (height - 10);
+                const x = i * barWidth;
+                const y = height - barHeight;
+                
+                // 根据级别分布决定颜色
+                const levels = timelineData.bucketLevels[i];
+                let color = '#888888'; // 默认灰色
+                
+                if (levels.ERROR > 0) {
+                    color = '#f14c4c'; // 红色 - ERROR
+                } else if (levels.WARN > 0) {
+                    color = '#cca700'; // 橙色 - WARN
+                } else if (levels.INFO > 0) {
+                    color = '#4fc1ff'; // 蓝色 - INFO
+                } else if (levels.DEBUG > 0) {
+                    color = '#b267e6'; // 紫色 - DEBUG
+                }
+                
+                // 绘制柱子
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, Math.max(barWidth - 1, 1), barHeight);
+            }
+            
+            console.log('✅ 时间线绘制完成');
+        }
+        
+        // 点击时间线跳转
+        document.getElementById('timelineCanvas').addEventListener('click', function(e) {
+            if (!timelineData) return;
+            
+            const canvas = this;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const clickRatio = x / rect.width;
+            
+            // 计算点击位置对应的时间
+            const targetTime = new Date(timelineData.startTime.getTime() + clickRatio * timelineData.timeRange);
+            
+            console.log('🕐 时间线点击 - 目标时间:', targetTime.toLocaleString());
+            
+            // 在已加载的数据中查找最接近的行
+            let closestIndex = -1;
+            let minDiff = Infinity;
+            
+            for (let i = 0; i < allLines.length; i++) {
+                if (allLines[i].timestamp) {
+                    const lineTime = new Date(allLines[i].timestamp);
+                    const diff = Math.abs(lineTime - targetTime);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIndex = i;
+                    }
+                }
+            }
+            
+            if (closestIndex !== -1) {
+                // 跳转到对应页面
+                const targetPage = Math.floor(closestIndex / pageSize) + 1;
+                currentPage = targetPage;
+                updatePagination();
+                renderLines();
+                
+                // 滚动到顶部
+                document.getElementById('logContainer').scrollTop = 0;
+                
+                showToast(`已跳转到 ${new Date(allLines[closestIndex].timestamp).toLocaleString()}`);
+            } else {
+                showToast('⚠️ 该时间段没有日志数据');
+            }
+        });
+        
+        // 鼠标悬停显示时间信息
+        document.getElementById('timelineCanvas').addEventListener('mousemove', function(e) {
+            if (!timelineData) return;
+            
+            const canvas = this;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const hoverRatio = x / rect.width;
+            
+            // 计算悬停位置对应的时间
+            const hoverTime = new Date(timelineData.startTime.getTime() + hoverRatio * timelineData.timeRange);
+            
+            // 找到对应的桶
+            const bucketIndex = Math.min(Math.floor(hoverRatio * timelineData.bucketCount), timelineData.bucketCount - 1);
+            const count = timelineData.buckets[bucketIndex];
+            const levels = timelineData.bucketLevels[bucketIndex];
+            
+            // 更新标题显示详细信息
+            canvas.title = `${hoverTime.toLocaleString()}\n日志数: ${count}\nERROR: ${levels.ERROR} | WARN: ${levels.WARN} | INFO: ${levels.INFO} | DEBUG: ${levels.DEBUG}`;
+        });
+        
         // 搜索框回车搜索
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 search();
             }
         });
+        
+        // ========== JSON/XML 自动解析功能 ==========
+        
+        function detectAndParseStructuredData(content) {
+            if (!content || typeof content !== 'string') return null;
+            
+            // 尝试检测JSON
+            const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+            if (jsonMatch) {
+                try {
+                    const jsonStr = jsonMatch[0];
+                    const jsonObj = JSON.parse(jsonStr);
+                    return renderJSONTree(jsonObj);
+                } catch (e) {
+                    // 不是有效的JSON
+                }
+            }
+            
+            // 尝试检测XML
+            const xmlMatch = content.match(/<[^>]+>[\s\S]*<\/[^>]+>/);
+            if (xmlMatch) {
+                try {
+                    const xmlStr = xmlMatch[0];
+                    return renderXMLTree(xmlStr);
+                } catch (e) {
+                    // 不是有效的XML
+                }
+            }
+            
+            return null;
+        }
+        
+        function renderJSONTree(obj, depth = 0) {
+            const id = 'json_' + Math.random().toString(36).substr(2, 9);
+            
+            if (obj === null) {
+                return `<span class="json-null">null</span>`;
+            }
+            
+            if (typeof obj === 'string') {
+                return `<span class="json-string">"${escapeHtml(obj)}"</span>`;
+            }
+            
+            if (typeof obj === 'number') {
+                return `<span class="json-number">${obj}</span>`;
+            }
+            
+            if (typeof obj === 'boolean') {
+                return `<span class="json-boolean">${obj}</span>`;
+            }
+            
+            const isArray = Array.isArray(obj);
+            const keys = Object.keys(obj);
+            const len = keys.length;
+            
+            if (len === 0) {
+                return isArray ? '<span>[]</span>' : '<span>{}</span>';
+            }
+            
+            // 如果对象太大，默认折叠
+            const defaultCollapsed = depth > 1 || len > 10;
+            
+            let html = '<div class="json-tree">';
+            html += `<span class="json-tree-toggle" onclick="toggleJSONNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
+            html += `<span>${isArray ? '[' : '{'}</span>`;
+            html += `<span class="json-expand-btn" onclick="toggleJSONNode('${id}')" style="display:${defaultCollapsed ? 'inline-block' : 'none'}" id="${id}_btn">${len} items</span>`;
+            
+            html += `<div id="${id}" class="json-tree-item${defaultCollapsed ? ' json-tree-collapsed' : ''}">`;
+            
+            keys.forEach((key, index) => {
+                const value = obj[key];
+                const isLast = index === len - 1;
+                
+                html += '<div style="margin-left: 15px;">';
+                
+                if (!isArray) {
+                    html += `<span class="json-key">"${escapeHtml(key)}"</span>: `;
+                }
+                
+                if (typeof value === 'object' && value !== null) {
+                    html += renderJSONTree(value, depth + 1);
+                } else {
+                    html += renderJSONTree(value, depth + 1);
+                }
+                
+                if (!isLast) {
+                    html += ',';
+                }
+                
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            html += `<span>${isArray ? ']' : '}'}</span>`;
+            html += '</div>';
+            
+            return html;
+        }
+        
+        function renderXMLTree(xmlStr) {
+            const id = 'xml_' + Math.random().toString(36).substr(2, 9);
+            
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
+                
+                if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+                    return null;
+                }
+                
+                return renderXMLNode(xmlDoc.documentElement, 0);
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        function renderXMLNode(node, depth = 0) {
+            if (!node) return '';
+            
+            const id = 'xml_' + Math.random().toString(36).substr(2, 9);
+            const tagName = node.tagName;
+            const hasChildren = node.children.length > 0;
+            const hasText = node.childNodes.length === 1 && node.childNodes[0].nodeType === 3;
+            
+            // 默认折叠深度>1的节点
+            const defaultCollapsed = depth > 1;
+            
+            let html = '<div class="xml-tree">';
+            
+            if (hasChildren) {
+                html += `<span class="xml-tree-toggle" onclick="toggleXMLNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
+            } else {
+                html += '<span style="display:inline-block;width:14px;"></span>';
+            }
+            
+            // 开始标签
+            html += '<span class="xml-tag">&lt;' + escapeHtml(tagName);
+            
+            // 属性
+            if (node.attributes) {
+                for (let i = 0; i < node.attributes.length; i++) {
+                    const attr = node.attributes[i];
+                    html += ' <span class="xml-attr-name">' + escapeHtml(attr.name) + '</span>=';
+                    html += '<span class="xml-attr-value">"' + escapeHtml(attr.value) + '"</span>';
+                }
+            }
+            
+            if (!hasChildren && !hasText) {
+                html += '/&gt;</span>';
+            } else {
+                html += '&gt;</span>';
+                
+                if (hasText) {
+                    html += escapeHtml(node.textContent.trim());
+                } else if (hasChildren) {
+                    html += `<div id="${id}" class="xml-tree-item${defaultCollapsed ? ' xml-tree-collapsed' : ''}">`;
+                    
+                    for (let i = 0; i < node.children.length; i++) {
+                        html += renderXMLNode(node.children[i], depth + 1);
+                    }
+                    
+                    html += '</div>';
+                }
+                
+                html += '<span class="xml-tag">&lt;/' + escapeHtml(tagName) + '&gt;</span>';
+            }
+            
+            html += '</div>';
+            
+            return html;
+        }
+        
+        function toggleJSONNode(id) {
+            const node = document.getElementById(id);
+            const toggle = node.previousElementSibling.previousElementSibling;
+            const btn = document.getElementById(id + '_btn');
+            
+            if (node.classList.contains('json-tree-collapsed')) {
+                node.classList.remove('json-tree-collapsed');
+                toggle.textContent = '▼';
+                if (btn) btn.style.display = 'none';
+            } else {
+                node.classList.add('json-tree-collapsed');
+                toggle.textContent = '▶';
+                if (btn) btn.style.display = 'inline-block';
+            }
+        }
+        
+        function toggleXMLNode(id) {
+            const node = document.getElementById(id);
+            const toggle = node.previousElementSibling.previousElementSibling;
+            
+            if (node.classList.contains('xml-tree-collapsed')) {
+                node.classList.remove('xml-tree-collapsed');
+                toggle.textContent = '▼';
+            } else {
+                node.classList.add('xml-tree-collapsed');
+                toggle.textContent = '▶';
+            }
+        }
+        
+        // ========== 去重统计功能 ==========
+        
+        function showDeduplicationStats() {
+            document.getElementById('deduplicationModal').style.display = 'block';
+            analyzeDeduplication(85);
+        }
+        
+        function closeDeduplicationModal() {
+            document.getElementById('deduplicationModal').style.display = 'none';
+        }
+        
+        function reanalyzeDeduplication() {
+            const threshold = parseInt(document.getElementById('similarityThreshold').value);
+            analyzeDeduplication(threshold);
+        }
+        
+        function analyzeDeduplication(similarityThreshold = 85) {
+            const resultDiv = document.getElementById('deduplicationResult');
+            resultDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">🔍 正在分析日志模式...</div>';
+            
+            // 延迟执行，显示加载效果
+            setTimeout(() => {
+                const patterns = findSimilarLogPatterns(allLines, similarityThreshold / 100);
+                displayDeduplicationResults(patterns);
+            }, 100);
+        }
+        
+        function findSimilarLogPatterns(lines, threshold) {
+            const patterns = new Map();
+            
+            lines.forEach((line, index) => {
+                const content = (line.content || line).toString();
+                
+                // 提取日志模式：将数字、时间戳、UUID等变量替换为占位符
+                let pattern = normalizeLogPattern(content);
+                
+                if (!patterns.has(pattern)) {
+                    patterns.set(pattern, {
+                        pattern: pattern,
+                        count: 0,
+                        level: line.level || 'OTHER',
+                        examples: [],
+                        lineNumbers: []
+                    });
+                }
+                
+                const patternData = patterns.get(pattern);
+                patternData.count++;
+                patternData.lineNumbers.push(line.lineNumber || index + 1);
+                
+                // 只保存3个示例
+                if (patternData.examples.length < 3) {
+                    patternData.examples.push({
+                        lineNumber: line.lineNumber || index + 1,
+                        content: content
+                    });
+                }
+            });
+            
+            // 转换为数组并按出现次数排序
+            const sortedPatterns = Array.from(patterns.values())
+                .filter(p => p.count >= 2) // 只显示至少出现了两次的模式
+                .sort((a, b) => b.count - a.count);
+            
+            return sortedPatterns;
+        }
+        
+        function normalizeLogPattern(content) {
+            let pattern = content;
+            
+            // 替换时间戳
+            pattern = pattern.replace(/\d{4}[-\/]\d{2}[-\/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?/g, '<TIMESTAMP>');
+            pattern = pattern.replace(/\[\d{4}[-\/]\d{2}[-\/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?\]/g, '[<TIMESTAMP>]');
+            
+            // 替换UUID
+            pattern = pattern.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<UUID>');
+            
+            // 替换IP地址
+            pattern = pattern.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '<IP>');
+            
+            // 替换端口号
+            pattern = pattern.replace(/:(\d{2,5})\b/g, ':<PORT>');
+            
+            // 替换整数（连续3位以上）
+            pattern = pattern.replace(/\b\d{3,}\b/g, '<NUMBER>');
+            
+            // 替换浮点数
+            pattern = pattern.replace(/\b\d+\.\d+\b/g, '<DECIMAL>');
+            
+            // 替换十六进制数（如内存地址）
+            pattern = pattern.replace(/0x[0-9a-fA-F]+/g, '<HEX>');
+            
+            // 替换文件路径
+            pattern = pattern.replace(/[A-Za-z]:\\[^\s]+/g, '<FILEPATH>');
+            pattern = pattern.replace(/\/[a-zA-Z0-9_\-\/\.]+/g, '<PATH>');
+            
+            // 替换单独的数字（不足三位）
+            pattern = pattern.replace(/\b\d{1,2}\b/g, '<NUM>');
+            
+            return pattern;
+        }
+        
+        function displayDeduplicationResults(patterns) {
+            const resultDiv = document.getElementById('deduplicationResult');
+            
+            if (patterns.length === 0) {
+                resultDiv.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">
+                        ✅ 没有发现重复的日志模式！<br>
+                        <span style="font-size: 12px; margin-top: 10px; display: block;">所有日志都是唯一的，或者相似度未达到阈值</span>
+                    </div>
+                `;
+                return;
+            }
+            
+            const totalDuplicates = patterns.reduce((sum, p) => sum + p.count, 0);
+            const uniquePatterns = patterns.length;
+            
+            let html = `
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 5px; margin-bottom: 15px; color: white;">
+                    <div style="display: flex; justify-content: space-around; text-align: center;">
+                        <div>
+                            <div style="font-size: 28px; font-weight: bold;">${uniquePatterns}</div>
+                            <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">相似模式</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 28px; font-weight: bold;">${totalDuplicates}</div>
+                            <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">总重复次数</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 28px; font-weight: bold;">${((totalDuplicates / allLines.length) * 100).toFixed(1)}%</div>
+                            <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">重复比例</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            patterns.forEach((p, index) => {
+                const levelColor = {
+                    'ERROR': '#f14c4c',
+                    'WARN': '#cca700',
+                    'INFO': '#4fc1ff',
+                    'DEBUG': '#b267e6',
+                    'OTHER': '#888888'
+                }[p.level.toUpperCase()] || '#888888';
+                
+                const isExpanded = index < 5; // 前5个默认展开
+                const patternId = 'pattern_' + index;
+                
+                html += `
+                    <div style="margin-bottom: 15px; border: 1px solid var(--vscode-panel-border); border-radius: 5px; overflow: hidden;">
+                        <div style="background-color: var(--vscode-editorWidget-background); padding: 12px; cursor: pointer;" 
+                             onclick="togglePattern('${patternId}')">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                    <span id="${patternId}_toggle" style="font-weight: bold; color: var(--vscode-textLink-foreground);">${isExpanded ? '▼' : '▶'}</span>
+                                    <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${levelColor};"></span>
+                                    <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">#${index + 1}</span>
+                                    <span style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        ${escapeHtml(p.pattern.substring(0, 100))}${p.pattern.length > 100 ? '...' : ''}
+                                    </span>
+                                </div>
+                                <div style="display: flex; gap: 15px; align-items: center;">
+                                    <span style="background-color: ${levelColor}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;">
+                                        ${p.level}
+                                    </span>
+                                    <span style="background-color: #8b5cf6; color: white; padding: 3px 10px; border-radius: 3px; font-size: 12px; font-weight: bold;">
+                                        ${p.count} 次
+                                    </span>
+                                    <button onclick="event.stopPropagation(); showPatternLines(${JSON.stringify(p.lineNumbers).replace(/"/g, '&quot;')})"
+                                            style="padding: 3px 10px; font-size: 11px; background-color: #10b981;">
+                                        🔍 查看所有
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="${patternId}" style="display: ${isExpanded ? 'block' : 'none'}; padding: 15px; background-color: var(--vscode-editor-background);">
+                            <div style="margin-bottom: 10px; font-weight: bold; color: var(--vscode-textLink-foreground);">📊 模式详情：</div>
+                            <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 11px; line-height: 1.6; word-wrap: break-word; margin-bottom: 15px;">
+                                ${escapeHtml(p.pattern)}
+                            </div>
+                            <div style="margin-bottom: 10px; font-weight: bold; color: var(--vscode-textLink-foreground);">📝 示例（前3条）：</div>
+                            ${p.examples.map(ex => `
+                                <div style="padding: 8px; margin-bottom: 8px; background-color: var(--vscode-editorWidget-background); border-radius: 3px; border-left: 3px solid ${levelColor}; cursor: pointer; transition: background-color 0.2s;"
+                                     onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'"
+                                     onmouseout="this.style.backgroundColor='var(--vscode-editorWidget-background)'"
+                                     onclick="jumpToLineInPattern(${ex.lineNumber})"
+                                     title="点击跳转到该行">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <span style="font-size: 11px; color: var(--vscode-descriptionForeground);">行 ${ex.lineNumber}</span>
+                                    </div>
+                                    <div style="font-family: 'Consolas', monospace; font-size: 11px; color: var(--vscode-editor-foreground); word-wrap: break-word;">
+                                        ${escapeHtml(ex.content)}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultDiv.innerHTML = html;
+        }
+        
+        function togglePattern(patternId) {
+            const content = document.getElementById(patternId);
+            const toggle = document.getElementById(patternId + '_toggle');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggle.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                toggle.textContent = '▶';
+            }
+        }
+        
+        function showPatternLines(lineNumbers) {
+            // 按行号筛选并显示
+            const filteredLines = allLines.filter(line => {
+                const lineNum = line.lineNumber || allLines.indexOf(line) + 1;
+                return lineNumbers.includes(lineNum);
+            });
+            
+            closeDeduplicationModal();
+            
+            // 显示筛选后的日志
+            allLines = filteredLines;
+            currentPage = 1;
+            isFiltering = true;
+            updatePagination();
+            renderLines();
+            
+            showToast(`✅ 已筛选出 ${filteredLines.length} 条相似日志`);
+        }
+        
+        function jumpToLineInPattern(lineNumber) {
+            closeDeduplicationModal();
+            
+            // 如果当前是过滤模式，先恢复完整日志
+            if (isFiltering || currentSearchKeyword) {
+                jumpToLineInFullLog(lineNumber);
+            } else {
+                jumpToLine(lineNumber);
+            }
+        }
         
         // 键盘快捷键支持
         document.addEventListener('keydown', function(e) {

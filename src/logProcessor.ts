@@ -132,7 +132,7 @@ export class LogProcessor {
     /**
      * 搜索包含关键词的行
      */
-    async search(keyword: string): Promise<LogLine[]> {
+    async search(keyword: string, reverse: boolean = false): Promise<LogLine[]> {
         return new Promise((resolve, reject) => {
             const results: LogLine[] = [];
             let currentLine = 0;
@@ -159,6 +159,10 @@ export class LogProcessor {
             });
 
             rl.on('close', () => {
+                // 如果是反向搜索，倒序返回结果
+                if (reverse) {
+                    results.reverse();
+                }
                 resolve(results);
             });
 
@@ -697,7 +701,7 @@ export class LogProcessor {
     /**
      * 正则表达式搜索
      */
-    async regexSearch(pattern: string, flags: string = 'i'): Promise<LogLine[]> {
+    async regexSearch(pattern: string, flags: string = 'i', reverse: boolean = false): Promise<LogLine[]> {
         return new Promise((resolve, reject) => {
             const results: LogLine[] = [];
             let currentLine = 0;
@@ -731,6 +735,10 @@ export class LogProcessor {
             });
 
             rl.on('close', () => {
+                // 如果是反向搜索，倒序返回结果
+                if (reverse) {
+                    results.reverse();
+                }
                 resolve(results);
             });
 

@@ -58,7 +58,7 @@ export class LogViewerPanel {
                         await this.loadMoreLines(message.startLine, message.count);
                         break;
                     case 'search':
-                        await this.searchLogs(message.keyword);
+                        await this.searchLogs(message.keyword, message.reverse);
                         break;
                     case 'refresh':
                         await this.loadFile(this._fileUri);
@@ -70,7 +70,7 @@ export class LogViewerPanel {
                         await this.getStatistics();
                         break;
                     case 'regexSearch':
-                        await this.regexSearch(message.pattern, message.flags);
+                        await this.regexSearch(message.pattern, message.flags, message.reverse);
                         break;
                     case 'exportLogs':
                         await this.exportCurrentView(message.lines);
@@ -83,6 +83,9 @@ export class LogViewerPanel {
                         break;
                     case 'jumpToTime':
                         await this.jumpToTime(message.timeStr);
+                        break;
+                    case 'jumpToLineInFullLog':
+                        await this.jumpToLineInFullLog(message.lineNumber);
                         break;
                     case 'showMessage':
                         if (message.type === 'warning') {
@@ -159,9 +162,9 @@ export class LogViewerPanel {
         }
     }
 
-    private async searchLogs(keyword: string) {
+    private async searchLogs(keyword: string, reverse: boolean = false) {
         try {
-            const results = await this._logProcessor.search(keyword);
+            const results = await this._logProcessor.search(keyword, reverse);
             this._panel.webview.postMessage({
                 command: 'searchResults',
                 data: {
@@ -357,6 +360,52 @@ export class LogViewerPanel {
         }
     }
 
+    private async jumpToLineInFullLog(lineNumber: number) {
+        try {
+            vscode.window.showInformationMessage(`正在加载完整日志并跳转到第 ${lineNumber} 行...`);
+            
+            // 获取总行数
+            const totalLines = await this._logProcessor.getTotalLines();
+            
+            // 根据文件大小决定加载策略
+            let lines;
+            let allLoaded = false;
+            
+            if (totalLines <= 50000) {
+                // 小文件，一次性加载所有数据
+                lines = await this._logProcessor.readLines(0, totalLines);
+                allLoaded = true;
+            } else {
+                // 大文件，加载目标行附近的10000行
+                const startLine = Math.max(0, lineNumber - 5000);
+                const count = 10000;
+                lines = await this._logProcessor.readLines(startLine, count);
+            }
+            
+            // 获取文件信息
+            const fileStats = await fs.promises.stat(this._fileUri.fsPath);
+            const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(2);
+            
+            // 发送完整日志数据和跳转指令
+            this._panel.webview.postMessage({
+                command: 'jumpToLineInFullLogResult',
+                data: {
+                    fileName: path.basename(this._fileUri.fsPath),
+                    filePath: this._fileUri.fsPath,
+                    fileSize: fileSizeMB,
+                    totalLines: totalLines,
+                    lines: lines,
+                    allLoaded: allLoaded,
+                    targetLineNumber: lineNumber
+                }
+            });
+            
+            vscode.window.showInformationMessage(`已跳转到第 ${lineNumber} 行`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`跳转失败: ${error}`);
+        }
+    }
+
     private async filterByLevel(levels: string[]) {
         try {
             console.log('📤 前端发送过滤请求 - 级别:', levels);
@@ -398,9 +447,9 @@ export class LogViewerPanel {
         }
     }
 
-    private async regexSearch(pattern: string, flags: string) {
+    private async regexSearch(pattern: string, flags: string, reverse: boolean = false) {
         try {
-            const results = await this._logProcessor.regexSearch(pattern, flags);
+            const results = await this._logProcessor.regexSearch(pattern, flags, reverse);
             this._panel.webview.postMessage({
                 command: 'searchResults',
                 data: {
@@ -432,6 +481,7 @@ export class LogViewerPanel {
             vscode.window.showErrorMessage(`导出失败: ${error}`);
         }
     }
+
 
     private _update() {
         const webview = this._panel.webview;
