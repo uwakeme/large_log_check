@@ -210,6 +210,29 @@
             padding-left: 5px;
         }
         
+        /* 折叠日志样式 */
+        .log-line.collapsed {
+            background-color: rgba(139, 92, 246, 0.1);
+            border-left: 3px solid #8b5cf6;
+            cursor: pointer;
+        }
+        
+        .log-line.collapsed:hover {
+            background-color: rgba(139, 92, 246, 0.2);
+        }
+        
+        .repeat-count {
+            display: inline-block;
+            background-color: #8b5cf6;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        
         .log-line.highlight-target {
             background-color: rgba(255, 193, 7, 0.3);
             border-left: 3px solid #ffc107;
@@ -627,6 +650,11 @@
             </label>
             <label><input type="checkbox" id="filterOther" checked onchange="applyFilter()"> 其他</label>
         </div>
+        <span style="width: 1px; height: 20px; background-color: var(--vscode-panel-border); margin: 0 10px;"></span>
+        <label style="font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="checkbox" id="collapseRepeated" onchange="toggleCollapseMode()">
+            <span>📎 折叠重复日志</span>
+        </label>
         <button onclick="showLegendModal()" style="margin-left: auto; padding: 3px 10px; font-size: 12px;">🎨 颜色图例</button>
     </div>
     
@@ -930,31 +958,6 @@
         </div>
     </div>
     
-    <!-- 去重统计弹窗 -->
-    <div id="deduplicationModal" class="modal">
-        <div class="modal-content" style="max-width: 1000px; max-height: 85vh;">
-            <div class="modal-header">
-                <h2>🔍 相似日志聚合分析</h2>
-                <span class="modal-close" onclick="closeDeduplicationModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
-                    <span style="font-weight: bold;">相似度阈值：</span>
-                    <input type="range" id="similarityThreshold" min="50" max="100" value="85" 
-                           oninput="document.getElementById('thresholdValue').textContent = this.value + '%'" 
-                           style="width: 200px;">
-                    <span id="thresholdValue" style="min-width: 40px; font-weight: bold; color: #8b5cf6;">85%</span>
-                    <button onclick="reanalyzeDeduplication()" style="background-color: #8b5cf6; padding: 5px 15px;">🔄 重新分析</button>
-                </div>
-                <div id="deduplicationResult" style="max-height: 60vh; overflow-y: auto;">
-                    <div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">
-                        🔍 正在分析日志模式...
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
     <!-- 高级搜索弹窗 -->
     <div id="advancedSearchModal" class="modal">
         <div class="modal-content" style="max-width: 600px;">
@@ -1006,6 +1009,11 @@
         let comments = new Map(); // 注释集合，key为行号，value为注释内容
         let timelineData = null; // 时间线数据
         let isTimelineExpanded = true; // 时间线是否展开
+        let isCollapseMode = false; // 是否开启折叠模式
+        let expandedGroups = new Set(); // 已展开的折叠组
+        let pageRanges = new Map(); // 记录每页实际加载的行范围 Map<pageNumber, {start, end}>
+        let isCalculatingPages = false; // 是否正在计算页面范围
+        let calculationProgress = 0; // 计算进度（0-100）
         
         // 分页参数
         let currentPage = 1;
@@ -1057,6 +1065,7 @@
             allLines = data.lines;
             originalLines = [...data.lines];
             currentPage = 1;
+            pageRanges.clear(); // 清空页面范围记录
             updatePagination();
             renderLines();
             
@@ -1086,6 +1095,7 @@
             currentSearchKeyword = data.keyword;
             allLines = data.results;
             currentPage = 1;
+            pageRanges.clear(); // 清空页面范围记录
             updatePagination();
             renderLines();
         }
@@ -1095,6 +1105,7 @@
             allLines = data.results;
             isFiltering = true; // 设置为过滤模式
             currentPage = 1;
+            pageRanges.clear(); // 清空页面范围记录
             updatePagination();
             renderLines();
             
@@ -1141,7 +1152,7 @@
             const container = document.getElementById('logContainer');
             container.innerHTML = '';
             
-            console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length);
+            console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length, '，折叠模式:', isCollapseMode);
             
             if (allLines.length === 0) {
                 container.innerHTML = '<div class="loading">没有日志数据</div>';
@@ -1152,102 +1163,530 @@
             }
             
             // 计算分页
-            const startIndex = (currentPage - 1) * pageSize;
-            const endIndex = Math.min(startIndex + pageSize, allLines.length);
-            const pageLines = allLines.slice(startIndex, endIndex);
+            let startIndex, endIndex;
             
-            pageLines.forEach((line, index) => {
-                const lineDiv = document.createElement('div');
-                lineDiv.className = 'log-line';
+            if (isCollapseMode && pageRanges.has(currentPage)) {
+                // 折叠模式且已记录过该页范围，直接使用
+                const range = pageRanges.get(currentPage);
+                startIndex = range.start;
+                endIndex = range.end;
+                console.log(`📖 使用已记录的第 ${currentPage} 页范围: ${startIndex}-${endIndex}`);
+            } else if (isCollapseMode && currentPage > 1 && pageRanges.has(currentPage - 1)) {
+                // 折叠模式且是新页面，从上一页的结束位置开始
+                const prevRange = pageRanges.get(currentPage - 1);
+                startIndex = prevRange.end;
+                endIndex = Math.min(startIndex + pageSize, allLines.length);
+                console.log(`📖 从上一页结束位置 ${startIndex} 开始加载第 ${currentPage} 页`);
+            } else {
+                // 非折叠模式或第一页，使用标准计算
+                startIndex = (currentPage - 1) * pageSize;
+                endIndex = Math.min(startIndex + pageSize, allLines.length);
+                console.log(`📖 标准分页计算第 ${currentPage} 页: ${startIndex}-${endIndex}`);
+            }
+            
+            // 如果开启折叠模式，动态调整加载数量以填满页面
+            if (isCollapseMode) {
+                const targetDisplayLines = pageSize; // 目标显示数量（折叠后）
+                let displayCount = 0;
+                let tempEndIndex = endIndex;
+                let attempts = 0;
+                const maxAttempts = 5; // 最多尝试5次，避免死循环
+                const maxLoadLines = pageSize * 50; // 最多加载50倍，避免过度加载
                 
-                const actualLineNumber = line.lineNumber || startIndex + index + 1;
-                
-                // 根据日志级别添加样式
-                if (line.level) {
-                    lineDiv.classList.add(line.level.toLowerCase());
+                // 尝试加载更多数据直到达到目标显示数量
+                while (displayCount < targetDisplayLines && tempEndIndex < allLines.length && attempts < maxAttempts) {
+                    // 限制最大加载范围
+                    if (tempEndIndex - startIndex > maxLoadLines) {
+                        console.log(`⚠️ 已达到最大加载限制 ${maxLoadLines} 行，停止加载`);
+                        break;
+                    }
+                    
+                    const testLines = allLines.slice(startIndex, tempEndIndex);
+                    const collapsed = collapseRepeatedLines(testLines, startIndex);
+                    displayCount = collapsed.length;
+                    
+                    console.log(`🔄 尝试 ${attempts + 1}：加载 ${tempEndIndex - startIndex} 行，折叠后得到 ${displayCount} 条，目标 ${targetDisplayLines} 条`);
+                    
+                    if (displayCount < targetDisplayLines) {
+                        // 需要加载更多，但要限制增量
+                        const needed = targetDisplayLines - displayCount;
+                        const ratio = displayCount > 0 ? (tempEndIndex - startIndex) / displayCount : 1;
+                        
+                        // 计算增量，但不要超过剩余需求的5倏
+                        let increment = Math.ceil(needed * ratio * 0.5); // 只增加50%，避免过度
+                        increment = Math.max(increment, 50); // 至少增加50条
+                        increment = Math.min(increment, pageSize * 2); // 最多增加2倍pageSize
+                        
+                        tempEndIndex = Math.min(tempEndIndex + increment, allLines.length);
+                        attempts++;
+                    } else {
+                        break;
+                    }
                 }
                 
-                // 如果是书签行，添加书签标记
-                if (bookmarks.has(actualLineNumber)) {
-                    lineDiv.style.backgroundColor = 'rgba(255, 193, 7, 0.1)';
-                    lineDiv.style.borderRight = '3px solid #ffc107';
+                endIndex = tempEndIndex;
+                console.log(`📎 折叠模式：最终加载范围 ${startIndex}-${endIndex}（${endIndex - startIndex} 行），折叠后显示 ${displayCount} 条`);
+                
+                // 记录该页的实际范围
+                pageRanges.set(currentPage, { start: startIndex, end: endIndex });
+            } else if (isCollapseMode) {
+                // 折叠模式但没有智能加载，也要记录范围
+                pageRanges.set(currentPage, { start: startIndex, end: endIndex });
+            }
+            
+            let pageLines = allLines.slice(startIndex, endIndex);
+            
+            // 如果开启折叠模式，进行折叠处理
+            if (isCollapseMode) {
+                pageLines = collapseRepeatedLines(pageLines, startIndex);
+            }
+            
+            pageLines.forEach((item, index) => {
+                // item 可能是单条日志或折叠组
+                if (item.isCollapsed) {
+                    // 渲染折叠组
+                    renderCollapsedGroup(container, item);
+                } else {
+                    // 渲染单条日志
+                    const line = item;
+                    renderSingleLine(container, line, startIndex, index);
                 }
-                
-                const lineNumber = document.createElement('span');
-                lineNumber.className = 'log-line-number';
-                lineNumber.textContent = actualLineNumber.toString();
-                
-                // 如果是书签，显示书签图标
-                if (bookmarks.has(actualLineNumber)) {
-                    lineNumber.textContent = '📌 ' + lineNumber.textContent;
-                }
-                
-                const lineContent = document.createElement('span');
-                lineContent.className = 'log-line-content';
-                
-                const content = line.content || line;
-                
-                // 尝试解析JSON/XML并添加到日志内容后面
-                const parsedStructure = detectAndParseStructuredData(content);
-                
-                // 增强高亮功能
-                let highlightedContent = highlightKeywords(content, currentSearchKeyword);
-                
-                // 如果有注释，添加注释徽章
-                if (comments.has(actualLineNumber)) {
-                    highlightedContent += `<span class="comment-badge" onclick="event.stopPropagation(); editComment(${actualLineNumber})" title="点击编辑注释">📝 有注释</span>`;
-                }
-                
-                lineContent.innerHTML = highlightedContent;
-                
-                // 添加右键菜单复制功能
-                lineDiv.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    showContextMenu(e, content, actualLineNumber);
-                };
-                
-                // 添加双击书签功能
-                lineDiv.ondblclick = (e) => {
-                    e.stopPropagation();
-                    toggleBookmark(actualLineNumber);
-                };
-                
-                // 添加点击跳转功能（仅在搜索模式下）
-                if (currentSearchKeyword || isFiltering) {
-                    lineDiv.onclick = (e) => {
-                        // 如果点击的是注释徽章，不跳转
-                        if (e.target.classList.contains('comment-badge')) {
-                            return;
-                        }
-                        jumpToLineInFullLog(actualLineNumber);
-                    };
-                    lineDiv.style.cursor = 'pointer';
-                    lineDiv.title = '点击跳转到完整日志中的此行';
-                }
-                
-                lineDiv.appendChild(lineNumber);
-                lineDiv.appendChild(lineContent);
-                
-                // 如果解析出JSON/XML结构，添加到下方
-                if (parsedStructure) {
-                    const structDiv = document.createElement('div');
-                    structDiv.innerHTML = parsedStructure;
-                    lineDiv.appendChild(structDiv);
-                }
-                
-                // 如果有注释，在下方显示注释内容
-                if (comments.has(actualLineNumber)) {
-                    const commentDiv = document.createElement('div');
-                    commentDiv.className = 'log-comment';
-                    commentDiv.textContent = '📝 ' + comments.get(actualLineNumber);
-                    lineDiv.appendChild(commentDiv);
-                }
-                
-                container.appendChild(lineDiv);
             });
             
             document.getElementById('loadedLines').textContent = allLines.length;
             document.getElementById('pagination').style.display = 'flex';
+            
+            console.log(`✅ 渲染完成！实际显示 ${pageLines.length} 条（原始 ${endIndex - startIndex} 行）`);
+        }
+        
+        // 计算指定页面的范围（不渲染，只计算）
+        function calculatePageRange(pageNum) {
+            console.log(`🧮 计算第 ${pageNum} 页范围...`);
+            
+            if (allLines.length === 0) {
+                pageRanges.set(pageNum, { start: 0, end: 0 });
+                return;
+            }
+            
+            // 计算分页
+            let startIndex, endIndex;
+            
+            if (pageNum === 1) {
+                startIndex = 0;
+                endIndex = Math.min(pageSize, allLines.length);
+            } else if (pageRanges.has(pageNum - 1)) {
+                const prevRange = pageRanges.get(pageNum - 1);
+                startIndex = prevRange.end;
+                endIndex = Math.min(startIndex + pageSize, allLines.length);
+            } else {
+                console.log(`⚠️ 无法计算第 ${pageNum} 页，缺少上一页数据`);
+                return;
+            }
+            
+            // 如果开启折叠模式，动态调整加载数量以填满页面
+            if (isCollapseMode) {
+                const targetDisplayLines = pageSize;
+                let displayCount = 0;
+                let tempEndIndex = endIndex;
+                let attempts = 0;
+                const maxAttempts = 5;
+                const maxLoadLines = pageSize * 50;
+                
+                while (displayCount < targetDisplayLines && tempEndIndex < allLines.length && attempts < maxAttempts) {
+                    if (tempEndIndex - startIndex > maxLoadLines) {
+                        break;
+                    }
+                    
+                    const testLines = allLines.slice(startIndex, tempEndIndex);
+                    const collapsed = collapseRepeatedLines(testLines, startIndex);
+                    displayCount = collapsed.length;
+                    
+                    if (displayCount < targetDisplayLines) {
+                        const needed = targetDisplayLines - displayCount;
+                        const ratio = displayCount > 0 ? (tempEndIndex - startIndex) / displayCount : 1;
+                        let increment = Math.ceil(needed * ratio * 0.5);
+                        increment = Math.max(increment, 50);
+                        increment = Math.min(increment, pageSize * 2);
+                        tempEndIndex = Math.min(tempEndIndex + increment, allLines.length);
+                        attempts++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                endIndex = tempEndIndex;
+            }
+            
+            pageRanges.set(pageNum, { start: startIndex, end: endIndex });
+            console.log(`✅ 第 ${pageNum} 页范围: ${startIndex}-${endIndex}`);
+        }
+        
+        // 异步计算所有页面范围
+        async function calculateAllPagesAsync() {
+            if (allLines.length === 0 || !isCollapseMode) {
+                return;
+            }
+            
+            isCalculatingPages = true;
+            calculationProgress = 0;
+            pageRanges.clear();
+            
+            console.log('📊 开始异步计算所有页面范围...');
+            updatePagination(); // 更新UI显示"计算中..."
+            
+            let pageNum = 1;
+            let lastEndIndex = 0;
+            
+            // 使用分批处理，每次计算5页，然后让出CPU时间
+            while (lastEndIndex < allLines.length && isCollapseMode) { // 添加检查：如果取消折叠，停止计算
+                // 批量计算5页
+                for (let i = 0; i < 5 && lastEndIndex < allLines.length; i++) {
+                    if (!isCollapseMode) break; // 再次检查
+                    
+                    calculatePageRange(pageNum);
+                    const range = pageRanges.get(pageNum);
+                    if (range) {
+                        lastEndIndex = range.end;
+                        pageNum++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // 如果已经取消折叠模式，退出计算
+                if (!isCollapseMode) {
+                    console.log('⚠️ 折叠模式已取消，停止计算');
+                    isCalculatingPages = false;
+                    calculationProgress = 0;
+                    return;
+                }
+                
+                // 计算进度
+                calculationProgress = Math.min(99, Math.floor((lastEndIndex / allLines.length) * 100));
+                console.log(`📊 计算进度: ${calculationProgress}% (已计算 ${pageNum - 1} 页，处理到第 ${lastEndIndex} 行)`);
+                updatePagination(); // 更新进度显示
+                
+                // 让出CPU时间，保持页面响应
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            
+            calculationProgress = 100;
+            isCalculatingPages = false;
+            
+            console.log(`✅ 所有页面计算完成！共 ${pageNum - 1} 页`);
+            updatePagination(); // 最终更新显示精确值
+        }
+        
+        // 提取日志的核心内容（去除时间戳）
+        function extractLogContent(line) {
+            const content = (line.content || line).toString();
+            
+            // 尝试移除常见的时间戳格式
+            // 格式1: 2025-11-20 08:16:50.054
+            let result = content.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+\s*/, '');
+            
+            // 格式2: [2025-11-20 08:16:50.054]
+            result = result.replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?\]\s*/, '');
+            
+            // 格式3: 2025-11-20 08:16:50
+            result = result.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*/, '');
+            
+            // 格式4: [2025-11-20 08:16:50]
+            result = result.replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\]\s*/, '');
+            
+            // 格式5: 2025/11/20 08:16:50.054
+            result = result.replace(/^\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?\s*/, '');
+            
+            return result.trim();
+        }
+        
+        // 折叠重复的日志行（支持多行模式重复）
+        function collapseRepeatedLines(lines, startIndex) {
+            console.log('📎 开始折叠分析，总行数:', lines.length);
+            const result = [];
+            let i = 0;
+            let totalCollapsed = 0;
+            
+            while (i < lines.length) {
+                // 尝试不同的模式长度（1行、2行、3行...最多10行）
+                let bestPatternLength = 0;
+                let bestRepeatCount = 0;
+                
+                for (let patternLength = 1; patternLength <= Math.min(10, Math.floor((lines.length - i) / 2)); patternLength++) {
+                    // 获取当前模式（去除时间戳）
+                    const pattern = [];
+                    for (let k = 0; k < patternLength; k++) {
+                        if (i + k >= lines.length) break;
+                        const content = extractLogContent(lines[i + k]);
+                        pattern.push(content);
+                    }
+                    
+                    if (pattern.length < patternLength) break;
+                    
+                    // 检测这个模式重复了多少次
+                    let repeatCount = 1;
+                    let j = i + patternLength;
+                    
+                    while (j + patternLength <= lines.length) {
+                        let matches = true;
+                        for (let k = 0; k < patternLength; k++) {
+                            const currentContent = extractLogContent(lines[j + k]);
+                            if (currentContent !== pattern[k]) {
+                                matches = false;
+                                break;
+                            }
+                        }
+                        
+                        if (matches) {
+                            repeatCount++;
+                            j += patternLength;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    // 如果这个模式至少重复2次，且比之前找到的更好
+                    if (repeatCount >= 2 && repeatCount > bestRepeatCount) {
+                        bestPatternLength = patternLength;
+                        bestRepeatCount = repeatCount;
+                    }
+                }
+                
+                if (bestPatternLength > 0 && bestRepeatCount >= 2) {
+                    // 找到了重复模式
+                    const firstLineNumber = lines[i].lineNumber || (startIndex + i + 1);
+                    const groupId = `group_${firstLineNumber}`;
+                    const totalLines = bestPatternLength * bestRepeatCount;
+                    
+                    console.log(`✅ 找到重复模式：从行 ${firstLineNumber} 开始，${bestPatternLength} 行为一组，重复 ${bestRepeatCount} 次，共 ${totalLines} 行`);
+                    if (bestPatternLength > 1) {
+                        console.log('  模式第一行:', extractLogContent(lines[i]).substring(0, 80));
+                    }
+                    totalCollapsed++;
+                    
+                    result.push({
+                        isCollapsed: true,
+                        groupId: groupId,
+                        patternLength: bestPatternLength,
+                        repeatCount: bestRepeatCount,
+                        lines: lines.slice(i, i + totalLines),
+                        firstLine: lines[i],
+                        isExpanded: expandedGroups.has(groupId)
+                    });
+                    
+                    i += totalLines;
+                } else {
+                    // 没有重复，直接添加
+                    result.push(lines[i]);
+                    i++;
+                }
+            }
+            
+            console.log(`📊 折叠完成！找到 ${totalCollapsed} 个重复组，最终输出 ${result.length} 条`);
+            return result;
+        }
+        
+        // 渲染折叠组
+        function renderCollapsedGroup(container, group) {
+            const lineDiv = document.createElement('div');
+            lineDiv.className = 'log-line collapsed';
+            lineDiv.dataset.groupId = group.groupId;
+            
+            // 添加级别样式
+            if (group.firstLine.level) {
+                lineDiv.classList.add(group.firstLine.level.toLowerCase());
+            }
+            
+            const firstLineNumber = group.firstLine.lineNumber || group.lines[0].lineNumber;
+            
+            const lineNumber = document.createElement('span');
+            lineNumber.className = 'log-line-number';
+            lineNumber.textContent = firstLineNumber.toString();
+            
+            const lineContent = document.createElement('span');
+            lineContent.className = 'log-line-content';
+            
+            // 显示模式的第一行
+            const content = group.firstLine.content || group.firstLine;
+            let highlightedContent = highlightKeywords(content, currentSearchKeyword);
+            
+            // 添加重复次数徽章
+            if (group.patternLength === 1) {
+                // 单行重复
+                highlightedContent += `<span class="repeat-count" title="点击${group.isExpanded ? '折叠' : '展开'}详情">重复 ${group.repeatCount} 次</span>`;
+            } else {
+                // 多行模式重复
+                highlightedContent += `<span class="repeat-count" title="点击${group.isExpanded ? '折叠' : '展开'}详情">${group.patternLength} 行为一组，重复 ${group.repeatCount} 次</span>`;
+            }
+            
+            lineContent.innerHTML = highlightedContent;
+            
+            // 点击展开/折叠
+            lineDiv.onclick = () => {
+                toggleGroup(group.groupId);
+            };
+            
+            lineDiv.appendChild(lineNumber);
+            lineDiv.appendChild(lineContent);
+            container.appendChild(lineDiv);
+            
+            // 如果已展开，显示所有行
+            if (group.isExpanded) {
+                group.lines.forEach((line, index) => {
+                    const expandedLineDiv = document.createElement('div');
+                    expandedLineDiv.className = 'log-line';
+                    expandedLineDiv.style.marginLeft = '20px';
+                    expandedLineDiv.style.opacity = '0.8';
+                    
+                    // 每个模式组之间加个分隔线
+                    if (index > 0 && index % group.patternLength === 0) {
+                        expandedLineDiv.style.borderTop = '1px dashed rgba(139, 92, 246, 0.3)';
+                        expandedLineDiv.style.marginTop = '3px';
+                        expandedLineDiv.style.paddingTop = '3px';
+                    }
+                    
+                    const actualLineNumber = line.lineNumber || (firstLineNumber + index);
+                    
+                    const expandedLineNumber = document.createElement('span');
+                    expandedLineNumber.className = 'log-line-number';
+                    expandedLineNumber.textContent = actualLineNumber.toString();
+                    
+                    const expandedLineContent = document.createElement('span');
+                    expandedLineContent.className = 'log-line-content';
+                    const expandedContent = line.content || line;
+                    expandedLineContent.innerHTML = highlightKeywords(expandedContent, currentSearchKeyword);
+                    
+                    expandedLineDiv.appendChild(expandedLineNumber);
+                    expandedLineDiv.appendChild(expandedLineContent);
+                    container.appendChild(expandedLineDiv);
+                });
+            }
+        }
+        
+        // 渲染单条日志
+        function renderSingleLine(container, line, startIndex, index) {
+            const lineDiv = document.createElement('div');
+            lineDiv.className = 'log-line';
+            
+            const actualLineNumber = line.lineNumber || startIndex + index + 1;
+            
+            // 根据日志级别添加样式
+            if (line.level) {
+                lineDiv.classList.add(line.level.toLowerCase());
+            }
+            
+            // 如果是书签行，添加书签标记
+            if (bookmarks.has(actualLineNumber)) {
+                lineDiv.style.backgroundColor = 'rgba(255, 193, 7, 0.1)';
+                lineDiv.style.borderRight = '3px solid #ffc107';
+            }
+            
+            const lineNumber = document.createElement('span');
+            lineNumber.className = 'log-line-number';
+            lineNumber.textContent = actualLineNumber.toString();
+            
+            // 如果是书签，显示书签图标
+            if (bookmarks.has(actualLineNumber)) {
+                lineNumber.textContent = '📌 ' + lineNumber.textContent;
+            }
+            
+            const lineContent = document.createElement('span');
+            lineContent.className = 'log-line-content';
+            
+            const content = line.content || line;
+            
+            // 尝试解析JSON/XML并添加到日志内容后面
+            const parsedStructure = detectAndParseStructuredData(content);
+            
+            // 增强高亮功能
+            let highlightedContent = highlightKeywords(content, currentSearchKeyword);
+            
+            // 如果有注释，添加注释徽章
+            if (comments.has(actualLineNumber)) {
+                highlightedContent += `<span class="comment-badge" onclick="event.stopPropagation(); editComment(${actualLineNumber})" title="点击编辑注释">📝 有注释</span>`;
+            }
+            
+            lineContent.innerHTML = highlightedContent;
+            
+            // 添加右键菜单复制功能
+            lineDiv.oncontextmenu = (e) => {
+                e.preventDefault();
+                showContextMenu(e, content, actualLineNumber);
+            };
+            
+            // 添加双击书签功能
+            lineDiv.ondblclick = (e) => {
+                e.stopPropagation();
+                toggleBookmark(actualLineNumber);
+            };
+            
+            // 添加点击跳转功能（仅在搜索模式下）
+            if (currentSearchKeyword || isFiltering) {
+                lineDiv.onclick = (e) => {
+                    // 如果点击的是注释徽章，不跳转
+                    if (e.target.classList.contains('comment-badge')) {
+                        return;
+                    }
+                    jumpToLineInFullLog(actualLineNumber);
+                };
+                lineDiv.style.cursor = 'pointer';
+                lineDiv.title = '点击跳转到完整日志中的此行';
+            }
+            
+            lineDiv.appendChild(lineNumber);
+            lineDiv.appendChild(lineContent);
+            
+            // 如果解析出JSON/XML结构，添加到下方
+            if (parsedStructure) {
+                const structDiv = document.createElement('div');
+                structDiv.innerHTML = parsedStructure;
+                lineDiv.appendChild(structDiv);
+            }
+            
+            // 如果有注释，在下方显示注释内容
+            if (comments.has(actualLineNumber)) {
+                const commentDiv = document.createElement('div');
+                commentDiv.className = 'log-comment';
+                commentDiv.textContent = '📝 ' + comments.get(actualLineNumber);
+                lineDiv.appendChild(commentDiv);
+            }
+            
+            container.appendChild(lineDiv);
+        }
+        
+        // 切换折叠组
+        function toggleGroup(groupId) {
+            if (expandedGroups.has(groupId)) {
+                expandedGroups.delete(groupId);
+            } else {
+                expandedGroups.add(groupId);
+            }
+            renderLines();
+        }
+        
+        // 切换折叠模式
+        function toggleCollapseMode() {
+            isCollapseMode = document.getElementById('collapseRepeated').checked;
+            console.log('🔍 切换折叠模式:', isCollapseMode);
+            
+            // 清空页面范围记录，重新计算
+            pageRanges.clear();
+            currentPage = 1;
+            expandedGroups.clear(); // 清空展开状态
+            
+            // 如果取消折叠模式，重置计算状态
+            if (!isCollapseMode) {
+                isCalculatingPages = false;
+                calculationProgress = 0;
+            }
+            
+            renderLines();
+            updatePagination(); // 手动再次调用以确保状态正确
+            
+            // 如果开启折叠模式，异步计算所有页面
+            if (isCollapseMode) {
+                calculateAllPagesAsync();
+            }
         }
         
         // 增强的关键词高亮功能
@@ -1510,20 +1949,6 @@
                     </div>
                 `;
             }
-            
-            // 添加去重统计按钮
-            grid.innerHTML += `
-                <div class="stats-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; cursor: pointer;" 
-                     onclick="showDeduplicationStats()">
-                    <h3 style="color: white; display: flex; align-items: center; gap: 10px;">
-                        <span>🔍</span>
-                        <span>相似日志聚合分析</span>
-                    </h3>
-                    <div style="font-size: 13px; opacity: 0.95; margin-top: 5px;">
-                        点击查看重复日志模式统计 →
-                    </div>
-                </div>
-            `;
             
             document.getElementById('statsModal').style.display = 'block';
         }
@@ -2478,19 +2903,67 @@
         
         // 分页功能
         function updatePagination() {
-            totalPages = Math.ceil(allLines.length / pageSize);
+            let isEstimated = false; // 标记总页数是否为估算值
+            
+            // 在折叠模式下，总页数难以精确计算，需要动态估算
+            if (isCollapseMode) {
+                // 如果已经有页面范围记录，根据最后一页的结束位置估算
+                if (pageRanges.size > 0) {
+                    const maxPage = Math.max(...pageRanges.keys());
+                    const maxRange = pageRanges.get(maxPage);
+                    
+                    if (maxRange.end >= allLines.length) {
+                        // 已经到达最后，总页数就是已知的最大页
+                        totalPages = maxPage;
+                        isEstimated = false; // 精确值
+                    } else {
+                        // 还有更多数据，至少比当前已知最大页多1页，以便启用“下一页”按钮
+                        totalPages = maxPage + 1;
+                        isEstimated = true; // 估算值
+                    }
+                } else {
+                    // 没有记录，使用标准计算作为初始估算
+                    totalPages = Math.ceil(allLines.length / pageSize);
+                    isEstimated = true; // 估算值
+                }
+            } else {
+                // 非折叠模式，使用标准计算
+                totalPages = Math.ceil(allLines.length / pageSize);
+                isEstimated = false;
+            }
+            
             if (totalPages < 1) totalPages = 1;
             if (currentPage > totalPages) currentPage = totalPages;
             
             document.getElementById('currentPageInput').value = currentPage;
-            document.getElementById('totalPages').textContent = totalPages;
+            
+            // 显示总页数：计算中、估算值或精确值
+            const totalPagesElement = document.getElementById('totalPages');
+            if (isCalculatingPages) {
+                // 正在计算中
+                totalPagesElement.textContent = `计算中... ${calculationProgress}%`;
+            } else if (isEstimated) {
+                // 估算值
+                totalPagesElement.textContent = `≥ ${totalPages - 1}`;
+            } else {
+                // 精确值
+                totalPagesElement.textContent = totalPages;
+            }
+            
             document.getElementById('totalLinesInPage').textContent = allLines.length;
             
             // 更新按钮状态
             document.getElementById('firstPageBtn').disabled = currentPage === 1;
             document.getElementById('prevPageBtn').disabled = currentPage === 1;
-            document.getElementById('nextPageBtn').disabled = currentPage === totalPages;
-            document.getElementById('lastPageBtn').disabled = currentPage === totalPages;
+            
+            // 在折叠模式下，如果是估算值，说明还有更多数据，不禁用“下一页”按钮
+            if (isCollapseMode && isEstimated) {
+                document.getElementById('nextPageBtn').disabled = false;
+                document.getElementById('lastPageBtn').disabled = false;
+            } else {
+                document.getElementById('nextPageBtn').disabled = currentPage === totalPages;
+                document.getElementById('lastPageBtn').disabled = currentPage === totalPages;
+            }
             
             // 检查是否需要加载更多数据
             checkAndLoadMore();
@@ -2582,6 +3055,13 @@
                 currentPage--;
                 updatePagination();
                 renderLines();
+                // 翻页后自动滚动到顶部
+                requestAnimationFrame(() => {
+                    const logContainer = document.getElementById('logContainer');
+                    if (logContainer) {
+                        logContainer.scrollTop = 0;
+                    }
+                });
             }
         }
         
@@ -2590,6 +3070,13 @@
                 currentPage++;
                 updatePagination();
                 renderLines();
+                // 翻页后自动滚动到顶部
+                requestAnimationFrame(() => {
+                    const logContainer = document.getElementById('logContainer');
+                    if (logContainer) {
+                        logContainer.scrollTop = 0;
+                    }
+                });
             }
         }
         
@@ -2597,14 +3084,49 @@
             currentPage = totalPages;
             updatePagination();
             renderLines();
+            // 翻页后自动滚动到顶部
+            requestAnimationFrame(() => {
+                const logContainer = document.getElementById('logContainer');
+                if (logContainer) {
+                    logContainer.scrollTop = 0;
+                }
+            });
         }
         
         function goToPage(page) {
             page = parseInt(page);
             if (page >= 1 && page <= totalPages) {
                 currentPage = page;
+                
+                // 在折叠模式下，如果跳转到未计算过的页面，需要先计算中间的所有页面
+                if (isCollapseMode && !pageRanges.has(page)) {
+                    console.log(`📖 跳转到第 ${page} 页，但该页尚未计算，需要从第 1 页开始顺序计算`);
+                    
+                    // 从第一页开始顺序计算到目标页
+                    pageRanges.clear();
+                    for (let p = 1; p <= page; p++) {
+                        currentPage = p;
+                        // 不显示，只计算范围
+                        calculatePageRange(p);
+                    }
+                    
+                    console.log(`✅ 已计算完成，第 ${page} 页范围:`, pageRanges.get(page));
+                }
+                
                 updatePagination();
                 renderLines();
+                // 翻页后自动滚动到顶部
+                console.log('📍 翻页到第', currentPage, '页，准备滚动到顶部');
+                requestAnimationFrame(() => {
+                    const logContainer = document.getElementById('logContainer');
+                    if (logContainer) {
+                        console.log('📍 当前滚动位置:', logContainer.scrollTop);
+                        logContainer.scrollTop = 0;
+                        console.log('📍 滚动后位置:', logContainer.scrollTop);
+                    } else {
+                        console.log('⚠️ 找不到 logContainer 元素');
+                    }
+                });
             } else {
                 document.getElementById('currentPageInput').value = currentPage;
             }
@@ -2613,8 +3135,16 @@
         function changePageSize(size) {
             pageSize = parseInt(size);
             currentPage = 1;
+            pageRanges.clear(); // 清空页面范围记录，重新计算
             updatePagination();
             renderLines();
+            // 改变页面大小后自动滚动到顶部
+            requestAnimationFrame(() => {
+                const logContainer = document.getElementById('logContainer');
+                if (logContainer) {
+                    logContainer.scrollTop = 0;
+                }
+            });
         }
         
         // ========== 时间线导航功能 ==========
@@ -3066,253 +3596,6 @@
             } else {
                 node.classList.add('xml-tree-collapsed');
                 toggle.textContent = '▶';
-            }
-        }
-        
-        // ========== 去重统计功能 ==========
-        
-        function showDeduplicationStats() {
-            document.getElementById('deduplicationModal').style.display = 'block';
-            analyzeDeduplication(85);
-        }
-        
-        function closeDeduplicationModal() {
-            document.getElementById('deduplicationModal').style.display = 'none';
-        }
-        
-        function reanalyzeDeduplication() {
-            const threshold = parseInt(document.getElementById('similarityThreshold').value);
-            analyzeDeduplication(threshold);
-        }
-        
-        function analyzeDeduplication(similarityThreshold = 85) {
-            const resultDiv = document.getElementById('deduplicationResult');
-            resultDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">🔍 正在分析日志模式...</div>';
-            
-            // 延迟执行，显示加载效果
-            setTimeout(() => {
-                const patterns = findSimilarLogPatterns(allLines, similarityThreshold / 100);
-                displayDeduplicationResults(patterns);
-            }, 100);
-        }
-        
-        function findSimilarLogPatterns(lines, threshold) {
-            const patterns = new Map();
-            
-            lines.forEach((line, index) => {
-                const content = (line.content || line).toString();
-                
-                // 提取日志模式：将数字、时间戳、UUID等变量替换为占位符
-                let pattern = normalizeLogPattern(content);
-                
-                if (!patterns.has(pattern)) {
-                    patterns.set(pattern, {
-                        pattern: pattern,
-                        count: 0,
-                        level: line.level || 'OTHER',
-                        examples: [],
-                        lineNumbers: []
-                    });
-                }
-                
-                const patternData = patterns.get(pattern);
-                patternData.count++;
-                patternData.lineNumbers.push(line.lineNumber || index + 1);
-                
-                // 只保存3个示例
-                if (patternData.examples.length < 3) {
-                    patternData.examples.push({
-                        lineNumber: line.lineNumber || index + 1,
-                        content: content
-                    });
-                }
-            });
-            
-            // 转换为数组并按出现次数排序
-            const sortedPatterns = Array.from(patterns.values())
-                .filter(p => p.count >= 2) // 只显示至少出现了两次的模式
-                .sort((a, b) => b.count - a.count);
-            
-            return sortedPatterns;
-        }
-        
-        function normalizeLogPattern(content) {
-            let pattern = content;
-            
-            // 替换时间戳
-            pattern = pattern.replace(/\d{4}[-\/]\d{2}[-\/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?/g, '<TIMESTAMP>');
-            pattern = pattern.replace(/\[\d{4}[-\/]\d{2}[-\/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?\]/g, '[<TIMESTAMP>]');
-            
-            // 替换UUID
-            pattern = pattern.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<UUID>');
-            
-            // 替换IP地址
-            pattern = pattern.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '<IP>');
-            
-            // 替换端口号
-            pattern = pattern.replace(/:(\d{2,5})\b/g, ':<PORT>');
-            
-            // 替换整数（连续3位以上）
-            pattern = pattern.replace(/\b\d{3,}\b/g, '<NUMBER>');
-            
-            // 替换浮点数
-            pattern = pattern.replace(/\b\d+\.\d+\b/g, '<DECIMAL>');
-            
-            // 替换十六进制数（如内存地址）
-            pattern = pattern.replace(/0x[0-9a-fA-F]+/g, '<HEX>');
-            
-            // 替换文件路径
-            pattern = pattern.replace(/[A-Za-z]:\\[^\s]+/g, '<FILEPATH>');
-            pattern = pattern.replace(/\/[a-zA-Z0-9_\-\/\.]+/g, '<PATH>');
-            
-            // 替换单独的数字（不足三位）
-            pattern = pattern.replace(/\b\d{1,2}\b/g, '<NUM>');
-            
-            return pattern;
-        }
-        
-        function displayDeduplicationResults(patterns) {
-            const resultDiv = document.getElementById('deduplicationResult');
-            
-            if (patterns.length === 0) {
-                resultDiv.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">
-                        ✅ 没有发现重复的日志模式！<br>
-                        <span style="font-size: 12px; margin-top: 10px; display: block;">所有日志都是唯一的，或者相似度未达到阈值</span>
-                    </div>
-                `;
-                return;
-            }
-            
-            const totalDuplicates = patterns.reduce((sum, p) => sum + p.count, 0);
-            const uniquePatterns = patterns.length;
-            
-            let html = `
-                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 5px; margin-bottom: 15px; color: white;">
-                    <div style="display: flex; justify-content: space-around; text-align: center;">
-                        <div>
-                            <div style="font-size: 28px; font-weight: bold;">${uniquePatterns}</div>
-                            <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">相似模式</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 28px; font-weight: bold;">${totalDuplicates}</div>
-                            <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">总重复次数</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 28px; font-weight: bold;">${((totalDuplicates / allLines.length) * 100).toFixed(1)}%</div>
-                            <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">重复比例</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            patterns.forEach((p, index) => {
-                const levelColor = {
-                    'ERROR': '#f14c4c',
-                    'WARN': '#cca700',
-                    'INFO': '#4fc1ff',
-                    'DEBUG': '#b267e6',
-                    'OTHER': '#888888'
-                }[p.level.toUpperCase()] || '#888888';
-                
-                const isExpanded = index < 5; // 前5个默认展开
-                const patternId = 'pattern_' + index;
-                
-                html += `
-                    <div style="margin-bottom: 15px; border: 1px solid var(--vscode-panel-border); border-radius: 5px; overflow: hidden;">
-                        <div style="background-color: var(--vscode-editorWidget-background); padding: 12px; cursor: pointer;" 
-                             onclick="togglePattern('${patternId}')">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
-                                    <span id="${patternId}_toggle" style="font-weight: bold; color: var(--vscode-textLink-foreground);">${isExpanded ? '▼' : '▶'}</span>
-                                    <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${levelColor};"></span>
-                                    <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">#${index + 1}</span>
-                                    <span style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                        ${escapeHtml(p.pattern.substring(0, 100))}${p.pattern.length > 100 ? '...' : ''}
-                                    </span>
-                                </div>
-                                <div style="display: flex; gap: 15px; align-items: center;">
-                                    <span style="background-color: ${levelColor}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;">
-                                        ${p.level}
-                                    </span>
-                                    <span style="background-color: #8b5cf6; color: white; padding: 3px 10px; border-radius: 3px; font-size: 12px; font-weight: bold;">
-                                        ${p.count} 次
-                                    </span>
-                                    <button onclick="event.stopPropagation(); showPatternLines(${JSON.stringify(p.lineNumbers).replace(/"/g, '&quot;')})"
-                                            style="padding: 3px 10px; font-size: 11px; background-color: #10b981;">
-                                        🔍 查看所有
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="${patternId}" style="display: ${isExpanded ? 'block' : 'none'}; padding: 15px; background-color: var(--vscode-editor-background);">
-                            <div style="margin-bottom: 10px; font-weight: bold; color: var(--vscode-textLink-foreground);">📊 模式详情：</div>
-                            <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 11px; line-height: 1.6; word-wrap: break-word; margin-bottom: 15px;">
-                                ${escapeHtml(p.pattern)}
-                            </div>
-                            <div style="margin-bottom: 10px; font-weight: bold; color: var(--vscode-textLink-foreground);">📝 示例（前3条）：</div>
-                            ${p.examples.map(ex => `
-                                <div style="padding: 8px; margin-bottom: 8px; background-color: var(--vscode-editorWidget-background); border-radius: 3px; border-left: 3px solid ${levelColor}; cursor: pointer; transition: background-color 0.2s;"
-                                     onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'"
-                                     onmouseout="this.style.backgroundColor='var(--vscode-editorWidget-background)'"
-                                     onclick="jumpToLineInPattern(${ex.lineNumber})"
-                                     title="点击跳转到该行">
-                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                                        <span style="font-size: 11px; color: var(--vscode-descriptionForeground);">行 ${ex.lineNumber}</span>
-                                    </div>
-                                    <div style="font-family: 'Consolas', monospace; font-size: 11px; color: var(--vscode-editor-foreground); word-wrap: break-word;">
-                                        ${escapeHtml(ex.content)}
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            });
-            
-            resultDiv.innerHTML = html;
-        }
-        
-        function togglePattern(patternId) {
-            const content = document.getElementById(patternId);
-            const toggle = document.getElementById(patternId + '_toggle');
-            
-            if (content.style.display === 'none') {
-                content.style.display = 'block';
-                toggle.textContent = '▼';
-            } else {
-                content.style.display = 'none';
-                toggle.textContent = '▶';
-            }
-        }
-        
-        function showPatternLines(lineNumbers) {
-            // 按行号筛选并显示
-            const filteredLines = allLines.filter(line => {
-                const lineNum = line.lineNumber || allLines.indexOf(line) + 1;
-                return lineNumbers.includes(lineNum);
-            });
-            
-            closeDeduplicationModal();
-            
-            // 显示筛选后的日志
-            allLines = filteredLines;
-            currentPage = 1;
-            isFiltering = true;
-            updatePagination();
-            renderLines();
-            
-            showToast(`✅ 已筛选出 ${filteredLines.length} 条相似日志`);
-        }
-        
-        function jumpToLineInPattern(lineNumber) {
-            closeDeduplicationModal();
-            
-            // 如果当前是过滤模式，先恢复完整日志
-            if (isFiltering || currentSearchKeyword) {
-                jumpToLineInFullLog(lineNumber);
-            } else {
-                jumpToLine(lineNumber);
             }
         }
         
