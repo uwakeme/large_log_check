@@ -1,14 +1,30 @@
 {
   "name": "big-log-viewer",
   "displayName": "大日志文件查看器",
-  "description": "专业的大日志文件查看和处理工具，支持按时间、行数删除日志",
+  "description": "专业的大日志文件查看和处理工具，支持虚拟滚动、智能搜索、时间过滤、级别过滤、折叠重复日志等功能",
   "version": "1.0.0",
-  "publisher": "your-publisher-name",
+  "license": "MIT",
+  "publisher": "wake",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uwakeme/large_log_check"
+  },
+  "keywords": [
+    "log",
+    "log viewer",
+    "large file",
+    "日志查看",
+    "大文件",
+    "日志分析"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Programming Languages",
+    "Formatters"
   ],
   "activationEvents": [
     "onCommand:big-log-viewer.openLogFile",
