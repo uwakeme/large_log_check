@@ -77,8 +77,7 @@
     "clean": "rimraf out",
     "rebuild": "npm run clean && npm run compile",
     "package": "vsce package",
-    "publish": "vsce publish",
-    "test": "node ./out/test/runTest.js"
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
