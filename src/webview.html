@@ -655,6 +655,10 @@
             <input type="checkbox" id="collapseRepeated" onchange="toggleCollapseMode()">
             <span>📎 折叠重复日志</span>
         </label>
+        <label style="font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="checkbox" id="enableJsonParse" checked onchange="toggleJsonParse()">
+            <span>🌲 解析JSON/XML</span>
+        </label>
         <button onclick="showLegendModal()" style="margin-left: auto; padding: 3px 10px; font-size: 12px;">🎨 颜色图例</button>
     </div>
     
@@ -2028,6 +2032,7 @@
         
         // ==========  注释功能 ==========
         let currentCommentLineNumber = null; // 当前正在编辑注释的行号
+        let enableJsonParse = true; // 是否启用JSON/XML解析
         
         function addOrEditComment(lineNumber) {
             console.log('📝 addOrEditComment 被调用，行号:', lineNumber);
@@ -3402,15 +3407,40 @@
         // ========== JSON/XML 自动解析功能 ==========
         
         function detectAndParseStructuredData(content) {
+            // 如果功能未启用，直接返回
+            if (!enableJsonParse) return null;
+            
             if (!content || typeof content !== 'string') return null;
             
-            // 尝试检测JSON
-            const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-            if (jsonMatch) {
+            // 更严格的JSON检测：
+            // 1. 对于对象：必须包含至少一个键值对，且格式像 {"key":value}
+            // 2. 对于数组：必须是多行的或包含对象/复杂结构，不匹配简单的 [123] 这种
+            
+            // 检测JSON对象（必须有引号包裹的键）
+            const jsonObjectMatch = content.match(/\{[\s\S]*?"[^"]+"[\s\S]*?:[\s\S]*?\}/);
+            if (jsonObjectMatch) {
                 try {
-                    const jsonStr = jsonMatch[0];
+                    const jsonStr = jsonObjectMatch[0];
                     const jsonObj = JSON.parse(jsonStr);
-                    return renderJSONTree(jsonObj);
+                    // 只解析对象类型，且至少有一个属性
+                    if (typeof jsonObj === 'object' && jsonObj !== null && !Array.isArray(jsonObj) && Object.keys(jsonObj).length > 0) {
+                        return renderJSONTree(jsonObj);
+                    }
+                } catch (e) {
+                    // 不是有效的JSON
+                }
+            }
+            
+            // 检测复杂的JSON数组（包含对象或嵌套结构，排除简单的数字数组）
+            const jsonArrayMatch = content.match(/\[[\s\S]*?\{[\s\S]*?\}[\s\S]*?\]/);
+            if (jsonArrayMatch) {
+                try {
+                    const jsonStr = jsonArrayMatch[0];
+                    const jsonObj = JSON.parse(jsonStr);
+                    // 只解析包含对象的数组
+                    if (Array.isArray(jsonObj) && jsonObj.length > 0 && typeof jsonObj[0] === 'object') {
+                        return renderJSONTree(jsonObj);
+                    }
                 } catch (e) {
                     // 不是有效的JSON
                 }
@@ -3597,6 +3627,14 @@
                 node.classList.add('xml-tree-collapsed');
                 toggle.textContent = '▶';
             }
+        }
+        
+        // 切换JSON/XML解析功能
+        function toggleJsonParse() {
+            enableJsonParse = document.getElementById('enableJsonParse').checked;
+            console.log('🌲 JSON/XML解析功能:', enableJsonParse ? '已启用' : '已禁用');
+            // 重新渲染当前页面
+            renderLines();
         }
         
         // 键盘快捷键支持
