@@ -11,3 +11,4 @@ PUBLISH_GUIDE.md
 QUICKSTART.md
 node_modules/**/.bin/**
 **/*.vsix
+.qoder/**
