@@ -508,16 +508,11 @@ export class LogProcessor {
 
     /**
      * 从日志行中提取方法名
-     * 格式：<objStatusSelect> 或 queryClassObjectsFun接口
+     * 格式：[catalogueSave:479] 或 [methodName:123]
      */
     private extractMethodName(line: string): string | undefined {
-        // 匹配 <方法名> 格式
-        let match = line.match(/<([a-zA-Z_][a-zA-Z0-9_]*)>/);
-        if (match) {
-            return match[1];
-        }
-        // 匹配方法名接口 格式
-        match = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)接口/);
+        // 匹配 [方法名:行号] 格式
+        const match = line.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
         if (match) {
             return match[1];
         }
@@ -527,11 +522,17 @@ export class LogProcessor {
     /**
      * 从日志行中提取线程名
      * 格式：[scheduling-1] 或 [http-nio-16710-exec-8]
+     * 注意：需要排除 [方法名:行号] 格式
      */
     private extractThreadName(line: string): string | undefined {
-        const match = line.match(/\[([a-zA-Z0-9-_]+)\]/);
+        // 匹配方括号内的线程名，但不包含冒号（排除方法名格式）
+        const match = line.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
         if (match) {
-            return match[1];
+            // 检查是否为方法名格式 [方法名:行号]
+            const methodPattern = /\[[a-zA-Z_][a-zA-Z0-9_]*:\d+\]/;
+            if (!methodPattern.test(match[0])) {
+                return match[1];
+            }
         }
         return undefined;
     }

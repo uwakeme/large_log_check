@@ -75,7 +75,7 @@
     "build": "npm run compile",
     "dev": "npm run watch",
     "clean": "rimraf out",
-    "rebuild": "npm run clean && npm run compile",
+    "rebuild": "npm run clean; npm run compile",
     "package": "vsce package",
     "publish": "vsce publish"
   },

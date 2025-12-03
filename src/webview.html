@@ -139,6 +139,30 @@
             flex-wrap: wrap;
         }
         
+        /* 筛选状态提示面板 */
+        .filter-status-panel {
+            background-color: var(--vscode-editorWidget-background);
+            padding: 8px 12px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border-left: 3px solid var(--vscode-textLink-foreground);
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
         /* 时间线面板样式 */
         .timeline-panel {
             background-color: var(--vscode-editorWidget-background);
@@ -457,6 +481,33 @@
             font-weight: bold;
         }
         
+        /* 线程名高亮 */
+        .highlight-thread {
+            background-color: #06b6d4;
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: 500;
+        }
+        
+        /* 类名高亮 */
+        .highlight-class {
+            background-color: #10b981;
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: 500;
+        }
+        
+        /* 方法名高亮 */
+        .highlight-method {
+            background-color: #f59e0b;
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: 500;
+        }
+        
         /* 通用 select 和 option 样式 */
         select {
             background-color: var(--vscode-dropdown-background);
@@ -589,6 +640,148 @@
             background-color: #7c3aed;
         }
         
+        /* 自定义高亮规则样式 */
+        .custom-highlight {
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: 500;
+        }
+        
+        /* 可点击的筛选项样式 */
+        .clickable-filter {
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        
+        .clickable-filter:hover {
+            opacity: 0.85;
+            transform: scale(1.05);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .clickable-filter:active {
+            transform: scale(0.95);
+        }
+        
+        .rule-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background-color: var(--vscode-editorWidget-background);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--vscode-panel-border);
+        }
+        
+        .rule-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+        
+        .color-picker-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .color-display {
+            width: 40px;
+            height: 30px;
+            border-radius: 3px;
+            border: 2px solid var(--vscode-panel-border);
+            cursor: pointer;
+        }
+        
+        .color-display:hover {
+            border-color: var(--vscode-textLink-foreground);
+        }
+        
+        /* 自定义确认对话框 */
+        .confirm-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+        }
+        
+        .confirm-dialog {
+            background-color: var(--vscode-editorWidget-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 5px;
+            padding: 20px;
+            min-width: 300px;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .confirm-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--vscode-foreground);
+        }
+        
+        .confirm-message {
+            margin-bottom: 20px;
+            color: var(--vscode-foreground);
+            line-height: 1.5;
+        }
+        
+        .confirm-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .confirm-buttons button {
+            padding: 8px 20px;
+            font-size: 13px;
+        }
+        
+        /* 更多菜单下拉样式 */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: var(--vscode-editorWidget-background);
+            min-width: 140px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 3px;
+            z-index: 1000;
+            margin-top: 2px;
+        }
+        
+        .dropdown-content button {
+            width: 100%;
+            text-align: left;
+            padding: 8px 12px;
+            border: none;
+            background: none;
+            color: var(--vscode-foreground);
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .dropdown-content button:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+        
+        .dropdown.show .dropdown-content {
+            display: block;
+        }
 
     </style>
 </head>
@@ -613,13 +806,19 @@
                 <span>反向搜索</span>
             </label>
             <button onclick="search()">🔍 搜索</button>
-            <button onclick="showAdvancedSearchModal()" style="background-color: #0e7490;">🔍 高级搜索</button>
-            <button onclick="showJumpDialog()" style="background-color: #0e7490;">🎯 定位</button>
-            <button onclick="showBookmarksModal()" style="background-color: #7c3aed;">📌 书签</button>
-            <button onclick="showCommentsModal()" style="background-color: #10b981;">📝 注释</button>
-            <button onclick="showStats()">📈 统计</button>
-            <button onclick="exportLogs()">💾 导出</button>
-            <button onclick="showDeleteModal()" style="background-color: #dc2626;">🗑️ 删除</button>
+            <button onclick="showAdvancedSearchModal()">🔍 高级搜索</button>
+            <button onclick="showJumpDialog()">🎯 定位</button>
+            <button onclick="showBookmarksModal()">📌 书签</button>
+            <button onclick="showCommentsModal()">📝 注释</button>
+            <button onclick="showCustomHighlightModal()">🎨 高亮规则</button>
+            <div class="dropdown">
+                <button onclick="toggleMoreMenu()">⋯ 更多</button>
+                <div class="dropdown-content" id="moreMenu">
+                    <button onclick="showStats(); closeMoreMenu();">📈 统计</button>
+                    <button onclick="exportLogs(); closeMoreMenu();">💾 导出</button>
+                    <button onclick="showDeleteModal(); closeMoreMenu();">🗑️ 删除</button>
+                </div>
+            </div>
             <button onclick="refresh()">🔄 刷新</button>
         </div>
     </div>
@@ -659,7 +858,13 @@
             <input type="checkbox" id="enableJsonParse" checked onchange="toggleJsonParse()">
             <span>🌲 解析JSON/XML</span>
         </label>
-        <button onclick="showLegendModal()" style="margin-left: auto; padding: 3px 10px; font-size: 12px;">🎨 颜色图例</button>
+    </div>
+    
+    <!-- 筛选状态提示 -->
+    <div class="filter-status-panel" id="filterStatusPanel" style="display: none;">
+        <span style="font-size: 12px; font-weight: bold;">🔍 正在筛选：</span>
+        <span id="filterStatusText" style="font-size: 12px; color: var(--vscode-textLink-foreground); font-weight: 500;"></span>
+        <button onclick="clearCustomFilter()" style="padding: 3px 10px; font-size: 11px; margin-left: 10px;">❌ 取消筛选</button>
     </div>
     
     <!-- 时间线导航 -->
@@ -743,7 +948,7 @@
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeDeleteByTimeModal()">取消</button>
-                    <button onclick="confirmDeleteByTime()" style="background-color: #d97706;">确认删除</button>
+                    <button onclick="confirmDeleteByTime()">确认删除</button>
                 </div>
             </div>
         </div>
@@ -758,14 +963,14 @@
             </div>
             <div class="modal-body">
                 <div style="display: grid; gap: 15px;">
-                    <button onclick="selectDeleteByTime()" style="padding: 15px; background-color: #d97706; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                    <button onclick="selectDeleteByTime()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
                         <span style="font-size: 20px;">⏰</span>
                         <div style="text-align: left;">
                             <div style="font-weight: bold;">按时间删除</div>
                             <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">删除指定时间之前/之后的日志</div>
                         </div>
                     </button>
-                    <button onclick="selectDeleteByLine()" style="padding: 15px; background-color: #dc2626; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                    <button onclick="selectDeleteByLine()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
                         <span style="font-size: 20px;">📊</span>
                         <div style="text-align: left;">
                             <div style="font-weight: bold;">按行数删除</div>
@@ -799,7 +1004,7 @@
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeDeleteByLineModal()">取消</button>
-                    <button onclick="confirmDeleteByLine()" style="background-color: #dc2626;">确认删除</button>
+                    <button onclick="confirmDeleteByLine()">确认删除</button>
                 </div>
             </div>
         </div>
@@ -837,65 +1042,7 @@
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeJumpModal()">取消</button>
-                    <button onclick="confirmJump()" style="background-color: #0e7490;">定位</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- 颜色图例弹窗 -->
-    <div id="legendModal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <h2>🎨 日志级别颜色图例</h2>
-                <span class="modal-close" onclick="closeLegendModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div style="display: grid; gap: 15px;">
-                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #f14c4c;">
-                        <span style="font-size: 24px; color: #f14c4c; font-weight: bold;">■</span>
-                        <div>
-                            <div style="font-weight: bold; font-size: 14px;">ERROR / FATAL / SEVERE</div>
-                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">错误级别，表示系统出现严重问题</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #cca700;">
-                        <span style="font-size: 24px; color: #cca700; font-weight: bold;">■</span>
-                        <div>
-                            <div style="font-weight: bold; font-size: 14px;">WARN / WARNING</div>
-                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">警告级别，表示潜在问题或需要关注的情况</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #4fc1ff;">
-                        <span style="font-size: 24px; color: #4fc1ff; font-weight: bold;">■</span>
-                        <div>
-                            <div style="font-weight: bold; font-size: 14px;">INFO / INFORMATION</div>
-                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">信息级别，记录正常的业务流程和状态</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #b267e6;">
-                        <span style="font-size: 24px; color: #b267e6; font-weight: bold;">■</span>
-                        <div>
-                            <div style="font-weight: bold; font-size: 14px;">DEBUG / TRACE / VERBOSE</div>
-                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">调试级别，用于详细的调试信息</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid var(--vscode-panel-border);">
-                        <span style="font-size: 24px; color: var(--vscode-descriptionForeground); font-weight: bold;">■</span>
-                        <div>
-                            <div style="font-weight: bold; font-size: 14px;">其他</div>
-                            <div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 3px;">无法识别级别的日志行</div>
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-top: 20px; padding: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #ffc107;">
-                    <div style="font-weight: bold; margin-bottom: 5px;">💡 快捷键提示：</div>
-                    <div style="font-size: 12px; color: var(--vscode-descriptionForeground); line-height: 1.6;">
-                        • 右键点击日志行可复制内容/添加书签<br>
-                        • 双击日志行可快速添加书签<br>
-                        • 选中文本后右键可复制选中部分<br>
-                        • 使用过滤面板快速筛选日志级别
-                    </div>
+                    <button onclick="confirmJump()">定位</button>
                 </div>
             </div>
         </div>
@@ -956,7 +1103,7 @@
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeCommentInputModal()">取消</button>
-                    <button onclick="confirmCommentInput()" style="background-color: #10b981;">确定</button>
+                    <button onclick="confirmCommentInput()">确定</button>
                 </div>
             </div>
         </div>
@@ -996,12 +1143,81 @@
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeAdvancedSearchModal()">取消</button>
-                    <button onclick="confirmAdvancedSearch()" style="background-color: #0e7490;">搜索</button>
+                    <button onclick="confirmAdvancedSearch()">搜索</button>
                 </div>
             </div>
         </div>
     </div>
     
+    <!-- 自定义高亮规则弹窗 -->
+    <div id="customHighlightModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>🎨 自定义高亮规则</h2>
+                <span class="modal-close" onclick="closeCustomHighlightModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <button onclick="showAddRuleDialog()" style="width: 100%; padding: 12px; font-weight: bold;">➕ 添加新规则</button>
+                </div>
+                <div id="highlightRulesList" style="max-height: 500px; overflow-y: auto;">
+                    <!-- 规则列表将动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 添加/编辑高亮规则弹窗 -->
+    <div id="addRuleModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 id="ruleModalTitle">➕ 添加高亮规则</h2>
+                <span class="modal-close" onclick="closeAddRuleModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">规则名称：</label>
+                    <input type="text" id="ruleName" placeholder="例如：API调用、错误代码" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">匹配模式：</label>
+                    <select id="ruleType" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                        <option value="text">文本匹配</option>
+                        <option value="regex">正则表达式</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">匹配内容：</label>
+                    <input type="text" id="rulePattern" placeholder="例如：API或 \\bERROR\\b" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">高亮颜色：</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="ruleBgColor" value="#10b981" style="width: 80px; height: 40px; border: none; cursor: pointer;">
+                        <input type="color" id="ruleTextColor" value="#ffffff" style="width: 80px; height: 40px; border: none; cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 11px; color: var(--vscode-descriptionForeground);">预览：</div>
+                            <div id="colorPreview" style="display: inline-block; padding: 4px 8px; border-radius: 3px; background-color: #10b981; color: #ffffff; font-weight: 500;">示例文本</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="checkbox" id="ruleEnabled" checked>
+                        <span>启用此规则</span>
+                    </label>
+                </div>
+                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #8b5cf6;">
+                    <strong>💡 提示：</strong>正则表达式示例：<code>\\b\w+:\\d+\\b</code> 匹配方法名:line号
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeAddRuleModal()">取消</button>
+                    <button onclick="saveHighlightRule()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         const vscode = acquireVsCodeApi();
@@ -1018,6 +1234,52 @@
         let pageRanges = new Map(); // 记录每页实际加载的行范围 Map<pageNumber, {start, end}>
         let isCalculatingPages = false; // 是否正在计算页面范围
         let calculationProgress = 0; // 计算进度（0-100）
+        
+        // 筛选状态管理
+        let currentFilterType = null; // 当前筛选类型: 'thread', 'class', 'method', null
+        let currentFilterValue = null; // 当前筛选值
+        
+        /**
+         * 统一处理数据变更后的页面计算
+         * 在以下情况下调用：
+         * 1. 文件加载/刷新
+         * 2. 搜索/筛选操作
+         * 3. 切换折叠模式
+         * 4. 加载更多数据
+         */
+        function handleDataChange(options = {}) {
+            const {
+                resetPage = true,           // 是否重置到第一页
+                clearPageRanges = true,     // 是否清空页面范围记录
+                triggerAsyncCalc = true     // 是否触发异步计算
+            } = options;
+            
+            console.log('🔄 数据变更处理:', { resetPage, clearPageRanges, triggerAsyncCalc, isCollapseMode, dataLength: allLines.length });
+            
+            // 重置页码
+            if (resetPage) {
+                currentPage = 1;
+            }
+            
+            // 清空页面范围记录
+            if (clearPageRanges) {
+                pageRanges.clear();
+            }
+            
+            // 清空计算状态
+            isCalculatingPages = false;
+            calculationProgress = 0;
+            
+            // 更新分页器和渲染
+            updatePagination();
+            renderLines();
+            
+            // 如果开启了折叠模式且有数据，触发异步计算
+            if (triggerAsyncCalc && isCollapseMode && allLines.length > 0) {
+                console.log('📊 触发异步页面计算...');
+                calculateAllPagesAsync();
+            }
+        }
         
         // 分页参数
         let currentPage = 1;
@@ -1066,12 +1328,16 @@
             isFiltering = false; // 重置过滤状态
             currentSearchKeyword = ''; // 重置搜索关键词
             
+            // 清除筛选状态
+            currentFilterType = null;
+            currentFilterValue = null;
+            hideFilterStatus();
+            
             allLines = data.lines;
             originalLines = [...data.lines];
-            currentPage = 1;
-            pageRanges.clear(); // 清空页面范围记录
-            updatePagination();
-            renderLines();
+            
+            // 统一处理数据变更
+            handleDataChange();
             
             // 生成时间线
             generateTimeline();
@@ -1091,27 +1357,29 @@
                 allDataLoaded = true;
             }
             
-            updatePagination();
-            renderLines();
+            // 加载更多数据时不重置页码，但需要重新计算
+            handleDataChange({
+                resetPage: false,           // 不重置页码
+                clearPageRanges: false,     // 不清空已计算的页面
+                triggerAsyncCalc: true      // 触发异步计算新页面
+            });
         }
         
         function handleSearchResults(data) {
             currentSearchKeyword = data.keyword;
             allLines = data.results;
-            currentPage = 1;
-            pageRanges.clear(); // 清空页面范围记录
-            updatePagination();
-            renderLines();
+            
+            // 统一处理数据变更
+            handleDataChange();
         }
         
         function handleFilterResults(data) {
             console.log('📥 收到过滤结果:', data.results.length, '条');
             allLines = data.results;
             isFiltering = true; // 设置为过滤模式
-            currentPage = 1;
-            pageRanges.clear(); // 清空页面范围记录
-            updatePagination();
-            renderLines();
+            
+            // 统一处理数据变更
+            handleDataChange();
             
             // 如果过滤结果为空，给出友好提示
             if (data.results.length === 0) {
@@ -1141,6 +1409,11 @@
             
             allLines = data.lines;
             originalLines = [...data.lines];
+            
+            // 统一处理数据变更（但不重置页码，因为要跳转到目标行）
+            handleDataChange({
+                resetPage: false  // 不重置页码，由 jumpToLine 决定
+            });
             
             // 跳转到目标行
             jumpToLine(data.targetLineNumber);
@@ -1673,42 +1946,76 @@
             isCollapseMode = document.getElementById('collapseRepeated').checked;
             console.log('🔍 切换折叠模式:', isCollapseMode);
             
-            // 清空页面范围记录，重新计算
-            pageRanges.clear();
-            currentPage = 1;
             expandedGroups.clear(); // 清空展开状态
             
-            // 如果取消折叠模式，重置计算状态
-            if (!isCollapseMode) {
-                isCalculatingPages = false;
-                calculationProgress = 0;
-            }
-            
-            renderLines();
-            updatePagination(); // 手动再次调用以确保状态正确
-            
-            // 如果开启折叠模式，异步计算所有页面
-            if (isCollapseMode) {
-                calculateAllPagesAsync();
-            }
+            // 统一处理数据变更
+            handleDataChange();
         }
         
-        // 增强的关键词高亮功能
+        // 增强的关键词高亮功能 - 使用自定义规则
         function highlightKeywords(content, keyword) {
             if (!content) return '';
             
             let result = escapeHtml(content);
             
-            // 高亮日志级别
-            result = result.replace(/\b(ERROR)\b/gi, '<span class="highlight-error">$1</span>');
-            result = result.replace(/\b(WARN|WARNING)\b/gi, '<span class="highlight-warn">$1</span>');
-            result = result.replace(/\b(INFO)\b/gi, '<span class="highlight-info">$1</span>');
+            // 应用所有启用的自定义高亮规则
+            customHighlightRules.forEach(rule => {
+                if (!rule.enabled) return;
+                
+                try {
+                    if (rule.type === 'text') {
+                        // 文本匹配
+                        const escaped = escapeRegex(rule.pattern);
+                        const regex = new RegExp('(' + escaped + ')', 'gi');
+                        result = result.replace(regex, function(match) {
+                            return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
+                        });
+                    } else {
+                        // 正则表达式匹配
+                        const regex = new RegExp(rule.pattern, 'g');
+                        
+                        // 根据规则名称判断是否需要添加点击事件
+                        if (rule.name === '线程名') {
+                            // 线程名 - 添加可点击功能
+                            result = result.replace(regex, function(match) {
+                                // 提取方括号内的线程名
+                                const threadNameMatch = match.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
+                                if (threadNameMatch) {
+                                    const threadName = threadNameMatch[1];
+                                    return `<span class="custom-highlight clickable-filter" style="background-color: ${rule.bgColor}; color: ${rule.textColor}; cursor: pointer;" onclick="event.stopPropagation(); filterByThreadName('${threadName.replace(/'/g, "\\'")}')", title="点击筛选线程: ${threadName}">${match}</span>`;
+                                }
+                                return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
+                            });
+                        } else if (rule.name === '类名') {
+                            // 类名 - 添加可点击功能
+                            result = result.replace(regex, function(match) {
+                                const className = match.trim();
+                                return `<span class="custom-highlight clickable-filter" style="background-color: ${rule.bgColor}; color: ${rule.textColor}; cursor: pointer;" onclick="event.stopPropagation(); filterByClassName('${className.replace(/'/g, "\\'")}')", title="点击筛选类: ${className}">${match}</span>`;
+                            });
+                        } else if (rule.name === '方法名') {
+                            // 方法名 - 添加可点击功能（匹配 [methodName:lineNumber]）
+                            result = result.replace(regex, function(match) {
+                                // 提取方括号内的方法名（去掉行号）
+                                const methodMatch = match.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
+                                if (methodMatch) {
+                                    const methodName = methodMatch[1];
+                                    return `<span class="custom-highlight clickable-filter" style="background-color: ${rule.bgColor}; color: ${rule.textColor}; cursor: pointer;" onclick="event.stopPropagation(); filterByMethodName('${methodName.replace(/'/g, "\\'")}')", title="点击筛选方法: ${methodName}">${match}</span>`;
+                                }
+                                return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
+                            });
+                        } else {
+                            // 其他规则 - 不添加点击事件
+                            result = result.replace(regex, function(match) {
+                                return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error(`规则 "${rule.name}" 应用失败:`, e);
+                }
+            });
             
-            // 高亮时间戳
-            result = result.replace(/(\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?)/g, '<span class="highlight-time">$1</span>');
-            result = result.replace(/(\[\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?\])/g, '<span class="highlight-time">$1</span>');
-            
-            // 高亮搜索关键词
+            // 高亮搜索关键词（最后处理，避免覆盖其他高亮）
             if (keyword) {
                 const regex = new RegExp('(' + escapeRegex(keyword) + ')', 'gi');
                 result = result.replace(regex, '<span class="highlight">$1</span>');
@@ -1961,15 +2268,6 @@
             document.getElementById('statsModal').style.display = 'none';
         }
         
-        // ========== 颜色图例弹窗 ==========
-        function showLegendModal() {
-            document.getElementById('legendModal').style.display = 'block';
-        }
-        
-        function closeLegendModal() {
-            document.getElementById('legendModal').style.display = 'none';
-        }
-        
         // ========== 书签功能 ==========
         function toggleBookmark(lineNumber) {
             if (bookmarks.has(lineNumber)) {
@@ -2002,7 +2300,7 @@
                              onclick="jumpToBookmark(${lineNum})">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                                 <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">📌 行 ${lineNum}</span>
-                                <button onclick="event.stopPropagation(); removeBookmark(${lineNum})" style="padding: 2px 8px; font-size: 11px; background-color: #dc2626;">删除</button>
+                                <button onclick="event.stopPropagation(); removeBookmark(${lineNum})" style="padding: 2px 8px; font-size: 11px;">删除</button>
                             </div>
                             <div style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                 ${escapeHtml(preview)}
@@ -2033,6 +2331,136 @@
         // ==========  注释功能 ==========
         let currentCommentLineNumber = null; // 当前正在编辑注释的行号
         let enableJsonParse = true; // 是否启用JSON/XML解析
+        
+        // 自定义高亮规则
+        let customHighlightRules = [];
+        let editingRuleIndex = -1; // 正在编辑的规则索引
+        
+        // 初始化预设规则
+        function initDefaultHighlightRules() {
+            customHighlightRules = [
+                { id: 1, name: '日志级别 - ERROR', type: 'regex', pattern: '\\b(ERROR|FATAL|SEVERE)\\b', bgColor: '#f14c4c', textColor: '#ffffff', enabled: true, builtin: true },
+                { id: 2, name: '日志级别 - WARN', type: 'regex', pattern: '\\b(WARN|WARNING)\\b', bgColor: '#cca700', textColor: '#ffffff', enabled: true, builtin: true },
+                { id: 3, name: '日志级别 - INFO', type: 'regex', pattern: '\\b(INFO)\\b', bgColor: '#4fc1ff', textColor: '#000000', enabled: true, builtin: true },
+                { id: 4, name: '日志级别 - DEBUG', type: 'regex', pattern: '\\b(DEBUG|TRACE|VERBOSE)\\b', bgColor: '#b267e6', textColor: '#ffffff', enabled: true, builtin: true },
+                { id: 5, name: '时间戳', type: 'regex', pattern: '\\d{4}[-/]\\d{2}[-/]\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?', bgColor: '#b267e6', textColor: '#ffffff', enabled: true, builtin: true },
+                { id: 6, name: '线程名', type: 'regex', pattern: '\\[([a-zA-Z][a-zA-Z0-9-_]*)\\]', bgColor: '#06b6d4', textColor: '#ffffff', enabled: true, builtin: true },
+                { id: 7, name: '类名', type: 'regex', pattern: '\\b([a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*\\.[A-Z][a-zA-Z0-9_]*)\\b', bgColor: '#10b981', textColor: '#ffffff', enabled: true, builtin: true },
+                { id: 8, name: '方法名', type: 'regex', pattern: '\\[([a-zA-Z_][a-zA-Z0-9_]*):\\d+\\]', bgColor: '#f59e0b', textColor: '#ffffff', enabled: true, builtin: true }
+            ];
+            loadCustomRulesFromStorage();
+        }
+        
+        // 从 localStorage 加载自定义规则
+        function loadCustomRulesFromStorage() {
+            try {
+                const saved = localStorage.getItem('customHighlightRules');
+                if (saved) {
+                    const customRules = JSON.parse(saved);
+                    // 合并内置规则和自定义规则
+                    customHighlightRules = customHighlightRules.concat(customRules);
+                }
+            } catch (e) {
+                console.error('加载自定义规则失败:', e);
+            }
+        }
+        
+        // 保存自定义规则到 localStorage
+        function saveCustomRulesToStorage() {
+            try {
+                // 只保存非内置规则
+                const customRules = customHighlightRules.filter(r => !r.builtin);
+                localStorage.setItem('customHighlightRules', JSON.stringify(customRules));
+            } catch (e) {
+                console.error('保存自定义规则失败:', e);
+            }
+        }
+        
+        // 初始化
+        initDefaultHighlightRules();
+        
+        // 自定义确认对话框
+        function showCustomConfirm(message, title = '确认') {
+            return new Promise((resolve) => {
+                // 创建遮罩层
+                const overlay = document.createElement('div');
+                overlay.className = 'confirm-overlay';
+                
+                // 创建对话框
+                const dialog = document.createElement('div');
+                dialog.className = 'confirm-dialog';
+                
+                // 标题
+                const titleEl = document.createElement('div');
+                titleEl.className = 'confirm-title';
+                titleEl.textContent = title;
+                
+                // 消息
+                const messageEl = document.createElement('div');
+                messageEl.className = 'confirm-message';
+                messageEl.textContent = message;
+                
+                // 按钮容器
+                const buttonsDiv = document.createElement('div');
+                buttonsDiv.className = 'confirm-buttons';
+                
+                // 取消按钮
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = '取消';
+                cancelBtn.addEventListener('click', () => {
+                    document.body.removeChild(overlay);
+                    resolve(false);
+                });
+                
+                // 确认按钮
+                const confirmBtn = document.createElement('button');
+                confirmBtn.textContent = '确认';
+                confirmBtn.addEventListener('click', () => {
+                    document.body.removeChild(overlay);
+                    resolve(true);
+                });
+                
+                buttonsDiv.appendChild(cancelBtn);
+                buttonsDiv.appendChild(confirmBtn);
+                
+                dialog.appendChild(titleEl);
+                dialog.appendChild(messageEl);
+                dialog.appendChild(buttonsDiv);
+                
+                overlay.appendChild(dialog);
+                document.body.appendChild(overlay);
+                
+                // 点击遮罩层关闭
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        document.body.removeChild(overlay);
+                        resolve(false);
+                    }
+                });
+                
+                // 聚焦确认按钮
+                confirmBtn.focus();
+            });
+        }
+        
+        // 更多菜单管理
+        function toggleMoreMenu() {
+            const dropdown = document.querySelector('.dropdown');
+            dropdown.classList.toggle('show');
+        }
+        
+        function closeMoreMenu() {
+            const dropdown = document.querySelector('.dropdown');
+            dropdown.classList.remove('show');
+        }
+        
+        // 点击外部关闭下拉菜单
+        document.addEventListener('click', function(event) {
+            const dropdown = document.querySelector('.dropdown');
+            if (dropdown && !dropdown.contains(event.target)) {
+                dropdown.classList.remove('show');
+            }
+        });
         
         function addOrEditComment(lineNumber) {
             console.log('📝 addOrEditComment 被调用，行号:', lineNumber);
@@ -2126,8 +2554,8 @@
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <span style="font-weight: bold; color: var(--vscode-textLink-foreground); cursor: pointer;" onclick="jumpToComment(${lineNum})">📝 行 ${lineNum}</span>
                                 <div style="display: flex; gap: 5px;">
-                                    <button onclick="editComment(${lineNum})" style="padding: 2px 8px; font-size: 11px; background-color: #0e7490;">编辑</button>
-                                    <button onclick="deleteCommentFromList(${lineNum})" style="padding: 2px 8px; font-size: 11px; background-color: #dc2626;">删除</button>
+                                    <button onclick="editComment(${lineNum})" style="padding: 2px 8px; font-size: 11px;">编辑</button>
+                                    <button onclick="deleteCommentFromList(${lineNum})" style="padding: 2px 8px; font-size: 11px;">删除</button>
                                 </div>
                             </div>
                             <div style="font-size: 11px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -2621,6 +3049,12 @@
         function filterByClassName(className) {
             console.log('🔍 按类名筛选:', className);
             closeStatsModal();
+            
+            // 记录筛选状态
+            currentFilterType = 'class';
+            currentFilterValue = className;
+            showFilterStatus(`类名: ${className}`);
+            
             // 使用正则搜索
             vscode.postMessage({
                 command: 'regexSearch',
@@ -2633,10 +3067,16 @@
         function filterByMethodName(methodName) {
             console.log('🔧 按方法名筛选:', methodName);
             closeStatsModal();
-            // 搜索 <方法名> 或 方法名接口
+            
+            // 记录筛选状态
+            currentFilterType = 'method';
+            currentFilterValue = methodName;
+            showFilterStatus(`方法名: ${methodName}`);
+            
+            // 搜索 [methodName:xxx]
             vscode.postMessage({
                 command: 'regexSearch',
-                pattern: `(<${methodName}>|${methodName}接口)`,
+                pattern: `\\[${methodName}:\\d+\\]`,
                 flags: 'i'
             });
         }
@@ -2645,12 +3085,43 @@
         function filterByThreadName(threadName) {
             console.log('🧵 按线程名筛选:', threadName);
             closeStatsModal();
+            
+            // 记录筛选状态
+            currentFilterType = 'thread';
+            currentFilterValue = threadName;
+            showFilterStatus(`线程名: ${threadName}`);
+            
             // 搜索 [线程名]
             vscode.postMessage({
                 command: 'regexSearch',
                 pattern: `\\[${threadName}\\]`,
                 flags: 'i'
             });
+        }
+        
+        // 显示筛选状态
+        function showFilterStatus(text) {
+            const panel = document.getElementById('filterStatusPanel');
+            const statusText = document.getElementById('filterStatusText');
+            statusText.textContent = text;
+            panel.style.display = 'flex';
+        }
+        
+        // 隐藏筛选状态
+        function hideFilterStatus() {
+            const panel = document.getElementById('filterStatusPanel');
+            panel.style.display = 'none';
+        }
+        
+        // 清除自定义筛选
+        function clearCustomFilter() {
+            console.log('❌ 清除筛选');
+            currentFilterType = null;
+            currentFilterValue = null;
+            hideFilterStatus();
+            
+            // 重新加载完整日志
+            refresh();
         }
         
         function showDeleteByTimeDialog() {
@@ -2774,9 +3245,43 @@
         function jumpToLine(lineNumber) {
             console.log('🎯 定位到行号:', lineNumber);
             
-            // 计算目标行所在的页面
-            const targetPage = Math.ceil(lineNumber / pageSize);
-            currentPage = targetPage;
+            // 在折叠模式下，需要智能查找目标页
+            if (isCollapseMode && pageRanges.size > 0) {
+                console.log('📏 折叠模式 - 智能查找目标页');
+                
+                // 先尝试在已计算的页面中查找
+                for (let [pageNum, range] of pageRanges.entries()) {
+                    // 查找该页范围内的日志是否包含目标行号
+                    const pageLines = allLines.slice(range.start, range.end);
+                    const hasTargetLine = pageLines.some(line => {
+                        const actualLineNumber = line.lineNumber || 0;
+                        return actualLineNumber === lineNumber;
+                    });
+                    
+                    if (hasTargetLine) {
+                        console.log(`✅ 在第 ${pageNum} 页找到目标行`);
+                        currentPage = pageNum;
+                        updatePagination();
+                        renderLines();
+                        
+                        // 等待渲染完成后高亮目标行
+                        setTimeout(() => {
+                            highlightTargetLine(lineNumber);
+                        }, 100);
+                        return;
+                    }
+                }
+                
+                // 如果在已计算的页面中没找到，尝试估算页码
+                console.log('⚠️ 已计算页面中未找到，使用估算方法');
+                const estimatedPage = Math.ceil(lineNumber / pageSize);
+                currentPage = Math.max(1, Math.min(estimatedPage, totalPages));
+            } else {
+                // 非折叠模式或未计算页面，使用标准计算
+                const targetPage = Math.ceil(lineNumber / pageSize);
+                currentPage = targetPage;
+            }
+            
             updatePagination();
             renderLines();
             
@@ -2848,27 +3353,42 @@
         }
         
         function highlightTargetLine(lineNumber) {
+            console.log('🔆 高亮目标行:', lineNumber);
+            
             // 移除之前的高亮
             document.querySelectorAll('.log-line.highlight-target').forEach(el => {
                 el.classList.remove('highlight-target');
             });
             
-            // 查找目标行
+            // 查找目标行（通过行号匹配，而不是索引）
             const logLines = document.querySelectorAll('.log-line');
-            const startIndex = (currentPage - 1) * pageSize;
-            const indexInPage = lineNumber - startIndex - 1;
             
-            if (indexInPage >= 0 && indexInPage < logLines.length) {
-                const targetLine = logLines[indexInPage];
-                targetLine.classList.add('highlight-target');
-                // 滚动到可见区域
-                targetLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            for (let i = 0; i < logLines.length; i++) {
+                const logLine = logLines[i];
+                const lineNumberSpan = logLine.querySelector('.log-line-number');
                 
-                // 3秒后移除高亮
-                setTimeout(() => {
-                    targetLine.classList.remove('highlight-target');
-                }, 3000);
+                if (lineNumberSpan) {
+                    // 提取行号（去除书签图标）
+                    const displayedLineNumber = parseInt(lineNumberSpan.textContent.replace(/📌\s*/, ''));
+                    
+                    if (displayedLineNumber === lineNumber) {
+                        console.log(`✅ 找到目标行，索引: ${i}`);
+                        logLine.classList.add('highlight-target');
+                        
+                        // 滚动到可见区域
+                        logLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // 3秒后移除高亮
+                        setTimeout(() => {
+                            logLine.classList.remove('highlight-target');
+                        }, 3000);
+                        
+                        return;
+                    }
+                }
             }
+            
+            console.log('⚠️ 未找到目标行，可能不在当前页面');
         }
         
         function confirmDeleteByLine() {
@@ -3347,6 +3867,7 @@
             
             // 在已加载的数据中查找最接近的行
             let closestIndex = -1;
+            let closestLineNumber = -1;
             let minDiff = Infinity;
             
             for (let i = 0; i < allLines.length; i++) {
@@ -3356,19 +3877,17 @@
                     if (diff < minDiff) {
                         minDiff = diff;
                         closestIndex = i;
+                        // 获取实际的行号
+                        closestLineNumber = allLines[i].lineNumber || (i + 1);
                     }
                 }
             }
             
             if (closestIndex !== -1) {
-                // 跳转到对应页面
-                const targetPage = Math.floor(closestIndex / pageSize) + 1;
-                currentPage = targetPage;
-                updatePagination();
-                renderLines();
+                console.log(`🎯 找到最接近的日志 - 索引:${closestIndex}, 行号:${closestLineNumber}`);
                 
-                // 滚动到顶部
-                document.getElementById('logContainer').scrollTop = 0;
+                // 使用 jumpToLine 函数跳转，它能正确处理折叠模式
+                jumpToLine(closestLineNumber);
                 
                 showToast(`已跳转到 ${new Date(allLines[closestIndex].timestamp).toLocaleString()}`);
             } else {
@@ -3412,37 +3931,55 @@
             
             if (!content || typeof content !== 'string') return null;
             
-            // 更严格的JSON检测：
-            // 1. 对于对象：必须包含至少一个键值对，且格式像 {"key":value}
-            // 2. 对于数组：必须是多行的或包含对象/复杂结构，不匹配简单的 [123] 这种
+            // 改进的JSON检测策略：
+            // 1. 先尝试提取所有可能的JSON字符串（使用贪婪匹配）
+            // 2. 对于对象：匹配 {...}
+            // 3. 对于数组：匹配 [...]
+            // 4. 尝试解析，如果失败则跳过
+            // 5. 排除简单的纯数字数组如 [123]、[205] 等
             
-            // 检测JSON对象（必须有引号包裹的键）
-            const jsonObjectMatch = content.match(/\{[\s\S]*?"[^"]+"[\s\S]*?:[\s\S]*?\}/);
-            if (jsonObjectMatch) {
+            // 尝试匹配JSON对象（贪婪匹配，获取最完整的对象）
+            let jsonMatch = content.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+            if (!jsonMatch) {
+                // 尝试更复杂的嵌套对象匹配
+                jsonMatch = content.match(/\{[\s\S]*\}/);
+            }
+            
+            if (jsonMatch) {
                 try {
-                    const jsonStr = jsonObjectMatch[0];
+                    const jsonStr = jsonMatch[0];
                     const jsonObj = JSON.parse(jsonStr);
                     // 只解析对象类型，且至少有一个属性
                     if (typeof jsonObj === 'object' && jsonObj !== null && !Array.isArray(jsonObj) && Object.keys(jsonObj).length > 0) {
                         return renderJSONTree(jsonObj);
                     }
                 } catch (e) {
-                    // 不是有效的JSON
+                    // JSON解析失败，继续尝试其他格式
+                    console.debug('JSON对象解析失败:', e.message);
                 }
             }
             
-            // 检测复杂的JSON数组（包含对象或嵌套结构，排除简单的数字数组）
-            const jsonArrayMatch = content.match(/\[[\s\S]*?\{[\s\S]*?\}[\s\S]*?\]/);
-            if (jsonArrayMatch) {
+            // 尝试匹配JSON数组
+            let arrayMatch = content.match(/\[[\s\S]*?\]/);
+            if (arrayMatch) {
                 try {
-                    const jsonStr = jsonArrayMatch[0];
+                    const jsonStr = arrayMatch[0];
                     const jsonObj = JSON.parse(jsonStr);
-                    // 只解析包含对象的数组
-                    if (Array.isArray(jsonObj) && jsonObj.length > 0 && typeof jsonObj[0] === 'object') {
-                        return renderJSONTree(jsonObj);
+                    
+                    if (Array.isArray(jsonObj)) {
+                        // 排除简单的纯数字数组（只包含一个数字）
+                        if (jsonObj.length === 1 && typeof jsonObj[0] === 'number') {
+                            return null; // 跳过 [123]、[205] 这种格式
+                        }
+                        
+                        // 解析包含对象的数组，或者包含多个元素的复杂数组
+                        if (jsonObj.length > 0 && (typeof jsonObj[0] === 'object' || jsonObj.length > 3)) {
+                            return renderJSONTree(jsonObj);
+                        }
                     }
                 } catch (e) {
-                    // 不是有效的JSON
+                    // JSON解析失败
+                    console.debug('JSON数组解析失败:', e.message);
                 }
             }
             
@@ -3488,12 +4025,22 @@
             }
             
             // 如果对象太大，默认折叠
-            const defaultCollapsed = depth > 1 || len > 10;
+            const defaultCollapsed = depth > 0 || len > 10;
             
-            let html = '<div class="json-tree">';
-            html += `<span class="json-tree-toggle" onclick="toggleJSONNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
-            html += `<span>${isArray ? '[' : '{'}</span>`;
-            html += `<span class="json-expand-btn" onclick="toggleJSONNode('${id}')" style="display:${defaultCollapsed ? 'inline-block' : 'none'}" id="${id}_btn">${len} items</span>`;
+            // 只有第一层级添加 json-tree 容器和折叠控件
+            const isRootLevel = depth === 0;
+            
+            let html = '';
+            
+            if (isRootLevel) {
+                html += '<div class="json-tree">';
+                html += `<span class="json-tree-toggle" onclick="toggleJSONNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
+                html += `<span>${isArray ? '[' : '{'}</span>`;
+                html += `<span class="json-expand-btn" onclick="toggleJSONNode('${id}')" style="display:${defaultCollapsed ? 'inline-block' : 'none'}" id="${id}_btn">${len} items</span>`;
+            } else {
+                // 内层嵌套不添加折叠控件，直接显示
+                html += `<span>${isArray ? '[' : '{'}</span>`;
+            }
             
             html += `<div id="${id}" class="json-tree-item${defaultCollapsed ? ' json-tree-collapsed' : ''}">`;
             
@@ -3522,7 +4069,10 @@
             
             html += '</div>';
             html += `<span>${isArray ? ']' : '}'}</span>`;
-            html += '</div>';
+            
+            if (isRootLevel) {
+                html += '</div>';
+            }
             
             return html;
         }
@@ -3601,17 +4151,26 @@
         }
         
         function toggleJSONNode(id) {
-            const node = document.getElementById(id);
-            const toggle = node.previousElementSibling.previousElementSibling;
+            const contentNode = document.getElementById(id);
+            if (!contentNode) return;
+            
+            // 向上查找 json-tree 容器
+            const container = contentNode.closest('.json-tree');
+            if (!container) return;
+            
+            // 查找箭头和展开按钮
+            const toggle = container.querySelector('.json-tree-toggle');
             const btn = document.getElementById(id + '_btn');
             
-            if (node.classList.contains('json-tree-collapsed')) {
-                node.classList.remove('json-tree-collapsed');
-                toggle.textContent = '▼';
+            if (contentNode.classList.contains('json-tree-collapsed')) {
+                // 展开
+                contentNode.classList.remove('json-tree-collapsed');
+                if (toggle) toggle.textContent = '▼';
                 if (btn) btn.style.display = 'none';
             } else {
-                node.classList.add('json-tree-collapsed');
-                toggle.textContent = '▶';
+                // 折叠
+                contentNode.classList.add('json-tree-collapsed');
+                if (toggle) toggle.textContent = '▶';
                 if (btn) btn.style.display = 'inline-block';
             }
         }
@@ -3636,6 +4195,292 @@
             // 重新渲染当前页面
             renderLines();
         }
+        
+        // ========== 自定义高亮规则管理 ==========
+        
+        function showCustomHighlightModal() {
+            renderHighlightRulesList();
+            document.getElementById('customHighlightModal').style.display = 'block';
+        }
+
+        function closeCustomHighlightModal() {
+            document.getElementById('customHighlightModal').style.display = 'none';
+        }
+
+        function showAddRuleDialog() {
+            editingRuleIndex = -1;
+            document.getElementById('ruleModalTitle').textContent = '➕ 添加高亮规则';
+            document.getElementById('ruleName').value = '';
+            document.getElementById('ruleType').value = 'text';
+            document.getElementById('rulePattern').value = '';
+            document.getElementById('ruleBgColor').value = '#10b981';
+            document.getElementById('ruleTextColor').value = '#ffffff';
+            document.getElementById('ruleEnabled').checked = true;
+            updateColorPreview();
+            document.getElementById('addRuleModal').style.display = 'block';
+        }
+
+        function closeAddRuleModal() {
+            document.getElementById('addRuleModal').style.display = 'none';
+        }
+
+        function saveHighlightRule() {
+            const name = document.getElementById('ruleName').value.trim();
+            const type = document.getElementById('ruleType').value;
+            const pattern = document.getElementById('rulePattern').value.trim();
+            const bgColor = document.getElementById('ruleBgColor').value;
+            const textColor = document.getElementById('ruleTextColor').value;
+            const enabled = document.getElementById('ruleEnabled').checked;
+            
+            if (!name) {
+                showToast('⚠️ 请输入规则名称');
+                document.getElementById('ruleName').focus();
+                return;
+            }
+            
+            if (!pattern) {
+                showToast('⚠️ 请输入匹配内容');
+                document.getElementById('rulePattern').focus();
+                return;
+            }
+            
+            // 验证正则表达式
+            if (type === 'regex') {
+                try {
+                    new RegExp(pattern);
+                } catch (e) {
+                    showToast('❌ 正则表达式格式错误：' + e.message);
+                    document.getElementById('rulePattern').focus();
+                    return;
+                }
+            }
+            
+            const rule = {
+                id: editingRuleIndex >= 0 ? customHighlightRules[editingRuleIndex].id : Date.now(),
+                name,
+                type,
+                pattern,
+                bgColor,
+                textColor,
+                enabled,
+                builtin: false
+            };
+            
+            if (editingRuleIndex >= 0) {
+                // 更新现有规则
+                customHighlightRules[editingRuleIndex] = rule;
+            } else {
+                // 添加新规则
+                customHighlightRules.push(rule);
+            }
+            
+            saveCustomRulesToStorage();
+            closeAddRuleModal();
+            renderHighlightRulesList();
+            renderLines(); // 重新渲染日志以应用新规则
+            showToast('✅ 规则已保存');
+        }
+
+        function editHighlightRule(index) {
+            editingRuleIndex = index;
+            const rule = customHighlightRules[index];
+            
+            document.getElementById('ruleModalTitle').textContent = '✏️ 编辑高亮规则';
+            document.getElementById('ruleName').value = rule.name;
+            document.getElementById('ruleType').value = rule.type;
+            document.getElementById('rulePattern').value = rule.pattern;
+            document.getElementById('ruleBgColor').value = rule.bgColor;
+            document.getElementById('ruleTextColor').value = rule.textColor;
+            document.getElementById('ruleEnabled').checked = rule.enabled;
+            updateColorPreview();
+            document.getElementById('addRuleModal').style.display = 'block';
+        }
+
+        function toggleHighlightRule(index) {
+            customHighlightRules[index].enabled = !customHighlightRules[index].enabled;
+            saveCustomRulesToStorage();
+            renderHighlightRulesList();
+            renderLines(); // 重新渲染日志
+        }
+
+        function deleteHighlightRule(index) {
+            console.log('🗑️ 删除规则被调用, index:', index);
+            console.log('当前规则数量:', customHighlightRules.length);
+            
+            if (index < 0 || index >= customHighlightRules.length) {
+                console.error('无效的索引:', index);
+                showToast('❌ 规则索引错误');
+                return;
+            }
+            
+            const rule = customHighlightRules[index];
+            console.log('要删除的规则:', rule);
+            
+            if (rule.builtin) {
+                showToast('⚠️ 内置规则不能删除，但可以禁用');
+                return;
+            }
+            
+            // 使用自定义确认对话框
+            showCustomConfirm(`确定要删除规则 "${rule.name}" 吗？`, '删除规则').then(confirmed => {
+                if (confirmed) {
+                    console.log('用户确认删除');
+                    customHighlightRules.splice(index, 1);
+                    console.log('删除后规则数量:', customHighlightRules.length);
+                    saveCustomRulesToStorage();
+                    renderHighlightRulesList();
+                    renderLines(); // 重新渲染日志
+                    showToast('✅ 规则已删除');
+                } else {
+                    console.log('用户取消删除');
+                }
+            });
+        }
+
+        function resetToDefault() {
+            // 使用自定义确认对话框
+            showCustomConfirm('确定要重置所有规则到默认状态吗？这将删除所有自定义规则！', '重置规则').then(confirmed => {
+                if (confirmed) {
+                    // 只保留内置规则
+                    customHighlightRules = customHighlightRules.filter(r => r.builtin);
+                    // 启用所有内置规则
+                    customHighlightRules.forEach(r => r.enabled = true);
+                    localStorage.removeItem('customHighlightRules');
+                    renderHighlightRulesList();
+                    renderLines();
+                    showToast('✅ 已重置到默认规则');
+                }
+            });
+        }
+
+        function renderHighlightRulesList() {
+            const container = document.getElementById('highlightRulesList');
+            
+            if (customHighlightRules.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无规则</div>';
+                return;
+            }
+            
+            // 清空容器
+            container.innerHTML = '';
+            
+            customHighlightRules.forEach((rule, index) => {
+                const typeLabel = rule.type === 'text' ? '文本' : '正则';
+                const currentIndex = index; // 保存当前索引，避免闭包问题
+                
+                // 创建规则项
+                const ruleItem = document.createElement('div');
+                ruleItem.className = 'rule-item';
+                ruleItem.style.borderLeftColor = rule.bgColor;
+                ruleItem.setAttribute('data-index', currentIndex); // 添加数据属性
+                
+                // 复选框
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = rule.enabled;
+                checkbox.style.cursor = 'pointer';
+                checkbox.addEventListener('change', function() {
+                    toggleHighlightRule(currentIndex);
+                });
+                
+                // 内容区域
+                const contentDiv = document.createElement('div');
+                contentDiv.style.flex = '1';
+                
+                // 规则名称行
+                const nameDiv = document.createElement('div');
+                nameDiv.style.fontWeight = 'bold';
+                nameDiv.style.marginBottom = '5px';
+                nameDiv.textContent = rule.name + ' ';
+                
+                if (rule.builtin) {
+                    const builtinTag = document.createElement('span');
+                    builtinTag.style.cssText = 'background-color: #6366f1; color: white; font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-left: 5px;';
+                    builtinTag.textContent = '内置';
+                    nameDiv.appendChild(builtinTag);
+                }
+                
+                const typeTag = document.createElement('span');
+                typeTag.style.cssText = 'background-color: var(--vscode-editorWidget-background); color: var(--vscode-descriptionForeground); font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-left: 5px;';
+                typeTag.textContent = typeLabel;
+                nameDiv.appendChild(typeTag);
+                
+                // 匹配内容行
+                const patternDiv = document.createElement('div');
+                patternDiv.style.cssText = 'font-size: 11px; color: var(--vscode-descriptionForeground); font-family: "Consolas", monospace;';
+                patternDiv.textContent = rule.pattern;
+                
+                // 示例效果
+                const exampleDiv = document.createElement('div');
+                exampleDiv.style.marginTop = '5px';
+                const exampleSpan = document.createElement('span');
+                exampleSpan.className = 'custom-highlight';
+                exampleSpan.style.cssText = `background-color: ${rule.bgColor}; color: ${rule.textColor}; font-size: 11px;`;
+                exampleSpan.textContent = '示例效果';
+                exampleDiv.appendChild(exampleSpan);
+                
+                contentDiv.appendChild(nameDiv);
+                contentDiv.appendChild(patternDiv);
+                contentDiv.appendChild(exampleDiv);
+                
+                // 按钮区域
+                const buttonsDiv = document.createElement('div');
+                buttonsDiv.style.display = 'flex';
+                buttonsDiv.style.gap = '5px';
+                
+                if (!rule.builtin) {
+                    // 编辑按钮
+                    const editBtn = document.createElement('button');
+                    editBtn.textContent = '编辑';
+                    editBtn.style.cssText = 'padding: 5px 10px; font-size: 11px;';
+                    editBtn.addEventListener('click', function() {
+                        console.log('📝 编辑按钮被点击, index:', currentIndex);
+                        editHighlightRule(currentIndex);
+                    });
+                    
+                    // 删除按钮
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = '删除';
+                    deleteBtn.style.cssText = 'padding: 5px 10px; font-size: 11px;';
+                    deleteBtn.addEventListener('click', function(e) {
+                        console.log('🔴 删除按钮被点击, index:', currentIndex);
+                        e.stopPropagation(); // 阻止事件冒泡
+                        deleteHighlightRule(currentIndex);
+                    });
+                    
+                    buttonsDiv.appendChild(editBtn);
+                    buttonsDiv.appendChild(deleteBtn);
+                }
+                
+                ruleItem.appendChild(checkbox);
+                ruleItem.appendChild(contentDiv);
+                ruleItem.appendChild(buttonsDiv);
+                
+                container.appendChild(ruleItem);
+            });
+            
+            // 重置按钮
+            const resetDiv = document.createElement('div');
+            resetDiv.style.cssText = 'margin-top: 20px; text-align: center;';
+            const resetBtn = document.createElement('button');
+            resetBtn.textContent = '🔄 重置为默认规则';
+            resetBtn.addEventListener('click', resetToDefault);
+            resetDiv.appendChild(resetBtn);
+            
+            container.appendChild(resetDiv);
+        }
+
+        function updateColorPreview() {
+            const bgColor = document.getElementById('ruleBgColor').value;
+            const textColor = document.getElementById('ruleTextColor').value;
+            const preview = document.getElementById('colorPreview');
+            if (preview) {
+                preview.style.backgroundColor = bgColor;
+                preview.style.color = textColor;
+            }
+        }
+        
+        // ========== 结束自定义高亮规则管理 ==========
         
         // 键盘快捷键支持
         document.addEventListener('keydown', function(e) {
