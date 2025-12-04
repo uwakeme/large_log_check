@@ -1057,8 +1057,9 @@
                 </div>
                 <div id="jumpByTimeSection" style="display: none;">
                     <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">时间（支持格式：2024-01-01 12:00:00 或 2024-01-01）：</label>
-                        <input type="text" id="jumpTimeInput" placeholder="例如：2025-11-14 09:00:00" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">时间：</label>
+                        <input type="datetime-local" id="jumpTimeInput" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                        <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px;">💡 提示：支持直接输入或点击日历图标选择</div>
                     </div>
                 </div>
                 <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #0e7490;">
@@ -3283,7 +3284,21 @@
             } else {
                 lineSection.style.display = 'none';
                 timeSection.style.display = 'block';
-                document.getElementById('jumpTimeInput').focus();
+                
+                // 自动设置当前时间
+                const timeInput = document.getElementById('jumpTimeInput');
+                if (!timeInput.value) {
+                    // 获取当前时间并格式化为 datetime-local 格式（YYYY-MM-DDTHH:mm）
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const hours = String(now.getHours()).padStart(2, '0');
+                    const minutes = String(now.getMinutes()).padStart(2, '0');
+                    timeInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+                }
+                
+                timeInput.focus();
             }
         }
         
@@ -3302,15 +3317,22 @@
                 }
                 jumpToLine(lineNumber);
             } else {
-                const timeStr = document.getElementById('jumpTimeInput').value.trim();
-                if (!timeStr) {
-                    alert('请输入时间！');
+                const timeInputValue = document.getElementById('jumpTimeInput').value.trim();
+                if (!timeInputValue) {
+                    alert('请选择或输入时间！');
                     return;
                 }
-                if (!/^\d{4}-\d{2}-\d{2}/.test(timeStr)) {
-                    alert('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
-                    return;
+                
+                // datetime-local 格式：YYYY-MM-DDTHH:mm 或 YYYY-MM-DDTHH:mm:ss
+                // 转换为后端期望的格式：YYYY-MM-DD HH:mm:ss
+                let timeStr = timeInputValue.replace('T', ' ');
+                
+                // 如果没有秒，添加 :00
+                if (timeStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
+                    timeStr += ':00';
                 }
+                
+                console.log('🕐 跳转到时间:', timeStr);
                 jumpToTime(timeStr);
             }
             
