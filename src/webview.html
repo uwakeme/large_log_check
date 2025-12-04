@@ -645,6 +645,30 @@
             padding: 2px 4px;
             border-radius: 2px;
             font-weight: 500;
+            position: relative;
+        }
+        
+        /* 筛选图标样式 */
+        .filter-icon {
+            display: inline-block;
+            margin-left: 4px;
+            font-size: 11px;
+            opacity: 0.6;
+            cursor: pointer;
+            padding: 1px 3px;
+            border-radius: 2px;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        
+        .filter-icon:hover {
+            opacity: 1;
+            background-color: rgba(0, 0, 0, 0.2);
+            transform: scale(1.2);
+        }
+        
+        .filter-icon:active {
+            transform: scale(0.9);
         }
         
         /* 可点击的筛选项样式 */
@@ -1238,6 +1262,8 @@
         // 筛选状态管理
         let currentFilterType = null; // 当前筛选类型: 'thread', 'class', 'method', null
         let currentFilterValue = null; // 当前筛选值
+        let savedPageBeforeFilter = 1; // 筛选前的页码
+        let savedFirstLineBeforeFilter = null; // 筛选前当前页第一行的行号
         
         /**
          * 统一处理数据变更后的页面计算
@@ -1891,8 +1917,18 @@
                 showContextMenu(e, content, actualLineNumber);
             };
             
-            // 添加双击书签功能
+            // 添加双击书签功能（只有在没有选中文本时才触发）
             lineDiv.ondblclick = (e) => {
+                // 检查是否有文本被选中
+                const selection = window.getSelection();
+                const selectedText = selection.toString();
+                
+                // 如果有文本被选中，说明用户想复制，不触发书签
+                if (selectedText && selectedText.trim().length > 0) {
+                    console.log('📋 用户选中了文本，不触发书签');
+                    return;
+                }
+                
                 e.stopPropagation();
                 toggleBookmark(actualLineNumber);
             };
@@ -1976,30 +2012,30 @@
                         
                         // 根据规则名称判断是否需要添加点击事件
                         if (rule.name === '线程名') {
-                            // 线程名 - 添加可点击功能
+                            // 线程名 - 添加筛选图标
                             result = result.replace(regex, function(match) {
                                 // 提取方括号内的线程名
                                 const threadNameMatch = match.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
                                 if (threadNameMatch) {
                                     const threadName = threadNameMatch[1];
-                                    return `<span class="custom-highlight clickable-filter" style="background-color: ${rule.bgColor}; color: ${rule.textColor}; cursor: pointer;" onclick="event.stopPropagation(); filterByThreadName('${threadName.replace(/'/g, "\\'")}')", title="点击筛选线程: ${threadName}">${match}</span>`;
+                                    return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${threadName.replace(/'/g, "\\'")}')", title="点击筛选线程: ${threadName}">🔍</span></span>`;
                                 }
                                 return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
                             });
                         } else if (rule.name === '类名') {
-                            // 类名 - 添加可点击功能
+                            // 类名 - 添加筛选图标
                             result = result.replace(regex, function(match) {
                                 const className = match.trim();
-                                return `<span class="custom-highlight clickable-filter" style="background-color: ${rule.bgColor}; color: ${rule.textColor}; cursor: pointer;" onclick="event.stopPropagation(); filterByClassName('${className.replace(/'/g, "\\'")}')", title="点击筛选类: ${className}">${match}</span>`;
+                                return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${className.replace(/'/g, "\\'")}')", title="点击筛选类: ${className}">🔍</span></span>`;
                             });
                         } else if (rule.name === '方法名') {
-                            // 方法名 - 添加可点击功能（匹配 [methodName:lineNumber]）
+                            // 方法名 - 添加筛选图标（匹配 [methodName:lineNumber]）
                             result = result.replace(regex, function(match) {
                                 // 提取方括号内的方法名（去掉行号）
                                 const methodMatch = match.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
                                 if (methodMatch) {
                                     const methodName = methodMatch[1];
-                                    return `<span class="custom-highlight clickable-filter" style="background-color: ${rule.bgColor}; color: ${rule.textColor}; cursor: pointer;" onclick="event.stopPropagation(); filterByMethodName('${methodName.replace(/'/g, "\\'")}')", title="点击筛选方法: ${methodName}">${match}</span>`;
+                                    return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${methodName.replace(/'/g, "\\'")}')", title="点击筛选方法: ${methodName}">🔍</span></span>`;
                                 }
                                 return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
                             });
@@ -3050,6 +3086,9 @@
             console.log('🔍 按类名筛选:', className);
             closeStatsModal();
             
+            // 保存筛选前的位置
+            savePositionBeforeFilter();
+            
             // 记录筛选状态
             currentFilterType = 'class';
             currentFilterValue = className;
@@ -3067,6 +3106,9 @@
         function filterByMethodName(methodName) {
             console.log('🔧 按方法名筛选:', methodName);
             closeStatsModal();
+            
+            // 保存筛选前的位置
+            savePositionBeforeFilter();
             
             // 记录筛选状态
             currentFilterType = 'method';
@@ -3086,6 +3128,9 @@
             console.log('🧵 按线程名筛选:', threadName);
             closeStatsModal();
             
+            // 保存筛选前的位置
+            savePositionBeforeFilter();
+            
             // 记录筛选状态
             currentFilterType = 'thread';
             currentFilterValue = threadName;
@@ -3097,6 +3142,21 @@
                 pattern: `\\[${threadName}\\]`,
                 flags: 'i'
             });
+        }
+        
+        // 保存筛选前的位置
+        function savePositionBeforeFilter() {
+            savedPageBeforeFilter = currentPage;
+            
+            // 保存当前页第一行的行号
+            if (allLines.length > 0) {
+                const startIndex = (currentPage - 1) * pageSize;
+                if (startIndex < allLines.length) {
+                    savedFirstLineBeforeFilter = allLines[startIndex].lineNumber || (startIndex + 1);
+                }
+            }
+            
+            console.log('📌 保存筛选前位置 - 页码:', savedPageBeforeFilter, ', 行号:', savedFirstLineBeforeFilter);
         }
         
         // 显示筛选状态
@@ -3120,8 +3180,23 @@
             currentFilterValue = null;
             hideFilterStatus();
             
-            // 重新加载完整日志
-            refresh();
+            // 请求后端重新加载完整日志，并跳转到保存的位置
+            console.log('🔙 恢复到筛选前位置 - 行号:', savedFirstLineBeforeFilter);
+            
+            if (savedFirstLineBeforeFilter) {
+                // 有保存的行号，跳转到那行
+                vscode.postMessage({
+                    command: 'jumpToLineInFullLog',
+                    lineNumber: savedFirstLineBeforeFilter
+                });
+                
+                // 重置保存的位置
+                savedPageBeforeFilter = 1;
+                savedFirstLineBeforeFilter = null;
+            } else {
+                // 没有保存的位置，使用默认的刷新
+                refresh();
+            }
         }
         
         function showDeleteByTimeDialog() {
@@ -3931,54 +4006,40 @@
             
             if (!content || typeof content !== 'string') return null;
             
-            // 改进的JSON检测策略：
-            // 1. 先尝试提取所有可能的JSON字符串（使用贪婪匹配）
-            // 2. 对于对象：匹配 {...}
-            // 3. 对于数组：匹配 [...]
-            // 4. 尝试解析，如果失败则跳过
-            // 5. 排除简单的纯数字数组如 [123]、[205] 等
+            // 改进的JSON检测策略：使用括号匹配算法提取完整JSON
             
-            // 尝试匹配JSON对象（贪婪匹配，获取最完整的对象）
-            let jsonMatch = content.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
-            if (!jsonMatch) {
-                // 尝试更复杂的嵌套对象匹配
-                jsonMatch = content.match(/\{[\s\S]*\}/);
-            }
-            
-            if (jsonMatch) {
+            // 尝试匹配JSON对象（使用括号匹配）
+            const jsonObj = extractJSON(content, '{', '}');
+            if (jsonObj) {
                 try {
-                    const jsonStr = jsonMatch[0];
-                    const jsonObj = JSON.parse(jsonStr);
+                    const parsed = JSON.parse(jsonObj);
                     // 只解析对象类型，且至少有一个属性
-                    if (typeof jsonObj === 'object' && jsonObj !== null && !Array.isArray(jsonObj) && Object.keys(jsonObj).length > 0) {
-                        return renderJSONTree(jsonObj);
+                    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
+                        return renderJSONTree(parsed);
                     }
                 } catch (e) {
-                    // JSON解析失败，继续尝试其他格式
                     console.debug('JSON对象解析失败:', e.message);
                 }
             }
             
             // 尝试匹配JSON数组
-            let arrayMatch = content.match(/\[[\s\S]*?\]/);
-            if (arrayMatch) {
+            const jsonArr = extractJSON(content, '[', ']');
+            if (jsonArr) {
                 try {
-                    const jsonStr = arrayMatch[0];
-                    const jsonObj = JSON.parse(jsonStr);
+                    const parsed = JSON.parse(jsonArr);
                     
-                    if (Array.isArray(jsonObj)) {
+                    if (Array.isArray(parsed)) {
                         // 排除简单的纯数字数组（只包含一个数字）
-                        if (jsonObj.length === 1 && typeof jsonObj[0] === 'number') {
+                        if (parsed.length === 1 && typeof parsed[0] === 'number') {
                             return null; // 跳过 [123]、[205] 这种格式
                         }
                         
                         // 解析包含对象的数组，或者包含多个元素的复杂数组
-                        if (jsonObj.length > 0 && (typeof jsonObj[0] === 'object' || jsonObj.length > 3)) {
-                            return renderJSONTree(jsonObj);
+                        if (parsed.length > 0 && (typeof parsed[0] === 'object' || parsed.length > 3)) {
+                            return renderJSONTree(parsed);
                         }
                     }
                 } catch (e) {
-                    // JSON解析失败
                     console.debug('JSON数组解析失败:', e.message);
                 }
             }
@@ -3995,6 +4056,53 @@
             }
             
             return null;
+        }
+        
+        // 使用括号匹配算法提取完整的JSON字符串
+        function extractJSON(str, openChar, closeChar) {
+            const startIndex = str.indexOf(openChar);
+            if (startIndex === -1) return null;
+            
+            let depth = 0;
+            let inString = false;
+            let escapeNext = false;
+            
+            for (let i = startIndex; i < str.length; i++) {
+                const char = str[i];
+                
+                // 处理转义字符
+                if (escapeNext) {
+                    escapeNext = false;
+                    continue;
+                }
+                
+                if (char === '\\') {
+                    escapeNext = true;
+                    continue;
+                }
+                
+                // 处理字符串
+                if (char === '"') {
+                    inString = !inString;
+                    continue;
+                }
+                
+                // 在字符串内部，忽略括号
+                if (inString) continue;
+                
+                // 匹配括号
+                if (char === openChar) {
+                    depth++;
+                } else if (char === closeChar) {
+                    depth--;
+                    if (depth === 0) {
+                        // 找到匹配的闭合括号
+                        return str.substring(startIndex, i + 1);
+                    }
+                }
+            }
+            
+            return null; // 没有找到匹配的括号
         }
         
         function renderJSONTree(obj, depth = 0) {
