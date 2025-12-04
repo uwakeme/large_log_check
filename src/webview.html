@@ -4033,15 +4033,21 @@
             // 尝试匹配JSON对象（使用括号匹配）
             const jsonObj = extractJSON(content, '{', '}');
             if (jsonObj) {
+                console.log('📝 提取到JSON对象:', jsonObj.substring(0, 200), '...');
                 try {
                     const parsed = JSON.parse(jsonObj);
                     // 只解析对象类型，且至少有一个属性
                     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
+                        console.log('✅ JSON对象解析成功，键数量:', Object.keys(parsed).length, ', 键名:', Object.keys(parsed).join(', '));
                         return renderJSONTree(parsed);
+                    } else {
+                        console.log('⚠️ JSON对象不符合条件:', typeof parsed, Array.isArray(parsed));
                     }
                 } catch (e) {
-                    console.debug('JSON对象解析失败:', e.message);
+                    console.warn('❌ JSON对象解析失败:', e.message, 'JSON字符串:', jsonObj.substring(0, 200));
                 }
+            } else {
+                console.debug('🔍 未找到JSON对象');
             }
             
             // 尝试匹配JSON数组
@@ -4112,22 +4118,25 @@
                 // 在字符串内部，忽略括号
                 if (inString) continue;
                 
-                // 匹配括号
+                // 只匹配目标类型的括号，忽略其他类型
                 if (char === openChar) {
                     depth++;
                 } else if (char === closeChar) {
                     depth--;
                     if (depth === 0) {
                         // 找到匹配的闭合括号
-                        return str.substring(startIndex, i + 1);
+                        const result = str.substring(startIndex, i + 1);
+                        console.debug(`提取JSON (${openChar}${closeChar}): 长度=${result.length}, 开头=${result.substring(0, 80)}...`);
+                        return result;
                     }
                 }
             }
             
+            console.debug(`未找到匹配的括号 (${openChar}${closeChar})`);
             return null; // 没有找到匹配的括号
         }
         
-        function renderJSONTree(obj, depth = 0) {
+        function renderJSONTree(obj, depth = 0, parentCollapsed = false) {
             const id = 'json_' + Math.random().toString(36).substr(2, 9);
             
             if (obj === null) {
@@ -4154,25 +4163,49 @@
                 return isArray ? '<span>[]</span>' : '<span>{}</span>';
             }
             
-            // 如果对象太大，默认折叠
-            const defaultCollapsed = depth > 0 || len > 10;
+            // 计算渲染后的预估行数
+            const estimatedLines = estimateJSONLines(obj, depth);
+            console.log(`📏 JSON层级 depth=${depth}, 属性数=${len}, 预估行数=${estimatedLines}`);
             
+            // 根据行数和深度决定是否折叠
+            let defaultCollapsed = false;
+            if (depth === 0) {
+                // 根层级：超过20行折叠
+                defaultCollapsed = estimatedLines > 20;
+            } else {
+                // 嵌套层级：如果父级折叠了，全部折叠；否则全部展开，不再嵌套折叠
+                defaultCollapsed = parentCollapsed;
+            }
+            
+            console.log(`  → 是否折叠: ${defaultCollapsed}`);
+
             // 只有第一层级添加 json-tree 容器和折叠控件
             const isRootLevel = depth === 0;
             
             let html = '';
             
             if (isRootLevel) {
+                // 根层级：添加完整的折叠控件
                 html += '<div class="json-tree">';
-                html += `<span class="json-tree-toggle" onclick="toggleJSONNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
-                html += `<span>${isArray ? '[' : '{'}</span>`;
-                html += `<span class="json-expand-btn" onclick="toggleJSONNode('${id}')" style="display:${defaultCollapsed ? 'inline-block' : 'none'}" id="${id}_btn">${len} items</span>`;
+                html += `<span class="json-tree-toggle" onclick="toggleJSONNode('${id}')">${defaultCollapsed ? '\u25b6' : '\u25bc'}</span>`;
+                
+                // 折叠按钮（折叠时显示）
+                html += `<span class="json-expand-btn" onclick="toggleJSONNode('${id}')" id="${id}_btn" style="display:${defaultCollapsed ? 'inline-block' : 'none'};cursor:pointer;">${isArray ? '[' : '{'} ${len} items, ~${estimatedLines} lines ${isArray ? ']' : '}'}</span>`;
+                
+                // 开始括号（展开时显示）
+                html += `<span id="${id}_open" style="display:${defaultCollapsed ? 'none' : 'inline'}">${isArray ? '[' : '{'}</span>`;
             } else {
-                // 内层嵌套不添加折叠控件，直接显示
+                // 嵌套层级：不添加任何折叠控件，直接显示
                 html += `<span>${isArray ? '[' : '{'}</span>`;
             }
             
-            html += `<div id="${id}" class="json-tree-item${defaultCollapsed ? ' json-tree-collapsed' : ''}">`;
+            // 只有根层级才使用 json-tree-item 和折叠类
+            if (isRootLevel) {
+                html += `<div id="${id}" class="json-tree-item${defaultCollapsed ? ' json-tree-collapsed' : ''}">`;
+            } else {
+                // 嵌套层级不使用折叠类，直接用普通div
+                html += '<div>';
+            };
             
             keys.forEach((key, index) => {
                 const value = obj[key];
@@ -4185,9 +4218,10 @@
                 }
                 
                 if (typeof value === 'object' && value !== null) {
-                    html += renderJSONTree(value, depth + 1);
+                    // 传递当前层级的折叠状态给子级
+                    html += renderJSONTree(value, depth + 1, defaultCollapsed);
                 } else {
-                    html += renderJSONTree(value, depth + 1);
+                    html += renderJSONTree(value, depth + 1, defaultCollapsed);
                 }
                 
                 if (!isLast) {
@@ -4198,13 +4232,57 @@
             });
             
             html += '</div>';
-            html += `<span>${isArray ? ']' : '}'}</span>`;
+            
+            // 结束括号：根层级需要根据折叠状态控制显示/隐藏，嵌套层级总是显示
+            if (isRootLevel) {
+                // 根层级：结束括号（展开时显示，折叠时隐藏）
+                html += `<span id="${id}_close" style="display:${defaultCollapsed ? 'none' : 'inline'}">${isArray ? ']' : '}'}</span>`;
+            } else {
+                // 嵌套层级：总是显示结束括号
+                html += `<span>${isArray ? ']' : '}'}</span>`;
+            }
             
             if (isRootLevel) {
                 html += '</div>';
             }
             
             return html;
+        }
+        
+        // 预估JSON对象渲染后的行数
+        function estimateJSONLines(obj, depth = 0) {
+            if (obj === null || typeof obj !== 'object') {
+                return 1; // 基本类型占用1行
+            }
+            
+            const isArray = Array.isArray(obj);
+            const keys = Object.keys(obj);
+            const len = keys.length;
+            
+            if (len === 0) {
+                return 1; // 空对象/数组占用1行
+            }
+            
+            let totalLines = 0;
+            
+            keys.forEach(key => {
+                const value = obj[key];
+                
+                if (typeof value === 'object' && value !== null) {
+                    // 递归计算嵌套对象的行数
+                    totalLines += estimateJSONLines(value, depth + 1);
+                } else {
+                    // 基本类型占用1行
+                    totalLines += 1;
+                }
+            });
+            
+            // 加上开始和结束符号的行数（如果有内容）
+            if (totalLines > 0) {
+                totalLines += 2; // { 和 } 各占一行
+            }
+            
+            return totalLines;
         }
         
         function renderXMLTree(xmlStr) {
@@ -4284,24 +4362,32 @@
             const contentNode = document.getElementById(id);
             if (!contentNode) return;
             
-            // 向上查找 json-tree 容器
+            // 根层级才有 json-tree 容器
             const container = contentNode.closest('.json-tree');
-            if (!container) return;
+            if (!container) {
+                console.warn('未找到 json-tree 容器，这个节点可能不支持折叠');
+                return;
+            }
             
-            // 查找箭头和展开按钮
-            const toggle = container.querySelector('.json-tree-toggle');
             const btn = document.getElementById(id + '_btn');
+            const openBracket = document.getElementById(id + '_open');
+            const closeBracket = document.getElementById(id + '_close');
+            const toggle = container.querySelector('.json-tree-toggle');
             
             if (contentNode.classList.contains('json-tree-collapsed')) {
-                // 展开
+                // 展开：隐藏按钮，显示大括号和内容
                 contentNode.classList.remove('json-tree-collapsed');
                 if (toggle) toggle.textContent = '▼';
                 if (btn) btn.style.display = 'none';
+                if (openBracket) openBracket.style.display = 'inline';
+                if (closeBracket) closeBracket.style.display = 'inline';
             } else {
-                // 折叠
+                // 折叠：显示按钮，隐藏大括号和内容
                 contentNode.classList.add('json-tree-collapsed');
                 if (toggle) toggle.textContent = '▶';
                 if (btn) btn.style.display = 'inline-block';
+                if (openBracket) openBracket.style.display = 'none';
+                if (closeBracket) closeBracket.style.display = 'none';
             }
         }
         
