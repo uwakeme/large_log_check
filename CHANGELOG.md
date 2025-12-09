@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- 新增若干命令，包括以下命令
+  - 刷新日志文件
+  - 导出当前日志
+  - 显示日志统计
+  - 书签管理
+  - 注释管理
+  - 跳转到行号
+  - 高级搜索
+
 ## [1.1.3] - 2025-12-09
 
 ### Added
