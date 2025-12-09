@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2025-12-09
+
 ### Added
 - JSON自动解析支持多对象检测和渲染
   - 单行日志包含多个JSON对象时，自动分别解析展示
