@@ -1360,6 +1360,15 @@
                 case 'jumpToLineInFullLogResult':
                     handleJumpToLineInFullLogResult(message.data);
                     break;
+                case 'toggleBookmarks':
+                    showBookmarksModal();
+                    break;
+                case 'toggleComments':
+                    showCommentsModal();
+                    break;
+                case 'showAdvancedSearch':
+                    showAdvancedSearchModal();
+                    break;
             }
         });
         

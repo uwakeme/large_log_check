@@ -28,6 +28,15 @@
   ],
   "activationEvents": [
     "onCommand:big-log-viewer.openLogFile",
+    "onCommand:big-log-viewer.deleteByTime",
+    "onCommand:big-log-viewer.deleteByLine",
+    "onCommand:big-log-viewer.refresh",
+    "onCommand:big-log-viewer.exportLogs",
+    "onCommand:big-log-viewer.showStatistics",
+    "onCommand:big-log-viewer.toggleBookmarks",
+    "onCommand:big-log-viewer.toggleComments",
+    "onCommand:big-log-viewer.jumpToLine",
+    "onCommand:big-log-viewer.showAdvancedSearch",
     "onLanguage:log"
   ],
   "main": "./out/extension.js",
@@ -46,6 +55,41 @@
       {
         "command": "big-log-viewer.deleteByLine",
         "title": "按行数删除日志",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.refresh",
+        "title": "刷新日志文件",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.exportLogs",
+        "title": "导出当前日志",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.showStatistics",
+        "title": "显示日志统计",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.toggleBookmarks",
+        "title": "书签管理",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.toggleComments",
+        "title": "注释管理",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.jumpToLine",
+        "title": "跳转到行号",
+        "category": "日志查看器"
+      },
+      {
+        "command": "big-log-viewer.showAdvancedSearch",
+        "title": "高级搜索",
         "category": "日志查看器"
       }
     ],
