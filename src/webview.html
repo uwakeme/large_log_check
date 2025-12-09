@@ -640,6 +640,24 @@
             background-color: #7c3aed;
         }
         
+        /* 行内JSON样式 */
+        .json-inline {
+            display: inline;
+            margin: 0 3px;
+        }
+        
+        .json-separator {
+            color: var(--vscode-foreground);
+            opacity: 0.8;
+            margin: 0 2px;
+        }
+        
+        .json-error {
+            color: var(--vscode-errorForeground);
+            font-family: monospace;
+            opacity: 0.7;
+        }
+        
         /* 自定义高亮规则样式 */
         .custom-highlight {
             padding: 2px 4px;
@@ -4022,68 +4040,180 @@
         
         // ========== JSON/XML 自动解析功能 ==========
         
+        // 判断是否应该渲染JSON
+        function shouldRenderJSON(parsed) {
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                return Object.keys(parsed).length > 0;
+            }
+            if (Array.isArray(parsed)) {
+                if (parsed.length === 1 && typeof parsed[0] === 'number') {
+                    return false;
+                }
+                return parsed.length > 0 && (typeof parsed[0] === 'object' || parsed.length > 3);
+            }
+            return false;
+        }
+        
+        // 从指定位置提取JSON字符串
+        function extractJSONAt(str, startIndex, openChar, closeChar) {
+            let depth = 0;
+            let inString = false;
+            let escapeNext = false;
+            
+            for (let i = startIndex; i < str.length; i++) {
+                const char = str[i];
+                if (escapeNext) {
+                    escapeNext = false;
+                    continue;
+                }
+                if (char === '\\') {
+                    escapeNext = true;
+                    continue;
+                }
+                if (char === '"') {
+                    inString = !inString;
+                    continue;
+                }
+                if (inString) continue;
+                
+                if (char === openChar) {
+                    depth++;
+                } else if (char === closeChar) {
+                    depth--;
+                    if (depth === 0) {
+                        return {
+                            json: str.substring(startIndex, i + 1),
+                            startIndex: startIndex,
+                            endIndex: i
+                        };
+                    }
+                }
+            }
+            return null;
+        }
+        
+        // 提取所有JSON
+        function extractAllJSON(content) {
+            const results = [];
+            let currentIndex = 0;
+            
+            while (currentIndex < content.length) {
+                const nextObjStart = content.indexOf('{', currentIndex);
+                const nextArrStart = content.indexOf('[', currentIndex);
+                
+                let nextStart = -1;
+                let openChar = '';
+                let closeChar = '';
+                
+                if (nextObjStart !== -1 && (nextArrStart === -1 || nextObjStart < nextArrStart)) {
+                    nextStart = nextObjStart;
+                    openChar = '{';
+                    closeChar = '}';
+                } else if (nextArrStart !== -1) {
+                    nextStart = nextArrStart;
+                    openChar = '[';
+                    closeChar = ']';
+                }
+                
+                if (nextStart === -1) break;
+                
+                const extracted = extractJSONAt(content, nextStart, openChar, closeChar);
+                if (extracted) {
+                    try {
+                        const parsed = JSON.parse(extracted.json);
+                        if (shouldRenderJSON(parsed)) {
+                            results.push(extracted);
+                            currentIndex = extracted.endIndex + 1;
+                            continue;
+                        }
+                    } catch (e) {}
+                }
+                currentIndex = nextStart + 1;
+            }
+            return results;
+        }
+        
+        // 渲染混合内容
+        function renderMixedContent(content, jsonObjects) {
+            // 只渲染JSON部分，其他部分返回null让原来的渲染逻辑处理
+            // 这样可以保持日志前缀的高亮样式
+            let html = '';
+            let lastIndex = 0;
+            
+            jsonObjects.forEach((item, index) => {
+                // 添加JSON之前的普通文本（但不包括第一个JSON之前的）
+                if (index > 0 && item.startIndex > lastIndex) {
+                    const text = content.substring(lastIndex, item.startIndex);
+                    if (text.trim()) {
+                        html += `<span class="json-separator">${escapeHtml(text)}</span>`;
+                    }
+                }
+                
+                // 渲染JSON
+                try {
+                    const parsed = JSON.parse(item.json);
+                    html += '<span class="json-inline">';
+                    html += renderJSONTree(parsed);
+                    html += '</span>';
+                } catch (e) {
+                    html += `<span class="json-error">${escapeHtml(item.json)}</span>`;
+                }
+                
+                lastIndex = item.endIndex + 1;
+            });
+            
+            // 添加最后的普通文本
+            if (lastIndex < content.length) {
+                const text = content.substring(lastIndex);
+                if (text.trim()) {
+                    html += `<span class="json-separator">${escapeHtml(text)}</span>`;
+                }
+            }
+            
+            return html;
+        }
+        
         function detectAndParseStructuredData(content) {
             // 如果功能未启用，直接返回
             if (!enableJsonParse) return null;
             
             if (!content || typeof content !== 'string') return null;
             
-            // 改进的JSON检测策略：使用括号匹配算法提取完整JSON
+            // 提取所有JSON对象和数组
+            const jsonObjects = extractAllJSON(content);
             
-            // 尝试匹配JSON对象（使用括号匹配）
-            const jsonObj = extractJSON(content, '{', '}');
-            if (jsonObj) {
-                console.log('📝 提取到JSON对象:', jsonObj.substring(0, 200), '...');
+            if (jsonObjects.length === 0) {
+                // 没有找到JSON，尝试检测XML
+                const xmlMatch = content.match(/<[^>]+>[\s\S]*<\/[^>]+>/);
+                if (xmlMatch) {
+                    try {
+                        const xmlStr = xmlMatch[0];
+                        return renderXMLTree(xmlStr);
+                    } catch (e) {
+                        // 不是有效的XML
+                    }
+                }
+                return null;
+            }
+            
+            // 如果只有一个JSON对象，直接返回
+            if (jsonObjects.length === 1) {
+                const item = jsonObjects[0];
                 try {
-                    const parsed = JSON.parse(jsonObj);
-                    // 只解析对象类型，且至少有一个属性
-                    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
-                        console.log('✅ JSON对象解析成功，键数量:', Object.keys(parsed).length, ', 键名:', Object.keys(parsed).join(', '));
+                    const parsed = JSON.parse(item.json);
+                    if (shouldRenderJSON(parsed)) {
+                        console.log('✅ 解析单个JSON，属性数:', Object.keys(parsed).length || parsed.length);
                         return renderJSONTree(parsed);
-                    } else {
-                        console.log('⚠️ JSON对象不符合条件:', typeof parsed, Array.isArray(parsed));
                     }
                 } catch (e) {
-                    console.warn('❌ JSON对象解析失败:', e.message, 'JSON字符串:', jsonObj.substring(0, 200));
+                    console.warn('❌ JSON解析失败:', e.message);
                 }
-            } else {
-                console.debug('🔍 未找到JSON对象');
+                return null;
             }
             
-            // 尝试匹配JSON数组
-            const jsonArr = extractJSON(content, '[', ']');
-            if (jsonArr) {
-                try {
-                    const parsed = JSON.parse(jsonArr);
-                    
-                    if (Array.isArray(parsed)) {
-                        // 排除简单的纯数字数组（只包含一个数字）
-                        if (parsed.length === 1 && typeof parsed[0] === 'number') {
-                            return null; // 跳过 [123]、[205] 这种格式
-                        }
-                        
-                        // 解析包含对象的数组，或者包含多个元素的复杂数组
-                        if (parsed.length > 0 && (typeof parsed[0] === 'object' || parsed.length > 3)) {
-                            return renderJSONTree(parsed);
-                        }
-                    }
-                } catch (e) {
-                    console.debug('JSON数组解析失败:', e.message);
-                }
-            }
-            
-            // 尝试检测XML
-            const xmlMatch = content.match(/<[^>]+>[\s\S]*<\/[^>]+>/);
-            if (xmlMatch) {
-                try {
-                    const xmlStr = xmlMatch[0];
-                    return renderXMLTree(xmlStr);
-                } catch (e) {
-                    // 不是有效的XML
-                }
-            }
-            
-            return null;
+            // 多个JSON对象：渲染混合内容
+            console.log(`📊 检测到${jsonObjects.length}个JSON对象，使用混合模式渲染`);
+            return renderMixedContent(content, jsonObjects);
         }
         
         // 使用括号匹配算法提取完整的JSON字符串
