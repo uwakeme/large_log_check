@@ -8,7 +8,6 @@ test_sample.log
 .git/**
 .eslintrc.json
 PUBLISH_GUIDE.md
-QUICKSTART.md
 node_modules/**/.bin/**
 **/*.vsix
 .qoder/**
