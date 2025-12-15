@@ -112,6 +112,22 @@
             display: inline;
         }
         
+        .jump-btn {
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.2s, transform 0.2s;
+            user-select: none;
+            font-size: 12px;
+        }
+        
+        .jump-btn:hover {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+        
         .highlight {
             background-color: var(--vscode-editor-findMatchHighlightBackground);
             color: var(--vscode-editor-findMatchHighlightForeground);
@@ -1373,11 +1389,11 @@
         });
         
         function handleFileLoaded(data) {
-            document.getElementById('fileName').textContent = data.fileName;
-            document.getElementById('fileSize').textContent = data.fileSize;
-            document.getElementById('totalLines').textContent = data.totalLines;
+            document.getElementById('fileName').textContent = data.fileName || '';
+            document.getElementById('fileSize').textContent = data.fileSize || '0';
+            document.getElementById('totalLines').textContent = data.totalLines || '0';
             
-            totalLinesInFile = data.totalLines;
+            totalLinesInFile = data.totalLines || 0;
             allDataLoaded = data.allLoaded || false;
             isFiltering = false; // 重置过滤状态
             currentSearchKeyword = ''; // 重置搜索关键词
@@ -1387,8 +1403,8 @@
             currentFilterValue = null;
             hideFilterStatus();
             
-            allLines = data.lines;
-            originalLines = [...data.lines];
+            allLines = data.lines || [];
+            originalLines = [...allLines];
             
             // 统一处理数据变更
             handleDataChange();
@@ -1403,8 +1419,9 @@
         }
         
         function handleMoreLines(data) {
-            allLines = allLines.concat(data.lines);
-            originalLines = originalLines.concat(data.lines);
+            const newLines = data.lines || [];
+            allLines = allLines.concat(newLines);
+            originalLines = originalLines.concat(newLines);
             
             // 检查是否已加载全部数据
             if (allLines.length >= totalLinesInFile) {
@@ -1420,24 +1437,45 @@
         }
         
         function handleSearchResults(data) {
+            console.log('🔍 收到搜索结果 - 原始数据:', data);
+            console.log('🔍 搜索结果数量:', data.results ? data.results.length : 'undefined');
+            console.log('🔍 搜索关键词:', data.keyword);
+            console.log('🔍 修改前 allLines 数量:', allLines.length);
+            
             currentSearchKeyword = data.keyword;
-            allLines = data.results;
+            allLines = data.results || [];
+            
+            console.log('🔍 修改后 allLines 数量:', allLines.length);
+            console.log('🔍 修改后 currentSearchKeyword:', currentSearchKeyword);
+            
+            // 如果搜索结果为空，给出提示
+            if (allLines.length === 0) {
+                vscode.postMessage({
+                    command: 'showMessage',
+                    type: 'info',
+                    message: `未找到包含 "${data.keyword}" 的日志`
+                });
+            } else {
+                console.log('✅ 搜索成功，准备渲染', allLines.length, '条结果');
+            }
             
             // 统一处理数据变更
+            console.log('🔍 即将调用 handleDataChange');
             handleDataChange();
+            console.log('🔍 handleDataChange 调用完成');
         }
         
         function handleFilterResults(data) {
-            console.log('📥 收到过滤结果:', data.results.length, '条');
-            allLines = data.results;
+            allLines = data.results || [];
+            console.log('📥 收到过滤结果:', allLines.length, '条');
             isFiltering = true; // 设置为过滤模式
             
             // 统一处理数据变更
             handleDataChange();
             
             // 如果过滤结果为空，给出友好提示
-            if (data.results.length === 0) {
-                const levelText = data.levels.join('、');
+            if (allLines.length === 0) {
+                const levelText = (data.levels || []).join('、');
                 vscode.postMessage({
                     command: 'showMessage',
                     type: 'warning',
@@ -1481,9 +1519,11 @@
         
         function renderLines() {
             const container = document.getElementById('logContainer');
+            const oldContent = container.innerHTML;
             container.innerHTML = '';
             
-            console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length, '，折叠模式:', isCollapseMode);
+            console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length, '，折叠模式:', isCollapseMode, '，搜索关键词:', currentSearchKeyword, '，过滤模式:', isFiltering);
+            console.log('🗑️ 已清空容器，旧内容长度:', oldContent.length);
             
             if (allLines.length === 0) {
                 container.innerHTML = '<div class="loading">没有日志数据</div>';
@@ -1961,21 +2001,24 @@
                 toggleBookmark(actualLineNumber);
             };
             
-            // 添加点击跳转功能（仅在搜索模式下）
-            if (currentSearchKeyword || isFiltering) {
-                lineDiv.onclick = (e) => {
-                    // 如果点击的是注释徽章，不跳转
-                    if (e.target.classList.contains('comment-badge')) {
-                        return;
-                    }
-                    jumpToLineInFullLog(actualLineNumber);
-                };
-                lineDiv.style.cursor = 'pointer';
-                lineDiv.title = '点击跳转到完整日志中的此行';
-            }
-            
+            // 先添加行号和内容
             lineDiv.appendChild(lineNumber);
             lineDiv.appendChild(lineContent);
+            
+            // 搜索/过滤模式下，在行号前添加跳转按钮（不再自动点击跳转）
+            if (currentSearchKeyword || isFiltering) {
+                // 添加一个小的跳转按钮
+                const jumpBtn = document.createElement('span');
+                jumpBtn.className = 'jump-btn';
+                jumpBtn.innerHTML = '🔗';
+                jumpBtn.title = '跳转到完整日志中的此行';
+                jumpBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    jumpToLineInFullLog(actualLineNumber);
+                };
+                // 在行号之前插入跳转按钮
+                lineDiv.insertBefore(jumpBtn, lineNumber);
+            }
             
             // 如果解析出JSON/XML结构，添加到下方
             if (parsedStructure) {
@@ -2782,7 +2825,7 @@
             separator3.className = 'context-menu-separator';
             menu.appendChild(separator3);
             
-            // 定位到此行
+            // 定位到此行（当前视图）
             const jumpItem = document.createElement('div');
             jumpItem.className = 'context-menu-item';
             jumpItem.innerHTML = '<span>🎯</span><span>定位到第 ' + lineNumber + ' 行</span>';
@@ -2792,6 +2835,19 @@
                 closeContextMenu();
             };
             menu.appendChild(jumpItem);
+            
+            // 如果是搜索/过滤模式，添加"跳转到完整日志"选项
+            if (currentSearchKeyword || isFiltering) {
+                const jumpToFullLogItem = document.createElement('div');
+                jumpToFullLogItem.className = 'context-menu-item';
+                jumpToFullLogItem.innerHTML = '<span>🔗</span><span>跳转到完整日志</span>';
+                jumpToFullLogItem.onclick = (e) => {
+                    e.stopPropagation();
+                    jumpToLineInFullLog(lineNumber);
+                    closeContextMenu();
+                };
+                menu.appendChild(jumpToFullLogItem);
+            }
             
             // 设置位置
             menu.style.left = event.pageX + 'px';
@@ -3396,14 +3452,37 @@
                     }
                 }
                 
-                // 如果在已计算的页面中没找到，尝试估算页码
-                console.log('⚠️ 已计算页面中未找到，使用估算方法');
-                const estimatedPage = Math.ceil(lineNumber / pageSize);
-                currentPage = Math.max(1, Math.min(estimatedPage, totalPages));
+                // 如果在已计算的页面中没找到，尝试在数组中查找索引位置
+                console.log('⚠️ 已计算页面中未找到，在数组中查找');
+                const targetIndex = allLines.findIndex(line => line.lineNumber === lineNumber);
+                
+                if (targetIndex !== -1) {
+                    // 根据索引位置估算页码（折叠模式下可能不准确，但比直接用行号好）
+                    const estimatedPage = Math.ceil((targetIndex + 1) / pageSize);
+                    currentPage = Math.max(1, Math.min(estimatedPage, totalPages));
+                    console.log(`📍 目标行索引: ${targetIndex}，估算页码: ${estimatedPage}`);
+                } else {
+                    // 完全找不到，使用行号估算（最后的备用方案）
+                    const estimatedPage = Math.ceil(lineNumber / pageSize);
+                    currentPage = Math.max(1, Math.min(estimatedPage, totalPages));
+                    console.log(`⚠️ 完全找不到目标行，使用行号估算: ${estimatedPage}`);
+                }
             } else {
                 // 非折叠模式或未计算页面，使用标准计算
-                const targetPage = Math.ceil(lineNumber / pageSize);
-                currentPage = targetPage;
+                // 🔧 修复：在 allLines 数组中查找目标行号的索引位置
+                const targetIndex = allLines.findIndex(line => line.lineNumber === lineNumber);
+                
+                if (targetIndex !== -1) {
+                    // 根据索引位置计算页码
+                    const targetPage = Math.ceil((targetIndex + 1) / pageSize);
+                    currentPage = targetPage;
+                    console.log(`✅ 找到目标行 ${lineNumber}，索引位置: ${targetIndex}，跳转到第 ${targetPage} 页`);
+                } else {
+                    // 未找到目标行，使用原有的估算方法（适用于完整日志）
+                    const targetPage = Math.ceil(lineNumber / pageSize);
+                    currentPage = targetPage;
+                    console.log(`⚠️ 未找到目标行 ${lineNumber}，使用估算跳转到第 ${targetPage} 页`);
+                }
             }
             
             updatePagination();
@@ -3622,9 +3701,9 @@
             // 如果已加载全部数据，不再加载
             if (allDataLoaded) return;
             
-            // 如果处于过滤模式，不自动加载更多数据
-            if (isFiltering) {
-                console.log('🚫 处于过滤模式，不加载更多数据');
+            // 如果处于过滤模式或搜索模式，不自动加载更多数据
+            if (isFiltering || currentSearchKeyword) {
+                console.log('🚫 处于过滤/搜索模式，不加载更多数据');
                 return;
             }
             

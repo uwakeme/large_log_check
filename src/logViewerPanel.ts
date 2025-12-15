@@ -104,6 +104,11 @@ export class LogViewerPanel {
         this.loadFile(fileUri);
     }
 
+    // 公共方法：刷新当前文件
+    public async refresh() {
+        await this.loadFile(this._fileUri);
+    }
+
     private async loadFile(fileUri: vscode.Uri) {
         this._fileUri = fileUri;
         this._logProcessor = new LogProcessor(fileUri.fsPath);

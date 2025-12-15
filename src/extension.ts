@@ -113,7 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
     let refreshCommand = vscode.commands.registerCommand('big-log-viewer.refresh', async () => {
         const panel = LogViewerPanel.currentPanel;
         if (panel) {
-            panel.loadFile(panel['_fileUri']);
+            await panel.refresh();
         } else {
             vscode.window.showWarningMessage('请先打开一个日志文件');
         }
