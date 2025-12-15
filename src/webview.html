@@ -3117,6 +3117,9 @@
                 }
             });
             
+            // 绘制当前浏览位置指示器
+            drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth);
+            
             // 添加点击事件
             canvas.onclick = (e) => {
                 const rect = canvas.getBoundingClientRect();
@@ -3163,6 +3166,108 @@
                 minute: '2-digit',
                 second: '2-digit'
             });
+        }
+        
+        // 绘制当前浏览位置指示器
+        function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
+            if (!timelineData || buckets.length === 0) return;
+            
+            // 获取当前可见区域中间的行号
+            const visibleLines = getVisibleLines();
+            if (visibleLines.length === 0) return;
+            
+            // 取可见区域中间的日志行
+            const middleIndex = Math.floor(visibleLines.length / 2);
+            const currentLine = visibleLines[middleIndex];
+            if (!currentLine || !currentLine.lineNumber) return;
+            
+            // 在所有bucket中查找这条日志对应的时间戳
+            let currentTime = null;
+            
+            for (let i = 0; i < buckets.length; i++) {
+                const bucket = buckets[i];
+                if (bucket.lines && bucket.lines.length > 0) {
+                    const foundLine = bucket.lines.find(l => l.lineNumber === currentLine.lineNumber);
+                    if (foundLine && foundLine.timestamp) {
+                        currentTime = new Date(foundLine.timestamp).getTime();
+                        break;
+                    }
+                }
+            }
+            
+            // 如果没找到精确匹配，根据行号比例估算位置
+            if (!currentTime) {
+                // 计算当前行在整个文件中的相对位置
+                const totalLines = totalLinesInFile || allLines.length;
+                if (totalLines === 0) return;
+                
+                const relativePosition = currentLine.lineNumber / totalLines;
+                const timeRange = timelineData.maxTime - timelineData.minTime;
+                currentTime = timelineData.minTime + relativePosition * timeRange;
+            }
+            
+            // 计算指示器在时间线上的位置
+            const timeRange = timelineData.maxTime - timelineData.minTime;
+            if (timeRange <= 0) return;
+            
+            const relativePosition = (currentTime - timelineData.minTime) / timeRange;
+            const indicatorX = Math.max(0, Math.min(canvas.width, relativePosition * canvas.width));
+            
+            // 绘制指示器（一条垂直的红线）
+            ctx.save();
+            ctx.strokeStyle = '#ff3333';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            
+            // 绘制垂直线
+            ctx.beginPath();
+            ctx.moveTo(indicatorX, 0);
+            ctx.lineTo(indicatorX, canvas.height - 20);
+            ctx.stroke();
+            
+            // 绘制顶部三角形标记
+            ctx.fillStyle = '#ff3333';
+            ctx.beginPath();
+            ctx.moveTo(indicatorX, 0);
+            ctx.lineTo(indicatorX - 5, 8);
+            ctx.lineTo(indicatorX + 5, 8);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 绘制底部三角形标记
+            ctx.beginPath();
+            ctx.moveTo(indicatorX, canvas.height - 20);
+            ctx.lineTo(indicatorX - 5, canvas.height - 28);
+            ctx.lineTo(indicatorX + 5, canvas.height - 28);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        // 获取当前可见的日志行
+        function getVisibleLines() {
+            const container = document.getElementById('logContainer');
+            const lines = container.querySelectorAll('.log-line');
+            const visibleLines = [];
+            
+            const containerRect = container.getBoundingClientRect();
+            
+            lines.forEach(lineEl => {
+                const rect = lineEl.getBoundingClientRect();
+                // 检查该行是否在可视区域内
+                if (rect.bottom >= containerRect.top && rect.top <= containerRect.bottom) {
+                    const lineNumber = parseInt(lineEl.dataset.lineNumber);
+                    if (lineNumber) {
+                        const line = allLines.find(l => l.lineNumber === lineNumber);
+                        if (line) {
+                            visibleLines.push(line);
+                        }
+                    }
+                }
+            });
+            
+            return visibleLines;
         }
         
         // 按类名筛选
@@ -4935,6 +5040,25 @@
                 goToLastPage();
             }
         });
+        
+        // 监听日志容器的滚动事件，更新时间线指示器
+        let scrollUpdateTimer = null;
+        const logContainer = document.getElementById('logContainer');
+        if (logContainer) {
+            logContainer.addEventListener('scroll', function() {
+                // 使用防抖，避免频繁重绘
+                if (scrollUpdateTimer) {
+                    clearTimeout(scrollUpdateTimer);
+                }
+                scrollUpdateTimer = setTimeout(() => {
+                    // 只有在时间线面板可见时才更新
+                    const timelinePanel = document.getElementById('timelinePanel');
+                    if (timelinePanel && timelinePanel.style.display !== 'none') {
+                        drawTimeline();
+                    }
+                }, 100); // 100ms 防抖
+            });
+        }
     </script>
 </body>
 </html>
