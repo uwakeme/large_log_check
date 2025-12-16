@@ -2594,7 +2594,6 @@
                 textarea.select();
             }, 100);
             
-            console.log('✅ 注释输入弹窗已显示');
         }
         
         function closeCommentInputModal() {
@@ -2604,7 +2603,6 @@
         
         function confirmCommentInput() {
             if (currentCommentLineNumber === null) {
-                console.log('⚠️ 没有当前编辑的行号');
                 return;
             }
             
@@ -2612,16 +2610,12 @@
             const commentText = document.getElementById('commentInputText').value;
             const existingComment = comments.get(lineNumber) || '';
             
-            console.log('📝 确认注释输入，行号:', lineNumber, '，内容:', commentText);
-            
             if (commentText.trim()) {
                 comments.set(lineNumber, commentText.trim());
-                console.log('✅ 添加注释:', lineNumber, '-', commentText.trim());
                 showToast(`✅ 注释已${existingComment ? '更新' : '添加'}`);
             } else if (existingComment) {
                 // 如果输入空白且原来有注释，则删除
                 comments.delete(lineNumber);
-                console.log('❌ 删除注释:', lineNumber);
                 showToast('❌ 注释已删除');
             }
             
@@ -2636,7 +2630,6 @@
         function deleteComment(lineNumber) {
             if (confirm('确定要删除这条注释吗？')) {
                 comments.delete(lineNumber);
-                console.log('❌ 删除注释:', lineNumber);
                 showToast('❌ 注释已删除');
                 renderLines();
             }
@@ -2724,9 +2717,7 @@
         // ========== 复制功能 ==========
         let currentContextMenu = null;
         
-        function showContextMenu(event, content, lineNumber) {
-            console.log('🖱️ showContextMenu 被调用，行号:', lineNumber);
-            
+        function showContextMenu(event, content, lineNumber) {            
             // 移除旧的菜单
             if (currentContextMenu) {
                 document.body.removeChild(currentContextMenu);
@@ -2795,13 +2786,11 @@
                 ? '<span>✏️</span><span>编辑注释</span>'
                 : '<span>📝</span><span>添加注释</span>';
             commentItem.onclick = (e) => {
-                console.log('🖱️ 点击了添加注释菜单项，行号:', lineNumber);
                 e.stopPropagation();
                 e.preventDefault();
                 closeContextMenu();
                 // 延迟执行，确保菜单先关闭
                 setTimeout(() => {
-                    console.log('⏰ 准备调用 addOrEditComment，行号:', lineNumber);
                     addOrEditComment(lineNumber);
                 }, 100);
             };
@@ -2922,9 +2911,7 @@
             if (document.getElementById('advSearchInfo').checked) levels.push('INFO');
             if (document.getElementById('advSearchDebug').checked) levels.push('DEBUG');
             if (document.getElementById('advSearchOther').checked) levels.push('OTHER');
-            
-            console.log('🔍 高级搜索:', { keyword, startTime, endTime, levels });
-            
+                        
             // 在已加载的数据中进行过滤
             let results = [...allLines];
             
@@ -2964,7 +2951,6 @@
                 });
             }
             
-            console.log('✅ 搜索结果:', results.length, '条');
             
             allLines = results;
             currentPage = 1;
@@ -3170,16 +3156,29 @@
         
         // 绘制当前浏览位置指示器
         function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
-            if (!timelineData || buckets.length === 0) return;
+            if (!timelineData || buckets.length === 0) {
+                console.log('⚠️ 指示器：没有时间线数据');
+                return;
+            }
             
             // 获取当前可见区域中间的行号
             const visibleLines = getVisibleLines();
-            if (visibleLines.length === 0) return;
+            console.log('👀 可见行数量:', visibleLines.length);
+            
+            if (visibleLines.length === 0) {
+                console.log('⚠️ 指示器：没有可见行');
+                return;
+            }
             
             // 取可见区域中间的日志行
             const middleIndex = Math.floor(visibleLines.length / 2);
             const currentLine = visibleLines[middleIndex];
-            if (!currentLine || !currentLine.lineNumber) return;
+            console.log('📍 当前中间行:', currentLine);
+            
+            if (!currentLine || !currentLine.lineNumber) {
+                console.log('⚠️ 指示器：当前行无效');
+                return;
+            }
             
             // 在所有bucket中查找这条日志对应的时间戳
             let currentTime = null;
@@ -3190,6 +3189,7 @@
                     const foundLine = bucket.lines.find(l => l.lineNumber === currentLine.lineNumber);
                     if (foundLine && foundLine.timestamp) {
                         currentTime = new Date(foundLine.timestamp).getTime();
+                        console.log('✅ 找到精确时间戳:', new Date(currentTime).toLocaleString());
                         break;
                     }
                 }
@@ -3199,24 +3199,32 @@
             if (!currentTime) {
                 // 计算当前行在整个文件中的相对位置
                 const totalLines = totalLinesInFile || allLines.length;
-                if (totalLines === 0) return;
+                if (totalLines === 0) {
+                    console.log('⚠️ 指示器：总行数为0');
+                    return;
+                }
                 
                 const relativePosition = currentLine.lineNumber / totalLines;
                 const timeRange = timelineData.maxTime - timelineData.minTime;
                 currentTime = timelineData.minTime + relativePosition * timeRange;
+                console.log('📊 估算时间戳（行号比例）:', new Date(currentTime).toLocaleString(), '比例:', relativePosition);
             }
             
             // 计算指示器在时间线上的位置
             const timeRange = timelineData.maxTime - timelineData.minTime;
-            if (timeRange <= 0) return;
+            if (timeRange <= 0) {
+                console.log('⚠️ 指示器：时间范围无效');
+                return;
+            }
             
             const relativePosition = (currentTime - timelineData.minTime) / timeRange;
             const indicatorX = Math.max(0, Math.min(canvas.width, relativePosition * canvas.width));
+            console.log('🎯 指示器X位置:', indicatorX, '画布宽度:', canvas.width, '相对位置:', relativePosition);
             
             // 绘制指示器（一条垂直的红线）
             ctx.save();
             ctx.strokeStyle = '#ff3333';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 3;
             ctx.setLineDash([]);
             
             // 绘制垂直线
@@ -3229,28 +3237,35 @@
             ctx.fillStyle = '#ff3333';
             ctx.beginPath();
             ctx.moveTo(indicatorX, 0);
-            ctx.lineTo(indicatorX - 5, 8);
-            ctx.lineTo(indicatorX + 5, 8);
+            ctx.lineTo(indicatorX - 6, 10);
+            ctx.lineTo(indicatorX + 6, 10);
             ctx.closePath();
             ctx.fill();
             
             // 绘制底部三角形标记
             ctx.beginPath();
             ctx.moveTo(indicatorX, canvas.height - 20);
-            ctx.lineTo(indicatorX - 5, canvas.height - 28);
-            ctx.lineTo(indicatorX + 5, canvas.height - 28);
+            ctx.lineTo(indicatorX - 6, canvas.height - 30);
+            ctx.lineTo(indicatorX + 6, canvas.height - 30);
             ctx.closePath();
             ctx.fill();
             
             ctx.restore();
+            console.log('✅ 指示器绘制完成');
         }
         
         // 获取当前可见的日志行
         function getVisibleLines() {
             const container = document.getElementById('logContainer');
-            const lines = container.querySelectorAll('.log-line');
-            const visibleLines = [];
+            if (!container) {
+                console.log('⚠️ getVisibleLines: 找不到 logContainer');
+                return [];
+            }
             
+            const lines = container.querySelectorAll('.log-line');
+            console.log('📋 总日志行数:', lines.length);
+            
+            const visibleLines = [];
             const containerRect = container.getBoundingClientRect();
             
             lines.forEach(lineEl => {
@@ -3267,12 +3282,12 @@
                 }
             });
             
+            console.log('👀 可见行:', visibleLines.length, '条');
             return visibleLines;
         }
         
         // 按类名筛选
         function filterByClassName(className) {
-            console.log('🔍 按类名筛选:', className);
             closeStatsModal();
             
             // 保存筛选前的位置
@@ -3293,7 +3308,6 @@
         
         // 按方法名筛选
         function filterByMethodName(methodName) {
-            console.log('🔧 按方法名筛选:', methodName);
             closeStatsModal();
             
             // 保存筛选前的位置
@@ -3314,7 +3328,6 @@
         
         // 按线程名筛选
         function filterByThreadName(threadName) {
-            console.log('🧵 按线程名筛选:', threadName);
             closeStatsModal();
             
             // 保存筛选前的位置
@@ -3345,7 +3358,6 @@
                 }
             }
             
-            console.log('📌 保存筛选前位置 - 页码:', savedPageBeforeFilter, ', 行号:', savedFirstLineBeforeFilter);
         }
         
         // 显示筛选状态
@@ -3548,6 +3560,7 @@
                         currentPage = pageNum;
                         updatePagination();
                         renderLines();
+                        drawTimeline(); // 重绘时间线以更新高亮位置
                         
                         // 等待渲染完成后高亮目标行
                         setTimeout(() => {
@@ -3592,6 +3605,7 @@
             
             updatePagination();
             renderLines();
+            drawTimeline(); // 重绘时间线以更新高亮位置
             
             // 等待渲染完成后高亮目标行
             setTimeout(() => {
@@ -3881,6 +3895,7 @@
             currentPage = 1;
             updatePagination();
             renderLines();
+            drawTimeline(); // 重绘时间线以更新高亮位置
         }
         
         function goToPrevPage() {
@@ -3888,6 +3903,7 @@
                 currentPage--;
                 updatePagination();
                 renderLines();
+                drawTimeline(); // 重绘时间线以更新高亮位置
                 // 翻页后自动滚动到顶部
                 requestAnimationFrame(() => {
                     const logContainer = document.getElementById('logContainer');
@@ -3903,6 +3919,7 @@
                 currentPage++;
                 updatePagination();
                 renderLines();
+                drawTimeline(); // 重绘时间线以更新高亮位置
                 // 翻页后自动滚动到顶部
                 requestAnimationFrame(() => {
                     const logContainer = document.getElementById('logContainer');
@@ -3917,6 +3934,7 @@
             currentPage = totalPages;
             updatePagination();
             renderLines();
+            drawTimeline(); // 重绘时间线以更新高亮位置
             // 翻页后自动滚动到顶部
             requestAnimationFrame(() => {
                 const logContainer = document.getElementById('logContainer');
@@ -3933,7 +3951,6 @@
                 
                 // 在折叠模式下，如果跳转到未计算过的页面，需要先计算中间的所有页面
                 if (isCollapseMode && !pageRanges.has(page)) {
-                    console.log(`📖 跳转到第 ${page} 页，但该页尚未计算，需要从第 1 页开始顺序计算`);
                     
                     // 从第一页开始顺序计算到目标页
                     pageRanges.clear();
@@ -3942,20 +3959,16 @@
                         // 不显示，只计算范围
                         calculatePageRange(p);
                     }
-                    
-                    console.log(`✅ 已计算完成，第 ${page} 页范围:`, pageRanges.get(page));
                 }
                 
                 updatePagination();
                 renderLines();
+                drawTimeline(); // 重绘时间线以更新高亮位置
                 // 翻页后自动滚动到顶部
-                console.log('📍 翻页到第', currentPage, '页，准备滚动到顶部');
                 requestAnimationFrame(() => {
                     const logContainer = document.getElementById('logContainer');
                     if (logContainer) {
-                        console.log('📍 当前滚动位置:', logContainer.scrollTop);
                         logContainer.scrollTop = 0;
-                        console.log('📍 滚动后位置:', logContainer.scrollTop);
                     } else {
                         console.log('⚠️ 找不到 logContainer 元素');
                     }
@@ -4156,7 +4169,89 @@
                 ctx.fillRect(x, y, Math.max(barWidth - 1, 1), barHeight);
             }
             
+            // 绘制当前浏览位置指示器
+            drawTimelineIndicator(ctx, width, height);
+            
             console.log('✅ 时间线绘制完成');
+        }
+        
+        // 获取当前浏览位置对应的时间块索引
+        function getCurrentBucketIndex() {
+            if (!timelineData || !timelineData.startTime || !timelineData.timeRange) {
+                console.log('⚠️ getCurrentBucketIndex: timelineData 不完整');
+                return -1;
+            }
+            
+            // 计算当前页的起始索引
+            let startIndex, endIndex;
+            if (isCollapseMode && pageRanges.has(currentPage)) {
+                const range = pageRanges.get(currentPage);
+                startIndex = range.start;
+                endIndex = range.end;
+            } else {
+                startIndex = (currentPage - 1) * pageSize;
+                endIndex = Math.min(startIndex + pageSize, allLines.length);
+            }
+            
+            // 从当前页的日志中找到第一个有时间戳的行
+            let currentTime = null;
+            for (let i = startIndex; i < endIndex && i < allLines.length; i++) {
+                if (allLines[i] && allLines[i].timestamp) {
+                    currentTime = new Date(allLines[i].timestamp);
+                    break;
+                }
+            }
+            
+            if (!currentTime) {
+                console.log('⚠️ getCurrentBucketIndex: 当前页没有时间戳');
+                return -1;
+            }
+            
+            // 计算当前时间在整个时间轴上的相对位置
+            const timeOffset = currentTime - timelineData.startTime;
+            const timeProgress = timeOffset / timelineData.timeRange;
+            
+            // 计算对应的bucket索引
+            const bucketIndex = Math.floor(timeProgress * timelineData.bucketCount);
+            
+            console.log('🎯 当前位置 - 页码:', currentPage, '索引范围:', startIndex, '-', endIndex, '时间:', currentTime.toLocaleString(), '时间进度:', (timeProgress * 100).toFixed(1) + '%', '对应bucket:', bucketIndex);
+            
+            // 限制在有效范围内
+            return Math.max(0, Math.min(timelineData.bucketCount - 1, bucketIndex));
+        }
+        
+        // 绘制时间线上的当前位置指示器（高亮当前时间块）
+        function drawTimelineIndicator(ctx, width, height) {
+            const currentBucket = getCurrentBucketIndex();
+            if (currentBucket === -1) {
+                return;
+            }
+            
+            console.log('🎯 高亮当前时间块:', currentBucket);
+            
+            // 计算当前bucket的位置和宽度
+            const barWidth = width / timelineData.bucketCount;
+            const x = currentBucket * barWidth;
+            
+            // 绘制半透明的白色高亮覆盖层
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(x, 0, barWidth, height);
+            
+            // 绘制边框强调
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x + 1, 1, barWidth - 2, height - 2);
+            
+            ctx.restore();
+        }
+        
+        // 获取当前页面显示的日志行
+        function getDisplayedLines() {
+            // 从当前页面的 allLines 中获取有时间戳的行
+            const linesWithTime = allLines.filter(line => line && line.timestamp);
+            console.log('📋 当前显示的日志行（有时间戳）:', linesWithTime.length);
+            return linesWithTime;
         }
         
         // 点击时间线跳转
@@ -4488,7 +4583,6 @@
             
             // 计算渲染后的预估行数
             const estimatedLines = estimateJSONLines(obj, depth);
-            console.log(`📏 JSON层级 depth=${depth}, 属性数=${len}, 预估行数=${estimatedLines}`);
             
             // 根据行数和深度决定是否折叠
             let defaultCollapsed = false;
