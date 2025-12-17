@@ -69,6 +69,9 @@ export class LogViewerPanel {
                     case 'getStatistics':
                         await this.getStatistics();
                         break;
+                    case 'sampleTimeline':
+                        await this.sampleTimeline(message.sampleCount);
+                        break;
                     case 'regexSearch':
                         await this.regexSearch(message.pattern, message.flags, message.reverse);
                         break;
@@ -122,14 +125,16 @@ export class LogViewerPanel {
             
             // 根据文件大小决定加载策略
             let initialLines;
-            if (totalLines <= 50000) {
-                // 小于5万行，一次性加载所有数据
-                vscode.window.showInformationMessage(`正在加载 ${totalLines} 行日志，请稍候...`);
+            let initialLoadCount = 2000; // 初始加载行数
+            
+            if (totalLines <= 10000) {
+                // 小于1万行，一次性加载所有数据
                 initialLines = await this._logProcessor.readLines(0, totalLines);
+                vscode.window.showInformationMessage(`成功加载日志文件: ${path.basename(fileUri.fsPath)} (${fileSizeMB}MB, ${totalLines}行)`);
             } else {
-                // 大于5万行，先加载前10000行
-                vscode.window.showInformationMessage(`文件较大，先加载前 10000 行...`);
-                initialLines = await this._logProcessor.readLines(0, 10000);
+                // 大于1万行，先快速加载前2000行
+                initialLines = await this._logProcessor.readLines(0, initialLoadCount);
+                vscode.window.showInformationMessage(`文件较大 (${totalLines}行)，已快速加载前 ${initialLoadCount} 行，后续数据将在后台加载...`);
             }
             
             this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
@@ -142,11 +147,12 @@ export class LogViewerPanel {
                     fileSize: fileSizeMB,
                     totalLines: totalLines,
                     lines: initialLines,
-                    allLoaded: totalLines <= 50000
+                    allLoaded: totalLines <= 10000
                 }
             });
             
-            vscode.window.showInformationMessage(`成功加载日志文件: ${path.basename(fileUri.fsPath)} (${fileSizeMB}MB, ${totalLines}行)`);
+            // 立即请求时间线采样（不等待后续数据加载）
+            this.sampleTimeline(200);
         } catch (error) {
             vscode.window.showErrorMessage(`加载文件失败: ${error}`);
         }
@@ -449,6 +455,18 @@ export class LogViewerPanel {
             });
         } catch (error) {
             vscode.window.showErrorMessage(`统计失败: ${error}`);
+        }
+    }
+
+    private async sampleTimeline(sampleCount: number = 100) {
+        try {
+            const timelineData = await this._logProcessor.sampleTimeline(sampleCount);
+            this._panel.webview.postMessage({
+                command: 'timelineData',
+                data: timelineData
+            });
+        } catch (error) {
+            vscode.window.showErrorMessage(`时间线采样失败: ${error}`);
         }
     }
 

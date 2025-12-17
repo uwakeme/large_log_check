@@ -965,7 +965,7 @@
             <span style="font-size: 14px; font-weight: 600;">行</span>
         </span>
         <span class="page-info">
-            共 <span id="totalLinesInPage">0</span> 行
+            <span id="lineRangeInfo" style="display: none;">第 <span id="lineRangeStart">0</span> - <span id="lineRangeEnd">0</span> 行 / </span>共 <span id="totalLinesInPage">0</span> 行
         </span>
     </div>
     
@@ -1287,12 +1287,14 @@
         let bookmarks = new Set(); // 书签集合，存储行号
         let comments = new Map(); // 注释集合，key为行号，value为注释内容
         let timelineData = null; // 时间线数据
+        let fileStats = null; // 完整的文件统计信息（包含时间范围）
         let isTimelineExpanded = true; // 时间线是否展开
         let isCollapseMode = false; // 是否开启折叠模式
         let expandedGroups = new Set(); // 已展开的折叠组
         let pageRanges = new Map(); // 记录每页实际加载的行范围 Map<pageNumber, {start, end}>
         let isCalculatingPages = false; // 是否正在计算页面范围
         let calculationProgress = 0; // 计算进度（0-100）
+        let currentCalculationId = 0; // 当前计算任务ID，用于取消旧任务
         
         // 筛选状态管理
         let currentFilterType = null; // 当前筛选类型: 'thread', 'class', 'method', null
@@ -1327,10 +1329,6 @@
                 pageRanges.clear();
             }
             
-            // 清空计算状态
-            isCalculatingPages = false;
-            calculationProgress = 0;
-            
             // 更新分页器和渲染
             updatePagination();
             renderLines();
@@ -1338,7 +1336,7 @@
             // 如果开启了折叠模式且有数据，触发异步计算
             if (triggerAsyncCalc && isCollapseMode && allLines.length > 0) {
                 console.log('📊 触发异步页面计算...');
-                calculateAllPagesAsync();
+                calculateAllPagesAsync(clearPageRanges);
             }
         }
         
@@ -1350,6 +1348,8 @@
         // 数据加载状态
         let totalLinesInFile = 0;
         let allDataLoaded = false;
+        let isBackgroundLoading = false; // 是否正在后台加载
+        let backgroundLoadChunkSize = 5000; // 每次后台加载的行数
         
         window.addEventListener('message', event => {
             const message = event.data;
@@ -1369,6 +1369,9 @@
                     break;
                 case 'statisticsResults':
                     handleStatisticsResults(message.data);
+                    break;
+                case 'timelineData':
+                    handleTimelineData(message.data);
                     break;
                 case 'jumpToTimeResult':
                     handleJumpToTimeResult(message.data);
@@ -1409,12 +1412,15 @@
             // 统一处理数据变更
             handleDataChange();
             
-            // 生成时间线
-            generateTimeline();
+            // 异步请求采样时间线数据（快速，不阻塞UI）
+            vscode.postMessage({
+                command: 'sampleTimeline',
+                sampleCount: 200  // 采样200个点
+            });
             
-            // 如果数据未全部加载，显示提示
+            // 如果数据未全部加载，启动后台加载
             if (!allDataLoaded && allLines.length < totalLinesInFile) {
-                showLoadMoreHint();
+                startBackgroundLoading();
             }
         }
         
@@ -1426,7 +1432,11 @@
             // 检查是否已加载全部数据
             if (allLines.length >= totalLinesInFile) {
                 allDataLoaded = true;
+                isBackgroundLoading = false;
             }
+            
+            // 更新加载状态显示
+            updateLoadingStatus();
             
             // 加载更多数据时不重置页码，但需要重新计算
             handleDataChange({
@@ -1485,7 +1495,23 @@
         }
         
         function handleStatisticsResults(data) {
+            // 保存统计信息
+            fileStats = data;
+            console.log('📊 保存文件统计信息:', fileStats);
+            
             showStatsModal(data);
+        }
+        
+        function handleTimelineData(data) {
+            console.log('📈 收到时间线采样数据:', data);
+            
+            if (!data || !data.startTime || !data.endTime || !data.samples || data.samples.length === 0) {
+                console.log('⚠️ 时间线数据不完整，隐藏时间线');
+                document.getElementById('timelinePanel').style.display = 'none';
+                return;
+            }
+            
+            generateTimelineFromSamples(data);
         }
         
         function handleJumpToLineInFullLogResult(data) {
@@ -1583,10 +1609,21 @@
                         const needed = targetDisplayLines - displayCount;
                         const ratio = displayCount > 0 ? (tempEndIndex - startIndex) / displayCount : 1;
                         
-                        // 计算增量，但不要超过剩余需求的5倏
-                        let increment = Math.ceil(needed * ratio * 0.5); // 只增加50%，避免过度
-                        increment = Math.max(increment, 50); // 至少增加50条
-                        increment = Math.min(increment, pageSize * 2); // 最多增加2倍pageSize
+                        // 根据重复率动态调整增量
+                        let increment;
+                        if (ratio > 50) {
+                            // 重复率极高，大幅增加
+                            increment = Math.ceil(needed * ratio);
+                        } else if (ratio > 10) {
+                            // 重复率高，显著增加
+                            increment = Math.ceil(needed * ratio * 0.8);
+                        } else {
+                            // 重复率较低，适度增加
+                            increment = Math.ceil(needed * ratio * 0.5);
+                        }
+                        
+                        increment = Math.max(increment, 100); // 至少增加100条
+                        increment = Math.min(increment, pageSize * 10); // 最多增加10倍pageSize
                         
                         tempEndIndex = Math.min(tempEndIndex + increment, allLines.length);
                         attempts++;
@@ -1672,12 +1709,28 @@
                     const collapsed = collapseRepeatedLines(testLines, startIndex);
                     displayCount = collapsed.length;
                     
+                    console.log(`🔄 折叠尝试 ${attempts + 1}: 加载 ${tempEndIndex - startIndex} 行 -> 折叠后 ${displayCount} 条`);
+                    
                     if (displayCount < targetDisplayLines) {
                         const needed = targetDisplayLines - displayCount;
                         const ratio = displayCount > 0 ? (tempEndIndex - startIndex) / displayCount : 1;
-                        let increment = Math.ceil(needed * ratio * 0.5);
-                        increment = Math.max(increment, 50);
-                        increment = Math.min(increment, pageSize * 2);
+                        
+                        // 根据重复率动态调整增量
+                        // 如果折叠率很高（ratio大），说明重复很多，需要加载更多行
+                        let increment;
+                        if (ratio > 50) {
+                            // 重复率极高（平均50行折叠成1条），大幅增加
+                            increment = Math.ceil(needed * ratio);
+                        } else if (ratio > 10) {
+                            // 重复率高（平均10行折叠成1条），显著增加
+                            increment = Math.ceil(needed * ratio * 0.8);
+                        } else {
+                            // 重复率较低，适度增加
+                            increment = Math.ceil(needed * ratio * 0.5);
+                        }
+                        
+                        increment = Math.max(increment, 100);  // 最少增加100行
+                        increment = Math.min(increment, pageSize * 10);  // 最多一次增加1000行
                         tempEndIndex = Math.min(tempEndIndex + increment, allLines.length);
                         attempts++;
                     } else {
@@ -1693,26 +1746,53 @@
         }
         
         // 异步计算所有页面范围
-        async function calculateAllPagesAsync() {
+        async function calculateAllPagesAsync(shouldClearRanges = true) {
             if (allLines.length === 0 || !isCollapseMode) {
                 return;
             }
             
+            // 生成新的计算任务ID，取消旧任务
+            currentCalculationId++;
+            const myCalculationId = currentCalculationId;
+            console.log(`📊 开始新的计算任务 #${myCalculationId}，取消旧任务... (清空范围: ${shouldClearRanges})`);
+            
             isCalculatingPages = true;
             calculationProgress = 0;
-            pageRanges.clear();
             
-            console.log('📊 开始异步计算所有页面范围...');
+            // 只在需要时清空页面范围
+            if (shouldClearRanges) {
+                pageRanges.clear();
+            }
+            
             updatePagination(); // 更新UI显示"计算中..."
             
+            // 如果不清空范围，从已计算的最后一页继续
             let pageNum = 1;
             let lastEndIndex = 0;
             
+            if (!shouldClearRanges && pageRanges.size > 0) {
+                // 找到最后已计算的页面
+                const lastPage = Math.max(...Array.from(pageRanges.keys()));
+                const lastRange = pageRanges.get(lastPage);
+                if (lastRange) {
+                    pageNum = lastPage + 1;
+                    lastEndIndex = lastRange.end;
+                    console.log(`📊 任务 #${myCalculationId} 从第 ${pageNum} 页继续计算 (上次结束位置: ${lastEndIndex})`);
+                }
+            }
+            
             // 使用分批处理，每次计算5页，然后让出CPU时间
-            while (lastEndIndex < allLines.length && isCollapseMode) { // 添加检查：如果取消折叠，停止计算
+            while (lastEndIndex < allLines.length && isCollapseMode) {
+                // 检查是否被新任务取代
+                if (myCalculationId !== currentCalculationId) {
+                    console.log(`⚠️ 计算任务 #${myCalculationId} 被新任务取代，停止计算`);
+                    return;
+                }
+                
                 // 批量计算5页
                 for (let i = 0; i < 5 && lastEndIndex < allLines.length; i++) {
-                    if (!isCollapseMode) break; // 再次检查
+                    // 检查折叠模式和任务ID
+                    if (!isCollapseMode || myCalculationId !== currentCalculationId) break;
                     
                     calculatePageRange(pageNum);
                     const range = pageRanges.get(pageNum);
@@ -1724,28 +1804,37 @@
                     }
                 }
                 
-                // 如果已经取消折叠模式，退出计算
+                // 如果已经取消折叠模式或被新任务取代，退出计算
                 if (!isCollapseMode) {
-                    console.log('⚠️ 折叠模式已取消，停止计算');
+                    console.log(`⚠️ 计算任务 #${myCalculationId} - 折叠模式已取消，停止计算`);
                     isCalculatingPages = false;
                     calculationProgress = 0;
                     return;
                 }
                 
+                if (myCalculationId !== currentCalculationId) {
+                    console.log(`⚠️ 计算任务 #${myCalculationId} 被取代，停止计算`);
+                    return;
+                }
+                
                 // 计算进度
                 calculationProgress = Math.min(99, Math.floor((lastEndIndex / allLines.length) * 100));
-                console.log(`📊 计算进度: ${calculationProgress}% (已计算 ${pageNum - 1} 页，处理到第 ${lastEndIndex} 行)`);
+                console.log(`📊 计算任务 #${myCalculationId} 进度: ${calculationProgress}% (已计算 ${pageNum - 1} 页，处理到第 ${lastEndIndex} 行)`);
                 updatePagination(); // 更新进度显示
                 
                 // 让出CPU时间，保持页面响应
                 await new Promise(resolve => setTimeout(resolve, 10));
             }
             
-            calculationProgress = 100;
-            isCalculatingPages = false;
-            
-            console.log(`✅ 所有页面计算完成！共 ${pageNum - 1} 页`);
-            updatePagination(); // 最终更新显示精确值
+            // 最后再次确认是否仍是当前任务
+            if (myCalculationId === currentCalculationId) {
+                calculationProgress = 100;
+                isCalculatingPages = false;
+                console.log(`✅ 计算任务 #${myCalculationId} 完成！共 ${pageNum - 1} 页`);
+                updatePagination(); // 最终更新显示精确值
+            } else {
+                console.log(`⚠️ 计算任务 #${myCalculationId} 完成时已被取代`);
+            }
         }
         
         // 提取日志的核心内容（去除时间戳）
@@ -3646,31 +3735,110 @@
             if (data.success) {
                 console.log('✅ 找到目标时间的日志，行号:', data.targetLineNumber);
                 
+                // 如果正在筛选或搜索模式，需要先退出到完整日志
+                if (isFiltering || currentSearchKeyword) {
+                    console.log('🔄 退出筛选/搜索模式，重新加载完整日志...');
+                    isFiltering = false;
+                    currentSearchKeyword = '';
+                    currentFilterType = null;
+                    currentFilterValue = null;
+                    hideFilterStatus();
+                    document.getElementById('searchInput').value = '';
+                    
+                    // 请求重新加载完整日志并跳转
+                    vscode.postMessage({
+                        command: 'jumpToLineInFullLog',
+                        lineNumber: data.targetLineNumber
+                    });
+                    return;
+                }
+                
+                // 检查目标行是否在已加载的数据中
+                const targetIndex = allLines.findIndex(line => line.lineNumber === data.targetLineNumber);
+                
+                if (targetIndex !== -1) {
+                    // 目标行已在内存中，直接跳转，不重新加载数据
+                    console.log(`✅ 目标行已在内存中（索引: ${targetIndex}），直接跳转`);
+                    jumpToLine(data.targetLineNumber);
+                    showToast(`✅ 已跳转到第 ${data.targetLineNumber} 行`);
+                    return;
+                }
+                
+                // 目标行不在已加载数据中，需要加载
+                console.log('⚠️ 目标行不在已加载范围，需要加载新数据');
+                
                 // 合并新加载的数据
                 const newLines = data.lines;
                 const startLine = data.startLine;
                 
-                // 更新 allLines：如果新数据覆盖了已加载的范围，则合并
-                if (allLines.length === 0 || startLine >= allLines.length) {
-                    // 新数据在已加载数据之后，直接追加
-                    allLines = allLines.concat(newLines);
-                } else {
-                    // 替换或插入新数据
-                    for (let i = 0; i < newLines.length; i++) {
-                        const globalIndex = startLine + i;
-                        if (globalIndex < allLines.length) {
-                            allLines[globalIndex] = newLines[i];
-                        } else {
-                            allLines.push(newLines[i]);
-                        }
+                console.log(`📥 接收到 ${newLines.length} 行数据，起始行号: ${startLine}`);
+                
+                // 检查数据重叠情况
+                if (allLines.length > 0) {
+                    const firstLoadedLineNum = allLines[0].lineNumber || 1;
+                    const lastLoadedLineNum = allLines[allLines.length - 1].lineNumber || allLines.length;
+                    const newFirstLineNum = newLines[0].lineNumber || startLine + 1;
+                    const newLastLineNum = newLines[newLines.length - 1].lineNumber || startLine + newLines.length;
+                    
+                    console.log(`📊 当前数据范围: ${firstLoadedLineNum} - ${lastLoadedLineNum}`);
+                    console.log(`📊 新数据范围: ${newFirstLineNum} - ${newLastLineNum}`);
+                    
+                    // 如果新数据和已有数据有连续性，尝试合并
+                    if (newFirstLineNum > lastLoadedLineNum && newFirstLineNum - lastLoadedLineNum < 1000) {
+                        // 新数据在后面且相近，追加
+                        console.log('📝 追加新数据到末尾');
+                        allLines = allLines.concat(newLines);
+                        originalLines = [...allLines];
+                    } else if (newLastLineNum < firstLoadedLineNum && firstLoadedLineNum - newLastLineNum < 1000) {
+                        // 新数据在前面且相近，前置
+                        console.log('📝 前置新数据到开头');
+                        allLines = newLines.concat(allLines);
+                        originalLines = [...allLines];
+                    } else {
+                        // 数据不连续，替换为新数据
+                        console.log('🔄 数据不连续，使用新数据');
+                        allLines = newLines;
+                        originalLines = [...newLines];
+                        allDataLoaded = false;
                     }
+                } else {
+                    // 没有已加载数据，直接使用新数据
+                    allLines = newLines;
+                    originalLines = [...newLines];
+                    allDataLoaded = false;
                 }
                 
-                // 跳转到目标行
-                jumpToLine(data.targetLineNumber);
+                // 重新计算页面（保持折叠状态）
+                handleDataChange({
+                    resetPage: true,
+                    clearPageRanges: true,
+                    triggerAsyncCalc: isCollapseMode  // 只在折叠模式下触发异步计算
+                });
+                
+                // 更新页面信息显示
+                document.getElementById('totalLinesInPage').textContent = allLines.length;
+                document.getElementById('totalLines').textContent = totalLinesInFile;
+                document.getElementById('loadedLines').textContent = allLines.length;
+                
+                // 显示行范围信息（如果是部分数据）
+                if (allLines.length > 0 && allLines.length < totalLinesInFile) {
+                    const firstLine = allLines[0].lineNumber || 1;
+                    const lastLine = allLines[allLines.length - 1].lineNumber || allLines.length;
+                    document.getElementById('lineRangeStart').textContent = firstLine;
+                    document.getElementById('lineRangeEnd').textContent = lastLine;
+                    document.getElementById('lineRangeInfo').style.display = 'inline';
+                } else {
+                    document.getElementById('lineRangeInfo').style.display = 'none';
+                }
+                
+                // 延迟跳转，确保页面已渲染
+                setTimeout(() => {
+                    jumpToLine(data.targetLineNumber);
+                    showToast(`✅ 已跳转到第 ${data.targetLineNumber} 行`);
+                }, 300);
             } else {
                 console.error('❌ 未找到目标时间的日志');
-                alert(data.message || '未找到大于或等于该时间的日志！');
+                showToast(data.message || '⚠️ 未找到大于或等于该时间的日志！');
             }
         }
         
@@ -3891,6 +4059,65 @@
             }
         }
         
+        // 后台逐步加载数据
+        function startBackgroundLoading() {
+            if (isBackgroundLoading || allDataLoaded) {
+                return;
+            }
+            
+            isBackgroundLoading = true;
+            console.log('🔄 开始后台加载数据...');
+            
+            // 更新状态栏显示
+            updateLoadingStatus();
+            
+            loadNextChunk();
+        }
+        
+        function loadNextChunk() {
+            if (allDataLoaded || !isBackgroundLoading) {
+                isBackgroundLoading = false;
+                return;
+            }
+            
+            const remaining = totalLinesInFile - allLines.length;
+            if (remaining <= 0) {
+                allDataLoaded = true;
+                isBackgroundLoading = false;
+                console.log('✅ 后台加载完成！');
+                updateLoadingStatus();
+                return;
+            }
+            
+            const chunkSize = Math.min(backgroundLoadChunkSize, remaining);
+            console.log(`📥 后台加载: 第 ${allLines.length} - ${allLines.length + chunkSize} 行`);
+            
+            vscode.postMessage({
+                command: 'loadMore',
+                startLine: allLines.length,
+                count: chunkSize
+            });
+            
+            // 延迟加载下一批，避免阻塞UI（每批间隔500ms）
+            setTimeout(() => {
+                loadNextChunk();
+            }, 500);
+        }
+        
+        function updateLoadingStatus() {
+            const loadedLines = document.getElementById('loadedLines');
+            if (loadedLines) {
+                if (isBackgroundLoading) {
+                    const percent = Math.floor((allLines.length / totalLinesInFile) * 100);
+                    loadedLines.textContent = `${allLines.length} (${percent}% 后台加载中...)`;
+                } else if (allDataLoaded) {
+                    loadedLines.textContent = allLines.length + ' ✓';
+                } else {
+                    loadedLines.textContent = allLines.length;
+                }
+            }
+        }
+        
         function goToFirstPage() {
             currentPage = 1;
             updatePagination();
@@ -4007,6 +4234,73 @@
                 content.style.display = 'none';
                 icon.textContent = '▶';
             }
+        }
+        
+        // 使用采样数据生成时间线（快速异步加载）
+        function generateTimelineFromSamples(sampledData) {
+            console.log('📈 使用采样数据生成时间线');
+            
+            const startTime = new Date(sampledData.startTime);
+            const endTime = new Date(sampledData.endTime);
+            const timeRange = endTime - startTime;
+            
+            console.log('📊 完整时间范围（采样）:', startTime.toLocaleString(), '-', endTime.toLocaleString());
+            
+            // 如果时间范围太小，不显示时间线
+            if (timeRange < 1000) {
+                console.log('⚠️ 时间范围太小，隐藏时间线');
+                document.getElementById('timelinePanel').style.display = 'none';
+                return;
+            }
+            
+            // 将时间分成若干个桶（bucket）
+            const bucketCount = 50;
+            const bucketSize = timeRange / bucketCount;
+            const buckets = new Array(bucketCount).fill(0);
+            const bucketLevels = new Array(bucketCount).fill(null).map(() => ({ ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0, OTHER: 0 }));
+            
+            // 将采样点分配到各个桶中
+            for (let sample of sampledData.samples) {
+                if (sample.timestamp) {
+                    const time = new Date(sample.timestamp);
+                    const bucketIndex = Math.min(Math.floor((time - startTime) / bucketSize), bucketCount - 1);
+                    if (bucketIndex >= 0) {
+                        buckets[bucketIndex]++;
+                        
+                        const level = (sample.level || 'OTHER').toUpperCase();
+                        if (bucketLevels[bucketIndex][level] !== undefined) {
+                            bucketLevels[bucketIndex][level]++;
+                        } else {
+                            bucketLevels[bucketIndex]['OTHER']++;
+                        }
+                    }
+                }
+            }
+            
+            // 保存时间线数据
+            timelineData = {
+                startTime,
+                endTime,
+                timeRange,
+                buckets,
+                bucketLevels,
+                bucketSize,
+                bucketCount
+            };
+            
+            console.log('✅ 基于采样的时间线数据生成完成，采样点数:', sampledData.samples.length);
+            
+            // 显示时间线面板
+            document.getElementById('timelinePanel').style.display = 'block';
+            
+            // 更新时间信息
+            const info = document.getElementById('timelineInfo');
+            info.innerHTML = `📅 ${startTime.toLocaleString()} — ${endTime.toLocaleString()} <span style="margin-left: 15px;">📊 基于 ${sampledData.samples.length} 个采样点</span>`;
+            
+            // 延迟绘制
+            setTimeout(() => {
+                drawTimeline();
+            }, 100);
         }
         
         function generateTimeline() {
@@ -4268,34 +4562,23 @@
             
             console.log('🕐 时间线点击 - 目标时间:', targetTime.toLocaleString());
             
-            // 在已加载的数据中查找最接近的行
-            let closestIndex = -1;
-            let closestLineNumber = -1;
-            let minDiff = Infinity;
+            // 格式化时间为字符串（YYYY-MM-DD HH:mm:ss）
+            const year = targetTime.getFullYear();
+            const month = String(targetTime.getMonth() + 1).padStart(2, '0');
+            const day = String(targetTime.getDate()).padStart(2, '0');
+            const hours = String(targetTime.getHours()).padStart(2, '0');
+            const minutes = String(targetTime.getMinutes()).padStart(2, '0');
+            const seconds = String(targetTime.getSeconds()).padStart(2, '0');
+            const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
             
-            for (let i = 0; i < allLines.length; i++) {
-                if (allLines[i].timestamp) {
-                    const lineTime = new Date(allLines[i].timestamp);
-                    const diff = Math.abs(lineTime - targetTime);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        closestIndex = i;
-                        // 获取实际的行号
-                        closestLineNumber = allLines[i].lineNumber || (i + 1);
-                    }
-                }
-            }
+            console.log('🔍 请求后端查找时间:', timeStr);
+            showToast('🔍 正在查找目标时间点...');
             
-            if (closestIndex !== -1) {
-                console.log(`🎯 找到最接近的日志 - 索引:${closestIndex}, 行号:${closestLineNumber}`);
-                
-                // 使用 jumpToLine 函数跳转，它能正确处理折叠模式
-                jumpToLine(closestLineNumber);
-                
-                showToast(`已跳转到 ${new Date(allLines[closestIndex].timestamp).toLocaleString()}`);
-            } else {
-                showToast('⚠️ 该时间段没有日志数据');
-            }
+            // 请求后端查找该时间点的日志行
+            vscode.postMessage({
+                command: 'jumpToTime',
+                timeStr: timeStr
+            });
         });
         
         // 鼠标悬停显示时间信息

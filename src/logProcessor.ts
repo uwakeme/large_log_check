@@ -562,6 +562,83 @@ export class LogProcessor {
     }
 
     /**
+     * 采样生成时间线数据（快速版本，不扫描全部文件）
+     * 通过均匀采样的方式快速获取时间分布
+     */
+    async sampleTimeline(sampleCount: number = 100): Promise<{
+        startTime?: Date;
+        endTime?: Date;
+        samples: Array<{ timestamp?: Date; lineNumber: number; level?: string }>;
+    }> {
+        return new Promise((resolve, reject) => {
+            const samples: Array<{ timestamp?: Date; lineNumber: number; level?: string }> = [];
+            let startTime: Date | undefined;
+            let endTime: Date | undefined;
+            let totalLines = 0;
+
+            // 第一遍：快速计算总行数
+            const countStream = fs.createReadStream(this.filePath);
+            const countRl = readline.createInterface({
+                input: countStream,
+                crlfDelay: Infinity
+            });
+
+            countRl.on('line', () => {
+                totalLines++;
+            });
+
+            countRl.on('close', () => {
+                if (totalLines === 0) {
+                    resolve({ samples });
+                    return;
+                }
+
+                // 第二遍：采样
+                const sampleInterval = Math.max(1, Math.floor(totalLines / sampleCount));
+                let currentLine = 0;
+                const sampleStream = fs.createReadStream(this.filePath);
+                const sampleRl = readline.createInterface({
+                    input: sampleStream,
+                    crlfDelay: Infinity
+                });
+
+                sampleRl.on('line', (line) => {
+                    currentLine++;
+                    
+                    // 均匀采样：每隔 sampleInterval 行采样一次
+                    if (currentLine === 1 || currentLine === totalLines || currentLine % sampleInterval === 0) {
+                        const timestamp = this.extractTimestamp(line);
+                        const level = this.extractLogLevel(line);
+                        
+                        if (timestamp) {
+                            samples.push({ timestamp, lineNumber: currentLine, level });
+                            
+                            if (!startTime || timestamp < startTime) {
+                                startTime = timestamp;
+                            }
+                            if (!endTime || timestamp > endTime) {
+                                endTime = timestamp;
+                            }
+                        }
+                    }
+                });
+
+                sampleRl.on('close', () => {
+                    resolve({ startTime, endTime, samples });
+                });
+
+                sampleRl.on('error', (error) => {
+                    reject(error);
+                });
+            });
+
+            countRl.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+
+    /**
      * 统计日志信息
      */
     async getStatistics(): Promise<LogStats> {
