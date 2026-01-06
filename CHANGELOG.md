@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 优化加载日志逻辑，提升用户体验
 - 修复折叠重复日志模式下加载进度问题
 
+### Changed
+- 搜索框支持输入后自动触发搜索（带轻微防抖），减少手动点击操作
+
 ## [1.1.4] - 2025-12-16
 ### Added
 - 新增若干命令，包括以下命令

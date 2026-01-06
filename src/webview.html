@@ -4602,12 +4602,34 @@
             canvas.title = `${hoverTime.toLocaleString()}\n日志数: ${count}\nERROR: ${levels.ERROR} | WARN: ${levels.WARN} | INFO: ${levels.INFO} | DEBUG: ${levels.DEBUG}`;
         });
         
-        // 搜索框回车搜索
-        document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                search();
+        // 搜索框即时搜索 + 回车搜索（带防抖）
+        (function () {
+            const input = document.getElementById('searchInput');
+            if (!input) {
+                return;
             }
-        });
+
+            let instantSearchTimer = null;
+
+            // 输入时即时搜索（防抖）
+            input.addEventListener('input', function () {
+                // 防抖：用户停止输入一小段时间后再触发搜索，避免频繁请求
+                if (instantSearchTimer) {
+                    clearTimeout(instantSearchTimer);
+                }
+
+                instantSearchTimer = setTimeout(() => {
+                    search();
+                }, 400); // 400ms 防抖间隔，可根据需要微调
+            });
+
+            // 回车键触发搜索（保持原行为）
+            input.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    search();
+                }
+            });
+        })();
         
         // ========== JSON/XML 自动解析功能 ==========
         

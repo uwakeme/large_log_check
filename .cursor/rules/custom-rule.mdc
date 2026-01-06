@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
++ 添加或修改功能后，需要即时更新README和CHANGELOG文档，保证实时性
