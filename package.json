@@ -42,7 +42,7 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
+  "commands": [
       {
         "command": "big-log-viewer.openLogFile",
         "title": "打开大日志文件",
@@ -109,6 +109,30 @@
           "group": "navigation"
         }
       ]
+    },
+    "configuration": {
+      "title": "大日志文件查看器",
+      "properties": {
+        "big-log-viewer.search.debounceMs": {
+          "type": "number",
+          "default": 400,
+          "minimum": 0,
+          "description": "搜索框输入后自动触发搜索的防抖时间（毫秒）。"
+        },
+        "big-log-viewer.collapse.minRepeatCount": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "description": "折叠重复日志时，至少重复多少次才会被折叠。"
+        },
+        "big-log-viewer.timeline.samplePoints": {
+          "type": "number",
+          "default": 200,
+          "minimum": 20,
+          "maximum": 1000,
+          "description": "时间线采样点数量，数值越大越精细但计算时间越长。"
+        }
+      }
     }
   },
   "scripts": {

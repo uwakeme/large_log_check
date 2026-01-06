@@ -10,6 +10,7 @@ export class LogViewerPanel {
     private _disposables: vscode.Disposable[] = [];
     private _fileUri: vscode.Uri;
     private _logProcessor: LogProcessor;
+    private _timelineSampleCount: number;
 
     public static createOrShow(extensionUri: vscode.Uri, fileUri: vscode.Uri) {
         const column = vscode.window.activeTextEditor
@@ -44,8 +45,14 @@ export class LogViewerPanel {
         this._fileUri = fileUri;
         this._logProcessor = new LogProcessor(fileUri.fsPath);
 
+        // 读取用户配置
+        const config = vscode.workspace.getConfiguration('big-log-viewer');
+        this._timelineSampleCount = config.get<number>('timeline.samplePoints', 200);
+
         // 设置WebView内容
         this._update();
+        // 将当前配置发送给 WebView
+        this.sendConfigToWebview();
 
         // 监听面板关闭事件
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -70,7 +77,7 @@ export class LogViewerPanel {
                         await this.getStatistics();
                         break;
                     case 'sampleTimeline':
-                        await this.sampleTimeline(message.sampleCount);
+                        await this.sampleTimeline(message.sampleCount ?? this._timelineSampleCount);
                         break;
                     case 'regexSearch':
                         await this.regexSearch(message.pattern, message.flags, message.reverse);
@@ -96,6 +103,12 @@ export class LogViewerPanel {
                         } else if (message.type === 'info') {
                             vscode.window.showInformationMessage(message.message);
                         }
+                        break;
+                    case 'getSettings':
+                        this.sendConfigToWebview();
+                        break;
+                    case 'updateSettings':
+                        await this.updateSettings(message.data);
                         break;
                 }
             },
@@ -152,7 +165,7 @@ export class LogViewerPanel {
             });
             
             // 立即请求时间线采样（不等待后续数据加载）
-            this.sampleTimeline(200);
+            this.sampleTimeline(this._timelineSampleCount);
         } catch (error) {
             vscode.window.showErrorMessage(`加载文件失败: ${error}`);
         }
@@ -467,6 +480,47 @@ export class LogViewerPanel {
             });
         } catch (error) {
             vscode.window.showErrorMessage(`时间线采样失败: ${error}`);
+        }
+    }
+
+    private sendConfigToWebview() {
+        const config = vscode.workspace.getConfiguration('big-log-viewer');
+        const searchDebounceMs = config.get<number>('search.debounceMs', 400);
+        const collapseMinRepeatCount = config.get<number>('collapse.minRepeatCount', 2);
+        const timelineSamplePoints = config.get<number>('timeline.samplePoints', 200);
+
+        this._timelineSampleCount = timelineSamplePoints;
+
+        this._panel.webview.postMessage({
+            command: 'config',
+            data: {
+                searchDebounceMs,
+                collapseMinRepeatCount,
+                timelineSamplePoints
+            }
+        });
+    }
+
+    private async updateSettings(newSettings: any) {
+        const config = vscode.workspace.getConfiguration('big-log-viewer');
+
+        try {
+            if (typeof newSettings.searchDebounceMs === 'number') {
+                await config.update('search.debounceMs', newSettings.searchDebounceMs, vscode.ConfigurationTarget.Workspace);
+            }
+            if (typeof newSettings.collapseMinRepeatCount === 'number') {
+                await config.update('collapse.minRepeatCount', newSettings.collapseMinRepeatCount, vscode.ConfigurationTarget.Workspace);
+            }
+            if (typeof newSettings.timelineSamplePoints === 'number') {
+                await config.update('timeline.samplePoints', newSettings.timelineSamplePoints, vscode.ConfigurationTarget.Workspace);
+            }
+
+            vscode.window.showInformationMessage('大日志文件查看器设置已保存');
+
+            // 保存后重新同步配置到 WebView
+            this.sendConfigToWebview();
+        } catch (error) {
+            vscode.window.showErrorMessage(`保存设置失败: ${error}`);
         }
     }
 

@@ -869,6 +869,7 @@
             <button onclick="showBookmarksModal()">📌 书签</button>
             <button onclick="showCommentsModal()">📝 注释</button>
             <button onclick="showCustomHighlightModal()">🎨 高亮规则</button>
+            <button onclick="showSettingsModal()">⚙ 设置</button>
             <div class="dropdown">
                 <button onclick="toggleMoreMenu()">⋯ 更多</button>
                 <div class="dropdown-content" id="moreMenu">
@@ -1209,7 +1210,7 @@
     </div>
     
     <!-- 自定义高亮规则弹窗 -->
-    <div id="customHighlightModal" class="modal">
+        <div id="customHighlightModal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
                 <h2>🎨 自定义高亮规则</h2>
@@ -1221,6 +1222,37 @@
                 </div>
                 <div id="highlightRulesList" style="max-height: 500px; overflow-y: auto;">
                     <!-- 规则列表将动态生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 设置面板 -->
+        <div id="settingsModal" class="modal">
+            <div class="modal-content small">
+                <div class="modal-header">
+                    <h3>⚙ 日志查看设置</h3>
+                    <button class="close-button" onclick="closeSettingsModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="settingSearchDebounce">搜索防抖时间（毫秒）</label>
+                        <input type="number" id="settingSearchDebounce" min="0" step="50">
+                        <div class="hint">输入停止后等待多久自动触发搜索，值越大越省资源，但响应越慢。</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="settingCollapseMinRepeat">折叠最小重复次数</label>
+                        <input type="number" id="settingCollapseMinRepeat" min="1" step="1">
+                        <div class="hint">连续重复达到多少次时才会被折叠（默认 2 次）。</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="settingTimelineSample">时间线采样点数</label>
+                        <input type="number" id="settingTimelineSample" min="20" max="1000" step="10">
+                        <div class="hint">用于生成时间线的采样点数量，建议 100~400 之间。</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeSettingsModal()">取消</button>
+                    <button onclick="saveSettings()">保存</button>
                 </div>
             </div>
         </div>
@@ -1282,6 +1314,9 @@
         const vscode = acquireVsCodeApi();
         let allLines = [];
         let currentSearchKeyword = '';
+        let currentSearchIsRegex = false; // 当前搜索是否为正则模式
+        let isInSearchMode = false;       // 是否处于搜索结果模式
+        let searchBackup = null;          // 搜索前的状态备份（分页、滚动、数据）
         let originalLines = []; // 保存原始数据用于过滤
         let isFiltering = false; // 标记是否在过滤模式下
         let bookmarks = new Set(); // 书签集合，存储行号
@@ -1295,6 +1330,14 @@
         let isCalculatingPages = false; // 是否正在计算页面范围
         let calculationProgress = 0; // 计算进度（0-100）
         let currentCalculationId = 0; // 当前计算任务ID，用于取消旧任务
+        let lastHoveredBucketIndex = null; // 时间线当前悬停的桶索引
+
+        // 用户可配置参数（从 VSCode 设置同步）
+        let userSettings = {
+            searchDebounceMs: 400,
+            collapseMinRepeatCount: 2,
+            timelineSamplePoints: 200
+        };
         
         // 筛选状态管理
         let currentFilterType = null; // 当前筛选类型: 'thread', 'class', 'method', null
@@ -1388,6 +1431,17 @@
                 case 'showAdvancedSearch':
                     showAdvancedSearchModal();
                     break;
+                case 'config':
+                    if (message.data) {
+                        userSettings = {
+                            ...userSettings,
+                            searchDebounceMs: typeof message.data.searchDebounceMs === 'number' ? message.data.searchDebounceMs : userSettings.searchDebounceMs,
+                            collapseMinRepeatCount: typeof message.data.collapseMinRepeatCount === 'number' ? message.data.collapseMinRepeatCount : userSettings.collapseMinRepeatCount,
+                            timelineSamplePoints: typeof message.data.timelineSamplePoints === 'number' ? message.data.timelineSamplePoints : userSettings.timelineSamplePoints
+                        };
+                        console.log('⚙️ 已从扩展配置同步设置:', userSettings);
+                    }
+                    break;
             }
         });
         
@@ -1400,6 +1454,9 @@
             allDataLoaded = data.allLoaded || false;
             isFiltering = false; // 重置过滤状态
             currentSearchKeyword = ''; // 重置搜索关键词
+            currentSearchIsRegex = false;
+            isInSearchMode = false;
+            searchBackup = null;
             
             // 清除筛选状态
             currentFilterType = null;
@@ -1415,7 +1472,7 @@
             // 异步请求采样时间线数据（快速，不阻塞UI）
             vscode.postMessage({
                 command: 'sampleTimeline',
-                sampleCount: 200  // 采样200个点
+                sampleCount: userSettings.timelineSamplePoints || 200  // 采样点数可配置
             });
             
             // 如果数据未全部加载，启动后台加载
@@ -1428,6 +1485,11 @@
             const newLines = data.lines || [];
             allLines = allLines.concat(newLines);
             originalLines = originalLines.concat(newLines);
+            
+            // 如果已计算过统计信息，增量更新统计数据，避免重新扫描整个文件
+            if (fileStats) {
+                updateStatsWithNewLines(newLines);
+            }
             
             // 检查是否已加载全部数据
             if (allLines.length >= totalLinesInFile) {
@@ -1453,6 +1515,7 @@
             console.log('🔍 修改前 allLines 数量:', allLines.length);
             
             currentSearchKeyword = data.keyword;
+            currentSearchIsRegex = !!data.isRegex;
             allLines = data.results || [];
             
             console.log('🔍 修改后 allLines 数量:', allLines.length);
@@ -1479,6 +1542,12 @@
             allLines = data.results || [];
             console.log('📥 收到过滤结果:', allLines.length, '条');
             isFiltering = true; // 设置为过滤模式
+
+            // 进入过滤模式时，清理搜索状态（避免与搜索备份冲突）
+            isInSearchMode = false;
+            searchBackup = null;
+            currentSearchKeyword = '';
+            currentSearchIsRegex = false;
             
             // 统一处理数据变更
             handleDataChange();
@@ -1500,6 +1569,49 @@
             console.log('📊 保存文件统计信息:', fileStats);
             
             showStatsModal(data);
+        }
+
+        // 使用新加载的行增量更新统计信息（仅更新基础数量与时间范围）
+        function updateStatsWithNewLines(newLines) {
+            if (!fileStats || !Array.isArray(newLines) || newLines.length === 0) {
+                return;
+            }
+
+            fileStats.totalLines += newLines.length;
+
+            newLines.forEach(line => {
+                const level = (line.level || '').toUpperCase();
+                if (level === 'ERROR') {
+                    fileStats.errorCount++;
+                } else if (level === 'WARN') {
+                    fileStats.warnCount++;
+                } else if (level === 'INFO') {
+                    fileStats.infoCount++;
+                } else if (level === 'DEBUG') {
+                    fileStats.debugCount++;
+                } else {
+                    fileStats.otherCount++;
+                }
+
+                if (line.timestamp) {
+                    const ts = new Date(line.timestamp);
+                    if (!fileStats.timeRange) {
+                        fileStats.timeRange = { start: ts, end: ts };
+                    } else {
+                        const currentStart = fileStats.timeRange.start ? new Date(fileStats.timeRange.start) : null;
+                        const currentEnd = fileStats.timeRange.end ? new Date(fileStats.timeRange.end) : null;
+
+                        if (!currentStart || ts < currentStart) {
+                            fileStats.timeRange.start = ts;
+                        }
+                        if (!currentEnd || ts > currentEnd) {
+                            fileStats.timeRange.end = ts;
+                        }
+                    }
+                }
+            });
+
+            console.log('📊 统计信息已增量更新:', fileStats);
         }
         
         function handleTimelineData(data) {
@@ -1524,6 +1636,9 @@
             allDataLoaded = data.allLoaded || false;
             isFiltering = false; // 重置过滤状态
             currentSearchKeyword = ''; // 重置搜索关键词
+            currentSearchIsRegex = false;
+            isInSearchMode = false;
+            searchBackup = null;
             
             allLines = data.lines;
             originalLines = [...data.lines];
@@ -1912,7 +2027,8 @@
                     }
                 }
                 
-                if (bestPatternLength > 0 && bestRepeatCount >= 2) {
+                const minRepeat = Math.max(1, userSettings.collapseMinRepeatCount || 2);
+                if (bestPatternLength > 0 && bestRepeatCount >= minRepeat) {
                     // 找到了重复模式
                     const firstLineNumber = lines[i].lineNumber || (startIndex + i + 1);
                     const groupId = `group_${firstLineNumber}`;
@@ -1969,14 +2085,45 @@
             // 显示模式的第一行
             const content = group.firstLine.content || group.firstLine;
             let highlightedContent = highlightKeywords(content, currentSearchKeyword);
+
+            // 统计当前折叠组内与搜索关键词匹配的日志条数
+            let matchCount = 0;
+            if (currentSearchKeyword && Array.isArray(group.lines)) {
+                try {
+                    let matcher = null;
+                    if (currentSearchIsRegex) {
+                        matcher = new RegExp(currentSearchKeyword, 'i');
+                    }
+                    for (const line of group.lines) {
+                        const text = (line.content || line || '').toString();
+                        if (!text) continue;
+                        if (matcher) {
+                            if (matcher.test(text)) {
+                                matchCount++;
+                            }
+                        } else {
+                            if (text.toLowerCase().includes(currentSearchKeyword.toLowerCase())) {
+                                matchCount++;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('搜索匹配统计失败:', e);
+                }
+            }
             
-            // 添加重复次数徽章
+            let matchInfo = '';
+            if (matchCount > 0) {
+                matchInfo = `，匹配 ${matchCount} 条`;
+            }
+            
+            // 添加重复次数徽章 + 匹配计数
             if (group.patternLength === 1) {
                 // 单行重复
-                highlightedContent += `<span class="repeat-count" title="点击${group.isExpanded ? '折叠' : '展开'}详情">重复 ${group.repeatCount} 次</span>`;
+                highlightedContent += `<span class="repeat-count" title="点击${group.isExpanded ? '折叠' : '展开'}详情">重复 ${group.repeatCount} 次${matchInfo}</span>`;
             } else {
                 // 多行模式重复
-                highlightedContent += `<span class="repeat-count" title="点击${group.isExpanded ? '折叠' : '展开'}详情">${group.patternLength} 行为一组，重复 ${group.repeatCount} 次</span>`;
+                highlightedContent += `<span class="repeat-count" title="点击${group.isExpanded ? '折叠' : '展开'}详情">${group.patternLength} 行为一组，重复 ${group.repeatCount} 次${matchInfo}</span>`;
             }
             
             lineContent.innerHTML = highlightedContent;
@@ -2235,16 +2382,63 @@
             const isRegex = document.getElementById('regexMode').checked;
             const isReverse = document.getElementById('reverseMode').checked;
             
+            // 关键字为空：如果之前在搜索模式下，则恢复到搜索前的位置和数据
             if (!keyword) {
-                vscode.postMessage({
-                    command: 'refresh'
-                });
                 currentSearchKeyword = '';
+                currentSearchIsRegex = false;
+
+                if (isInSearchMode && searchBackup) {
+                    console.log('🔙 清空搜索，恢复到搜索前状态');
+
+                    // 恢复数据
+                    allLines = searchBackup.allLines;
+                    originalLines = searchBackup.originalLines;
+                    totalLinesInFile = searchBackup.totalLinesInFile;
+                    allDataLoaded = searchBackup.allDataLoaded;
+                    isCollapseMode = searchBackup.isCollapseMode;
+
+                    // 恢复分页与页面范围
+                    currentPage = searchBackup.currentPage;
+                    pageRanges = new Map(searchBackup.pageRanges);
+
+                    // 清理搜索状态
+                    isInSearchMode = false;
+                    searchBackup = null;
+
+                    // 重新渲染但不触发异步计算（沿用已有页面范围）
+                    updatePagination();
+                    renderLines();
+
+                    // 恢复滚动位置
+                    const container = document.getElementById('logContainer');
+                    if (container && typeof searchBackup.scrollTop === 'number') {
+                        container.scrollTop = searchBackup.scrollTop;
+                    }
+                }
+
                 return;
             }
+
+            // 首次进入搜索模式时，备份当前状态用于之后恢复
+            if (!isInSearchMode) {
+                const container = document.getElementById('logContainer');
+                searchBackup = {
+                    allLines: allLines,
+                    originalLines: originalLines,
+                    totalLinesInFile,
+                    allDataLoaded,
+                    isCollapseMode,
+                    currentPage,
+                    pageRanges: new Map(pageRanges),
+                    scrollTop: container ? container.scrollTop : 0
+                };
+                isInSearchMode = true;
+                console.log('💾 已备份搜索前的分页与滚动位置:', searchBackup);
+            }
             
-            // 保存搜索关键词用于高亮
+            // 保存搜索关键词和模式用于高亮与折叠组统计
             currentSearchKeyword = keyword;
+            currentSearchIsRegex = isRegex;
             
             if (isRegex) {
                 vscode.postMessage({
@@ -4293,9 +4487,15 @@
             // 显示时间线面板
             document.getElementById('timelinePanel').style.display = 'block';
             
-            // 更新时间信息
+            // 更新时间信息（主信息 + 悬停附加信息占位）
             const info = document.getElementById('timelineInfo');
-            info.innerHTML = `📅 ${startTime.toLocaleString()} — ${endTime.toLocaleString()} <span style="margin-left: 15px;">📊 基于 ${sampledData.samples.length} 个采样点</span>`;
+            info.innerHTML = `
+                <span id="timelineMainInfo">
+                    📅 ${startTime.toLocaleString()} — ${endTime.toLocaleString()}
+                    <span style="margin-left: 15px;">📊 基于 ${sampledData.samples.length} 个采样点</span>
+                </span>
+                <span id="timelineHoverExtra" style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);"></span>
+            `;
             
             // 延迟绘制
             setTimeout(() => {
@@ -4378,9 +4578,15 @@
             // 显示时间线面板
             document.getElementById('timelinePanel').style.display = 'block';
             
-            // 更新时间信息
+            // 更新时间信息（主信息 + 悬停附加信息占位）
             const info = document.getElementById('timelineInfo');
-            info.innerHTML = `📅 ${startTime.toLocaleString()} — ${endTime.toLocaleString()} <span style="margin-left: 15px;">📊 共 ${timestamps.length} 条有时间戳的日志</span>`;
+            info.innerHTML = `
+                <span id="timelineMainInfo">
+                    📅 ${startTime.toLocaleString()} — ${endTime.toLocaleString()}
+                    <span style="margin-left: 15px;">📊 共 ${timestamps.length} 条有时间戳的日志</span>
+                </span>
+                <span id="timelineHoverExtra" style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);"></span>
+            `;
             
             // 延迟绘制，确保Canvas元素已经渲染好
             setTimeout(() => {
@@ -4548,6 +4754,49 @@
             return linesWithTime;
         }
         
+        // 按时间线桶筛选当前时间段日志
+        function filterByTimelineBucket(bucketIndex) {
+            if (!timelineData) return;
+            if (bucketIndex == null || bucketIndex < 0 || bucketIndex >= timelineData.bucketCount) return;
+
+            // 保存筛选前位置，便于之后恢复
+            savePositionBeforeFilter();
+
+            const startMs = timelineData.startTime.getTime() + bucketIndex * timelineData.bucketSize;
+            const endMs = startMs + timelineData.bucketSize;
+            const startTime = new Date(startMs);
+            const endTime = new Date(endMs);
+
+            const filtered = allLines.filter(line => {
+                if (!line.timestamp) return false;
+                const t = new Date(line.timestamp).getTime();
+                return t >= startMs && t < endMs;
+            });
+
+            if (filtered.length === 0) {
+                showToast('⚠️ 该时间段没有日志');
+                return;
+            }
+
+            currentFilterType = 'timeline';
+            currentFilterValue = { start: startTime.toISOString(), end: endTime.toISOString() };
+            showFilterStatus(`时间段: ${startTime.toLocaleString()} ~ ${endTime.toLocaleString()}`);
+
+            allLines = filtered;
+            isFiltering = true;
+
+            handleDataChange();
+            showToast(`⏱ 已切换到时间段视图，共 ${filtered.length} 条日志`);
+        }
+
+        function filterByTimelineCurrentBucket() {
+            if (lastHoveredBucketIndex == null) {
+                showToast('⚠️ 请先将鼠标移动到时间线上的某一段');
+                return;
+            }
+            filterByTimelineBucket(lastHoveredBucketIndex);
+        }
+
         // 点击时间线跳转
         document.getElementById('timelineCanvas').addEventListener('click', function(e) {
             if (!timelineData) return;
@@ -4581,7 +4830,7 @@
             });
         });
         
-        // 鼠标悬停显示时间信息
+        // 鼠标悬停显示时间信息 + 快捷筛选入口
         document.getElementById('timelineCanvas').addEventListener('mousemove', function(e) {
             if (!timelineData) return;
             
@@ -4597,9 +4846,23 @@
             const bucketIndex = Math.min(Math.floor(hoverRatio * timelineData.bucketCount), timelineData.bucketCount - 1);
             const count = timelineData.buckets[bucketIndex];
             const levels = timelineData.bucketLevels[bucketIndex];
+
+            lastHoveredBucketIndex = bucketIndex;
             
             // 更新标题显示详细信息
             canvas.title = `${hoverTime.toLocaleString()}\n日志数: ${count}\nERROR: ${levels.ERROR} | WARN: ${levels.WARN} | INFO: ${levels.INFO} | DEBUG: ${levels.DEBUG}`;
+
+            // 在面板中显示当前时间段信息和快捷筛选按钮
+            const hoverExtra = document.getElementById('timelineHoverExtra');
+            if (hoverExtra) {
+                const bucketStartMs = timelineData.startTime.getTime() + bucketIndex * timelineData.bucketSize;
+                const bucketEndMs = bucketStartMs + timelineData.bucketSize;
+                const bucketStart = new Date(bucketStartMs);
+                const bucketEnd = new Date(bucketEndMs);
+
+                hoverExtra.innerHTML = `当前: ${bucketStart.toLocaleString()} ~ ${bucketEnd.toLocaleString()} ，日志数: ${count}
+                    <button style="margin-left: 8px; padding: 2px 8px; font-size: 11px;" onclick="filterByTimelineCurrentBucket(); event.stopPropagation();">只看这个时间段</button>`;
+            }
         });
         
         // 搜索框即时搜索 + 回车搜索（带防抖）
@@ -4620,7 +4883,7 @@
 
                 instantSearchTimer = setTimeout(() => {
                     search();
-                }, 400); // 400ms 防抖间隔，可根据需要微调
+                }, userSettings.searchDebounceMs || 400); // 防抖间隔可通过设置调整
             });
 
             // 回车键触发搜索（保持原行为）
@@ -5217,6 +5480,58 @@
             renderHighlightRulesList();
             renderLines(); // 重新渲染日志以应用新规则
             showToast('✅ 规则已保存');
+        }
+
+        // ========== 设置面板 ==========
+        function showSettingsModal() {
+            // 如果扩展侧尚未发送配置，可主动请求一次
+            vscode.postMessage({ command: 'getSettings' });
+
+            // 将当前配置填入输入框
+            document.getElementById('settingSearchDebounce').value = userSettings.searchDebounceMs;
+            document.getElementById('settingCollapseMinRepeat').value = userSettings.collapseMinRepeatCount;
+            document.getElementById('settingTimelineSample').value = userSettings.timelineSamplePoints;
+
+            document.getElementById('settingsModal').style.display = 'block';
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        function saveSettings() {
+            const searchDebounce = parseInt(document.getElementById('settingSearchDebounce').value, 10);
+            const collapseMinRepeat = parseInt(document.getElementById('settingCollapseMinRepeat').value, 10);
+            const timelineSample = parseInt(document.getElementById('settingTimelineSample').value, 10);
+
+            if (isNaN(searchDebounce) || searchDebounce < 0) {
+                showToast('⚠️ 搜索防抖时间必须是大于等于 0 的数字');
+                return;
+            }
+            if (isNaN(collapseMinRepeat) || collapseMinRepeat < 1) {
+                showToast('⚠️ 折叠最小重复次数必须是大于等于 1 的整数');
+                return;
+            }
+            if (isNaN(timelineSample) || timelineSample < 20 || timelineSample > 1000) {
+                showToast('⚠️ 时间线采样点数需在 20 ~ 1000 之间');
+                return;
+            }
+
+            const newSettings = {
+                searchDebounceMs: searchDebounce,
+                collapseMinRepeatCount: collapseMinRepeat,
+                timelineSamplePoints: timelineSample
+            };
+
+            // 先更新前端内存中的配置，立即生效
+            userSettings = { ...userSettings, ...newSettings };
+
+            vscode.postMessage({
+                command: 'updateSettings',
+                data: newSettings
+            });
+
+            closeSettingsModal();
         }
 
         function editHighlightRule(index) {
