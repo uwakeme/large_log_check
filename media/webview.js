@@ -18,6 +18,8 @@ let isCalculatingPages = false; // 是否正在计算页面范围
 let calculationProgress = 0; // 计算进度（0-100）
 let currentCalculationId = 0; // 当前计算任务ID，用于取消旧任务
 let lastHoveredBucketIndex = null; // 时间线当前悬停的桶索引
+// 当前内存中 allLines[0] 对应的文件行索引（从 0 开始），用于统一后台增量加载起点
+let baseLineOffset = 0;
 
 // 用户可配置参数（从 VSCode 设置同步）
 let userSettings = {
@@ -138,6 +140,8 @@ function handleFileLoaded(data) {
     document.getElementById('totalLines').textContent = data.totalLines || '0';
     
     totalLinesInFile = data.totalLines || 0;
+    // 初次加载时，数据从文件开头开始
+    baseLineOffset = 0;
     allDataLoaded = data.allLoaded || false;
     isFiltering = false; // 重置过滤状态
     currentSearchKeyword = ''; // 重置搜索关键词
@@ -164,14 +168,31 @@ function handleFileLoaded(data) {
     
     // 如果数据未全部加载，启动后台加载
     if (!allDataLoaded && allLines.length < totalLinesInFile) {
+        // 重置后台加载状态，并从当前偏移量开始统一加载
+        isBackgroundLoading = false;
         startBackgroundLoading();
     }
 }
 
 function handleMoreLines(data) {
     const newLines = data.lines || [];
-    allLines = allLines.concat(newLines);
-    originalLines = originalLines.concat(newLines);
+    const startLine = typeof data.startLine === 'number' ? data.startLine : (baseLineOffset + allLines.length);
+    
+    console.log(`📥 handleMoreLines: 收到 ${newLines.length} 行, startLine = ${startLine}, baseLineOffset = ${baseLineOffset}`);
+
+    // 确保新数据与当前缓冲区在文件中的位置是连续的：
+    // 期望 startLine === baseLineOffset + allLines.length
+    const expectedStart = baseLineOffset + allLines.length;
+    if (startLine !== expectedStart) {
+        console.warn(`⚠️ handleMoreLines: 起始行不连续, 期望 ${expectedStart}, 实际 ${startLine}，将重置缓冲区为新数据`);
+        // 出现不连续时，为避免错乱，直接以新数据为准并重置偏移量
+        baseLineOffset = startLine;
+        allLines = newLines.slice();
+        originalLines = newLines.slice();
+    } else {
+        allLines = allLines.concat(newLines);
+        originalLines = originalLines.concat(newLines);
+    }
     
     // 如果已计算过统计信息，增量更新统计数据，避免重新扫描整个文件
     if (fileStats) {
@@ -321,6 +342,8 @@ function handleJumpToLineInFullLogResult(data) {
     
     totalLinesInFile = data.totalLines;
     allDataLoaded = data.allLoaded || false;
+    // 后端可能返回从中间位置开始的一段日志，记录偏移量（默认 0）
+    baseLineOffset = typeof data.startLine === 'number' ? data.startLine : 0;
     isFiltering = false; // 重置过滤状态
     currentSearchKeyword = ''; // 重置搜索关键词
     currentSearchIsRegex = false;
@@ -337,9 +360,15 @@ function handleJumpToLineInFullLogResult(data) {
     
     // 跳转到目标行
     jumpToLine(data.targetLineNumber);
-    
-    // 生成时间线
-    generateTimeline();
+
+    // 时间线使用后端采样结果，这里只需要重绘当前位置指示器，无需重新统计全文件
+    drawTimeline();
+
+    // 如有需要，重新启用后台加载（统一加载逻辑）
+    if (!allDataLoaded && allLines.length < totalLinesInFile) {
+        isBackgroundLoading = false;
+        startBackgroundLoading();
+    }
     
     // 显示成功提示
     showToast('✅ 已跳转到完整日志');
@@ -1012,7 +1041,7 @@ function highlightKeywords(content, keyword) {
                         const threadNameMatch = match.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
                         if (threadNameMatch) {
                             const threadName = threadNameMatch[1];
-                            return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${threadName.replace(/'/g, "\\'")}')", title="点击筛选线程: ${threadName}">🔍</span></span>`;
+                            return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${threadName.replace(/'/g, "\\'")}')" title="点击筛选线程: ${threadName}">🔍</span></span>`;
                         }
                         return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
                     });
@@ -1020,7 +1049,7 @@ function highlightKeywords(content, keyword) {
                     // 类名 - 添加筛选图标
                     result = result.replace(regex, function(match) {
                         const className = match.trim();
-                        return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${className.replace(/'/g, "\\'")}')", title="点击筛选类: ${className}">🔍</span></span>`;
+                        return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${className.replace(/'/g, "\\'")}')" title="点击筛选类: ${className}">🔍</span></span>`;
                     });
                 } else if (rule.name === '方法名') {
                     // 方法名 - 添加筛选图标（匹配 [methodName:lineNumber]）
@@ -1029,7 +1058,7 @@ function highlightKeywords(content, keyword) {
                         const methodMatch = match.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
                         if (methodMatch) {
                             const methodName = methodMatch[1];
-                            return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${methodName.replace(/'/g, "\\'")}')", title="点击筛选方法: ${methodName}">🔍</span></span>`;
+                            return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${methodName.replace(/'/g, "\\'")}')" title="点击筛选方法: ${methodName}">🔍</span></span>`;
                         }
                         return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
                     });
@@ -2348,6 +2377,7 @@ function hideFilterStatus() {
 function clearCustomFilter() {
     console.log('❌ 清除筛选');
     currentFilterType = null;
+    currentTimelineBucketIndex = null;
     currentFilterValue = null;
     hideFilterStatus();
     
@@ -2650,7 +2680,7 @@ function handleJumpToTimeResult(data) {
         
         // 合并新加载的数据
         const newLines = data.lines;
-        const startLine = data.startLine;
+        const startLine = typeof data.startLine === 'number' ? data.startLine : 0;
         
         console.log(`📥 接收到 ${newLines.length} 行数据，起始行号: ${startLine}`);
         
@@ -2688,6 +2718,9 @@ function handleJumpToTimeResult(data) {
             originalLines = [...newLines];
             allDataLoaded = false;
         }
+
+        // 记录当前缓冲区在文件中的起始行，用于统一后台加载
+        baseLineOffset = startLine;
         
         // 重新计算页面（保持折叠状态）
         handleDataChange({
@@ -2717,6 +2750,12 @@ function handleJumpToTimeResult(data) {
             jumpToLine(data.targetLineNumber);
             showToast(`✅ 已跳转到第 ${data.targetLineNumber} 行`);
         }, 300);
+
+        // 如有需要，重新启用统一的后台加载逻辑
+        if (!allDataLoaded && baseLineOffset + allLines.length < totalLinesInFile) {
+            isBackgroundLoading = false;
+            startBackgroundLoading();
+        }
     } else {
         console.error('❌ 未找到目标时间的日志');
         showToast(data.message || '⚠️ 未找到大于或等于该时间的日志！');
@@ -2961,7 +3000,7 @@ function loadNextChunk() {
         return;
     }
     
-    const remaining = totalLinesInFile - allLines.length;
+    const remaining = totalLinesInFile - (baseLineOffset + allLines.length);
     if (remaining <= 0) {
         allDataLoaded = true;
         isBackgroundLoading = false;
@@ -2971,11 +3010,12 @@ function loadNextChunk() {
     }
     
     const chunkSize = Math.min(backgroundLoadChunkSize, remaining);
-    console.log(`📥 后台加载: 第 ${allLines.length} - ${allLines.length + chunkSize} 行`);
+    const startLine = baseLineOffset + allLines.length;
+    console.log(`📥 后台加载: 第 ${startLine} - ${startLine + chunkSize} 行（baseOffset=${baseLineOffset}）`);
     
     vscode.postMessage({
         command: 'loadMore',
-        startLine: allLines.length,
+        startLine: startLine,
         count: chunkSize
     });
     
@@ -3410,7 +3450,7 @@ function getCurrentBucketIndex() {
 // 绘制时间线上的当前位置指示器（高亮当前时间块）
 function drawTimelineIndicator(ctx, width, height) {
     const currentBucket = getCurrentBucketIndex();
-    if (currentBucket === -1) {
+    if (currentBucket === -1 || currentBucket == null) {
         return;
     }
     
@@ -3439,49 +3479,6 @@ function getDisplayedLines() {
     const linesWithTime = allLines.filter(line => line && line.timestamp);
     console.log('📋 当前显示的日志行（有时间戳）:', linesWithTime.length);
     return linesWithTime;
-}
-
-// 按时间线桶筛选当前时间段日志
-function filterByTimelineBucket(bucketIndex) {
-    if (!timelineData) return;
-    if (bucketIndex == null || bucketIndex < 0 || bucketIndex >= timelineData.bucketCount) return;
-
-    // 保存筛选前位置，便于之后恢复
-    savePositionBeforeFilter();
-
-    const startMs = timelineData.startTime.getTime() + bucketIndex * timelineData.bucketSize;
-    const endMs = startMs + timelineData.bucketSize;
-    const startTime = new Date(startMs);
-    const endTime = new Date(endMs);
-
-    const filtered = allLines.filter(line => {
-        if (!line.timestamp) return false;
-        const t = new Date(line.timestamp).getTime();
-        return t >= startMs && t < endMs;
-    });
-
-    if (filtered.length === 0) {
-        showToast('⚠️ 该时间段没有日志');
-        return;
-    }
-
-    currentFilterType = 'timeline';
-    currentFilterValue = { start: startTime.toISOString(), end: endTime.toISOString() };
-    showFilterStatus(`时间段: ${startTime.toLocaleString()} ~ ${endTime.toLocaleString()}`);
-
-    allLines = filtered;
-    isFiltering = true;
-
-    handleDataChange();
-    showToast(`⏱ 已切换到时间段视图，共 ${filtered.length} 条日志`);
-}
-
-function filterByTimelineCurrentBucket() {
-    if (lastHoveredBucketIndex == null) {
-        showToast('⚠️ 请先将鼠标移动到时间线上的某一段');
-        return;
-    }
-    filterByTimelineBucket(lastHoveredBucketIndex);
 }
 
 // 点击时间线跳转
@@ -3539,7 +3536,7 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
     // 更新标题显示详细信息
     canvas.title = `${hoverTime.toLocaleString()}\n日志数: ${count}\nERROR: ${levels.ERROR} | WARN: ${levels.WARN} | INFO: ${levels.INFO} | DEBUG: ${levels.DEBUG}`;
 
-    // 在面板中显示当前时间段信息和快捷筛选按钮
+    // 在面板中显示当前时间段信息
     const hoverExtra = document.getElementById('timelineHoverExtra');
     if (hoverExtra) {
         const bucketStartMs = timelineData.startTime.getTime() + bucketIndex * timelineData.bucketSize;
@@ -3547,8 +3544,7 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
         const bucketStart = new Date(bucketStartMs);
         const bucketEnd = new Date(bucketEndMs);
 
-        hoverExtra.innerHTML = `当前: ${bucketStart.toLocaleString()} ~ ${bucketEnd.toLocaleString()} ，日志数: ${count}
-            <button style="margin-left: 8px; padding: 2px 8px; font-size: 11px;" onclick="filterByTimelineCurrentBucket(); event.stopPropagation();">只看这个时间段</button>`;
+        hoverExtra.innerHTML = `当前: ${bucketStart.toLocaleString()} ~ ${bucketEnd.toLocaleString()} ，日志数: ${count}`;
     }
 });
 
@@ -4172,14 +4168,34 @@ function saveHighlightRule() {
 // ========== 设置面板 ==========
 function showSettingsModal() {
     // 如果扩展侧尚未发送配置，可主动请求一次
-    vscode.postMessage({ command: 'getSettings' });
+    try {
+        vscode.postMessage({ command: 'getSettings' });
+    } catch (e) {
+        console.error('发送 getSettings 消息失败:', e);
+    }
 
-    // 将当前配置填入输入框
-    document.getElementById('settingSearchDebounce').value = userSettings.searchDebounceMs;
-    document.getElementById('settingCollapseMinRepeat').value = userSettings.collapseMinRepeatCount;
-    document.getElementById('settingTimelineSample').value = userSettings.timelineSamplePoints;
+    // 将当前配置填入输入框（容错，避免元素不存在时报错）
+    const debounceInput = document.getElementById('settingSearchDebounce');
+    if (debounceInput) {
+        debounceInput.value = userSettings.searchDebounceMs;
+    }
 
-    document.getElementById('settingsModal').style.display = 'block';
+    const collapseInput = document.getElementById('settingCollapseMinRepeat');
+    if (collapseInput) {
+        collapseInput.value = userSettings.collapseMinRepeatCount;
+    }
+
+    const timelineInput = document.getElementById('settingTimelineSample');
+    if (timelineInput) {
+        timelineInput.value = userSettings.timelineSamplePoints;
+    }
+
+    const modal = document.getElementById('settingsModal');
+    if (modal) {
+        modal.style.display = 'block';
+    } else {
+        console.warn('未找到 id 为 settingsModal 的元素');
+    }
 }
 
 function closeSettingsModal() {

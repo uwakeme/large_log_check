@@ -25,10 +25,9 @@
 
 ### 📊 数据分析
 - **统计信息** - 查看总行数、各级别日志数量、时间范围等统计数据
-- **时间线导航** - 可视化时间分布图，点击快速跳转到指定时间段
+- **时间线导航** - 基于全文件采样的可视化时间分布图，点击可跳转到对应时间点附近
 - **位置高亮** - 时间线图上自动高亮当前浏览位置对应的时间块，一目了然
 - **智能定位** - 翻页、跳转时自动更新高亮位置，始终准确反映当前所在时间段
-- **时间段过滤** - 在时间线悬停时可一键“只看这个时间段”的日志
 - **日志导出** - 导出过滤后的日志到新文件
 
 ### 🗑️ 日志管理
@@ -193,12 +192,15 @@ vsce publish
 large_log_check/
 ├── src/
 │   ├── extension.ts          # 扩展主入口，注册命令和事件
-│   ├── logViewerPanel.ts     # WebView面板管理，UI交互逻辑
+│   ├── logViewerPanel.ts     # WebView面板管理，负责注入 HTML/CSS/JS
 │   ├── logProcessor.ts       # 日志处理核心逻辑（读取、搜索、删除）
-│   └── webview.html          # WebView界面（HTML + CSS + JavaScript）
-├── out/                       # TypeScript编译输出目录
+│   └── webview.html          # WebView HTML 模板（结构为主）
+├── media/
+│   ├── webview.css           # WebView 样式
+│   └── webview.js            # WebView 前端逻辑
+├── out/                      # TypeScript 编译输出目录
 ├── package.json              # 项目配置和依赖
-├── tsconfig.json             # TypeScript编译配置
+├── tsconfig.json             # TypeScript 编译配置
 ├── .vscodeignore             # 打包时忽略的文件
 └── README.md                 # 使用说明文档
 ```

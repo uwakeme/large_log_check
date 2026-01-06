@@ -394,14 +394,16 @@ export class LogViewerPanel {
             // 根据文件大小决定加载策略
             let lines;
             let allLoaded = false;
+            let startLine = 0;
             
             if (totalLines <= 50000) {
                 // 小文件，一次性加载所有数据
+                startLine = 0;
                 lines = await this._logProcessor.readLines(0, totalLines);
                 allLoaded = true;
             } else {
                 // 大文件，加载目标行附近的10000行
-                const startLine = Math.max(0, lineNumber - 5000);
+                startLine = Math.max(0, lineNumber - 5000);
                 const count = 10000;
                 lines = await this._logProcessor.readLines(startLine, count);
             }
@@ -420,6 +422,7 @@ export class LogViewerPanel {
                     totalLines: totalLines,
                     lines: lines,
                     allLoaded: allLoaded,
+                    startLine: startLine,
                     targetLineNumber: lineNumber
                 }
             });

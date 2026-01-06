@@ -6,7 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
 ### Fixed
 - 修复时间线加载不完整的问题
 - 优化加载日志逻辑，提升用户体验
@@ -15,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - 搜索框支持输入后自动触发搜索（带轻微防抖），可在设置中调整防抖时间
 - 折叠重复日志的徽标会显示当前搜索命中的条数，便于快速判断重要性
-- 时间线悬停时可一键“只看这个时间段”的日志，实现时间段级快捷过滤
 - 新增设置面板，支持配置搜索防抖时间、折叠最小重复次数、时间线采样点数
+- 统一后台增量加载逻辑，时间线始终基于整文件采样并在跳转后保持正确的当前位置高亮
 
 ## [1.1.4] - 2025-12-16
 ### Added
