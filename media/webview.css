@@ -1,0 +1,881 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+    padding: 10px;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.toolbar {
+    background-color: var(--vscode-editorWidget-background);
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.file-info {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    flex: 1;
+    min-width: 200px;
+}
+
+.search-box {
+    display: flex;
+    gap: 5px;
+    flex: 1;
+    min-width: 100%;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+    padding: 5px 10px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+button {
+    padding: 5px 12px;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+.log-container {
+    flex: 1;
+    overflow-y: auto;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 5px;
+    padding: 10px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.log-line {
+    padding: 2px 0;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-line:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.log-line-number {
+    display: inline-block;
+    width: 60px;
+    color: var(--vscode-editorLineNumber-foreground);
+    user-select: none;
+    text-align: right;
+    padding-right: 10px;
+}
+
+.log-line-content {
+    display: inline;
+}
+
+.jump-btn {
+    display: inline-block;
+    width: 20px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s, transform 0.2s;
+    user-select: none;
+    font-size: 12px;
+}
+
+.jump-btn:hover {
+    opacity: 1;
+    transform: scale(1.2);
+}
+
+.highlight {
+    background-color: var(--vscode-editor-findMatchHighlightBackground);
+    color: var(--vscode-editor-findMatchHighlightForeground);
+}
+
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.stats {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.filter-panel {
+    background-color: var(--vscode-editorWidget-background);
+    padding: 8px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* 筛选状态提示面板 */
+.filter-status-panel {
+    background-color: var(--vscode-editorWidget-background);
+    padding: 8px 12px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border-left: 3px solid var(--vscode-textLink-foreground);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 时间线面板样式 */
+.timeline-panel {
+    background-color: var(--vscode-editorWidget-background);
+    border-radius: 5px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.timeline-header {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.timeline-header:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.timeline-content {
+    padding: 10px;
+    border-top: 1px solid var(--vscode-panel-border);
+}
+
+#timelineCanvas {
+    width: 100%;
+    height: 80px;
+    cursor: pointer;
+}
+
+.checkbox-group {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.log-line.error {
+    border-left: 3px solid #f14c4c;
+    padding-left: 5px;
+}
+
+.log-line.warn {
+    border-left: 3px solid #cca700;
+    padding-left: 5px;
+}
+
+.log-line.info {
+    border-left: 3px solid #4fc1ff;
+    padding-left: 5px;
+}
+
+.log-line.debug {
+    border-left: 3px solid #b267e6;
+    padding-left: 5px;
+}
+
+/* 折叠日志样式 */
+.log-line.collapsed {
+    background-color: rgba(139, 92, 246, 0.1);
+    border-left: 3px solid #8b5cf6;
+    cursor: pointer;
+}
+
+.log-line.collapsed:hover {
+    background-color: rgba(139, 92, 246, 0.2);
+}
+
+.repeat-count {
+    display: inline-block;
+    background-color: #8b5cf6;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 10px;
+    cursor: pointer;
+}
+
+.log-line.highlight-target {
+    background-color: rgba(255, 193, 7, 0.3);
+    border-left: 3px solid #ffc107;
+    animation: highlight-pulse 0.5s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+    0%, 100% { background-color: rgba(255, 193, 7, 0.3); }
+    50% { background-color: rgba(255, 193, 7, 0.6); }
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translateY(-10px); }
+    10% { opacity: 1; transform: translateY(0); }
+    90% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-10px); }
+}
+
+/* 右键菜单样式 */
+.context-menu {
+    position: fixed;
+    background-color: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 3px;
+    padding: 4px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    min-width: 180px;
+}
+
+.context-menu-item {
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--vscode-menu-foreground);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.context-menu-item:hover {
+    background-color: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+}
+
+.context-menu-separator {
+    height: 1px;
+    background-color: var(--vscode-menu-separatorBackground);
+    margin: 4px 0;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: var(--vscode-editor-background);
+    margin: 5% auto;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 5px;
+    width: 80%;
+    max-width: 900px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-content.small {
+    max-width: 480px;
+}
+
+.modal-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+}
+
+.modal-close {
+    color: var(--vscode-foreground);
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--vscode-panel-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.stats-card {
+    background-color: var(--vscode-editorWidget-background);
+    padding: 15px;
+    border-radius: 5px;
+    border: 1px solid var(--vscode-panel-border);
+}
+
+.stats-card h3 {
+    font-size: 14px;
+    margin-bottom: 5px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.stats-card .value {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--vscode-foreground);
+}
+
+/* 分页样式 */
+.pagination {
+    background-color: var(--vscode-editorWidget-background);
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.pagination button {
+    min-width: 35px;
+    padding: 5px 10px;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination .page-info {
+    font-size: 13px;
+    color: var(--vscode-descriptionForeground);
+    margin: 0 10px;
+    font-weight: 500;
+}
+
+.pagination input[type="number"] {
+    width: 60px;
+    padding: 3px 5px;
+    text-align: center;
+}
+
+.pagination select {
+    padding: 6px 8px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.pagination select option {
+    background-color: var(--vscode-dropdown-background);
+    color: var(--vscode-dropdown-foreground);
+    padding: 5px;
+}
+
+/* 增强高亮样式 */
+.highlight-error {
+    background-color: #f14c4c;
+    color: #fff;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: bold;
+}
+
+.highlight-warn {
+    background-color: #cca700;
+    color: #fff;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: bold;
+}
+
+.highlight-info {
+    background-color: #4fc1ff;
+    color: #000;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: bold;
+}
+
+.highlight-time {
+    background-color: #b267e6;
+    color: #fff;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: bold;
+}
+
+/* 线程名高亮 */
+.highlight-thread {
+    background-color: #06b6d4;
+    color: #fff;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: 500;
+}
+
+/* 类名高亮 */
+.highlight-class {
+    background-color: #10b981;
+    color: #fff;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: 500;
+}
+
+/* 方法名高亮 */
+.highlight-method {
+    background-color: #f59e0b;
+    color: #fff;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: 500;
+}
+
+/* 通用 select 和 option 样式 */
+select {
+    background-color: var(--vscode-dropdown-background);
+    color: var(--vscode-dropdown-foreground);
+    border: 1px solid var(--vscode-dropdown-border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+select option {
+    background-color: var(--vscode-dropdown-background);
+    color: var(--vscode-dropdown-foreground);
+    padding: 5px;
+}
+
+/* 注释样式 */
+.comment-badge {
+    display: inline-block;
+    background-color: #10b981;
+    color: #fff;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 5px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.comment-badge:hover {
+    background-color: #059669;
+}
+
+.log-comment {
+    display: block;
+    background-color: rgba(16, 185, 129, 0.1);
+    border-left: 3px solid #10b981;
+    padding: 5px 10px;
+    margin-top: 3px;
+    font-size: 11px;
+    font-style: italic;
+    color: var(--vscode-descriptionForeground);
+}
+
+/* JSON/XML 树状结构样式 */
+.json-tree, .xml-tree {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    margin: 5px 0;
+    padding: 8px;
+    background-color: rgba(107, 114, 128, 0.05);
+    border-radius: 4px;
+    border-left: 3px solid #8b5cf6;
+}
+
+.json-tree-item, .xml-tree-item {
+    margin-left: 15px;
+    position: relative;
+}
+
+.json-tree-toggle, .xml-tree-toggle {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    user-select: none;
+    margin-right: 4px;
+    color: var(--vscode-textLink-foreground);
+    font-weight: bold;
+    vertical-align: middle;
+}
+
+.json-tree-toggle:hover, .xml-tree-toggle:hover {
+    background-color: var(--vscode-list-hoverBackground);
+    border-radius: 2px;
+}
+
+.json-key {
+    color: #9cdcfe;
+    font-weight: 500;
+}
+
+.json-string {
+    color: #ce9178;
+}
+
+.json-number {
+    color: #b5cea8;
+}
+
+.json-boolean {
+    color: #569cd6;
+    font-weight: bold;
+}
+
+.json-null {
+    color: #808080;
+    font-style: italic;
+}
+
+.xml-tag {
+    color: #4ec9b0;
+}
+
+.xml-attr-name {
+    color: #9cdcfe;
+}
+
+.xml-attr-value {
+    color: #ce9178;
+}
+
+.json-tree-collapsed, .xml-tree-collapsed {
+    display: none;
+}
+
+.json-expand-btn {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 2px 6px;
+    font-size: 10px;
+    background-color: #8b5cf6;
+    color: white;
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.json-expand-btn:hover {
+    background-color: #7c3aed;
+}
+
+/* 行内JSON样式 */
+.json-inline {
+    display: inline;
+    margin: 0 3px;
+}
+
+.json-separator {
+    color: var(--vscode-foreground);
+    opacity: 0.8;
+    margin: 0 2px;
+}
+
+.json-error {
+    color: var(--vscode-errorForeground);
+    font-family: monospace;
+    opacity: 0.7;
+}
+
+/* 自定义高亮规则样式 */
+.custom-highlight {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-weight: 500;
+    position: relative;
+}
+
+/* 筛选图标样式 */
+.filter-icon {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 11px;
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 1px 3px;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.filter-icon:hover {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.2);
+    transform: scale(1.2);
+}
+
+.filter-icon:active {
+    transform: scale(0.9);
+}
+
+/* 可点击的筛选项样式 */
+.clickable-filter {
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+.clickable-filter:hover {
+    opacity: 0.85;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.clickable-filter:active {
+    transform: scale(0.95);
+}
+
+.rule-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background-color: var(--vscode-editorWidget-background);
+    border-radius: 5px;
+    margin-bottom: 10px;
+    border-left: 3px solid var(--vscode-panel-border);
+}
+
+.rule-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.color-picker-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.color-display {
+    width: 40px;
+    height: 30px;
+    border-radius: 3px;
+    border: 2px solid var(--vscode-panel-border);
+    cursor: pointer;
+}
+
+.color-display:hover {
+    border-color: var(--vscode-textLink-foreground);
+}
+
+/* 自定义确认对话框 */
+.confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+
+.confirm-dialog {
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 5px;
+    padding: 20px;
+    min-width: 300px;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.confirm-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: var(--vscode-foreground);
+}
+
+.confirm-message {
+    margin-bottom: 20px;
+    color: var(--vscode-foreground);
+    line-height: 1.5;
+}
+
+.confirm-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.confirm-buttons button {
+    padding: 8px 20px;
+    font-size: 13px;
+}
+
+/* 更多菜单下拉样式 */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    right: 0;
+    background-color: var(--vscode-editorWidget-background);
+    min-width: 140px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 3px;
+    z-index: 1000;
+    margin-top: 2px;
+}
+
+.dropdown-content button {
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dropdown-content button:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.dropdown.show .dropdown-content {
+    display: block;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.form-group input[type="number"] {
+    width: 100%;
+    padding: 6px 8px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.hint {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+

@@ -568,6 +568,20 @@ export class LogViewerPanel {
     private _getHtmlForWebview(webview: vscode.Webview) {
         const htmlPath = path.join(this._extensionUri.fsPath, 'src', 'webview.html');
         let html = fs.readFileSync(htmlPath, 'utf8');
+
+        // 生成样式和脚本在 Webview 中可访问的 URI
+        const styleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.css')
+        );
+        const scriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.js')
+        );
+
+        // 用占位符替换为真实路径
+        html = html
+            .replace(/%%WEBVIEW_CSS%%/g, styleUri.toString())
+            .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString());
+
         return html;
     }
 
