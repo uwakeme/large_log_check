@@ -2,6 +2,7 @@ const vscode = acquireVsCodeApi();
 let allLines = [];
 let currentSearchKeyword = '';
 let currentSearchIsRegex = false; // 当前搜索是否为正则模式
+let currentSearchIsMultiple = false; // 当前搜索是否为多关键词模式
 let isInSearchMode = false;       // 是否处于搜索结果模式
 let searchBackup = null;          // 搜索前的状态备份（分页、滚动、数据）
 let originalLines = []; // 保存原始数据用于过滤
@@ -48,23 +49,23 @@ function handleDataChange(options = {}) {
         clearPageRanges = true,     // 是否清空页面范围记录
         triggerAsyncCalc = true     // 是否触发异步计算
     } = options;
-    
+
     console.log('🔄 数据变更处理:', { resetPage, clearPageRanges, triggerAsyncCalc, isCollapseMode, dataLength: allLines.length });
-    
+
     // 重置页码
     if (resetPage) {
         currentPage = 1;
     }
-    
+
     // 清空页面范围记录
     if (clearPageRanges) {
         pageRanges.clear();
     }
-    
+
     // 更新分页器和渲染
     updatePagination();
     renderLines();
-    
+
     // 如果开启了折叠模式且有数据，触发异步计算
     if (triggerAsyncCalc && isCollapseMode && allLines.length > 0) {
         console.log('📊 触发异步页面计算...');
@@ -85,7 +86,7 @@ let backgroundLoadChunkSize = 5000; // 每次后台加载的行数
 
 window.addEventListener('message', event => {
     const message = event.data;
-    
+
     switch (message.command) {
         case 'fileLoaded':
             handleFileLoaded(message.data);
@@ -138,7 +139,7 @@ function handleFileLoaded(data) {
     document.getElementById('fileName').textContent = data.fileName || '';
     document.getElementById('fileSize').textContent = data.fileSize || '0';
     document.getElementById('totalLines').textContent = data.totalLines || '0';
-    
+
     totalLinesInFile = data.totalLines || 0;
     // 初次加载时，数据从文件开头开始
     baseLineOffset = 0;
@@ -146,26 +147,27 @@ function handleFileLoaded(data) {
     isFiltering = false; // 重置过滤状态
     currentSearchKeyword = ''; // 重置搜索关键词
     currentSearchIsRegex = false;
+    currentSearchIsMultiple = false;
     isInSearchMode = false;
     searchBackup = null;
-    
+
     // 清除筛选状态
     currentFilterType = null;
     currentFilterValue = null;
     hideFilterStatus();
-    
+
     allLines = data.lines || [];
     originalLines = [...allLines];
-    
+
     // 统一处理数据变更
     handleDataChange();
-    
+
     // 异步请求采样时间线数据（快速，不阻塞UI）
     vscode.postMessage({
         command: 'sampleTimeline',
         sampleCount: userSettings.timelineSamplePoints || 200  // 采样点数可配置
     });
-    
+
     // 如果数据未全部加载，启动后台加载
     if (!allDataLoaded && allLines.length < totalLinesInFile) {
         // 重置后台加载状态，并从当前偏移量开始统一加载
@@ -177,7 +179,7 @@ function handleFileLoaded(data) {
 function handleMoreLines(data) {
     const newLines = data.lines || [];
     const startLine = typeof data.startLine === 'number' ? data.startLine : (baseLineOffset + allLines.length);
-    
+
     console.log(`📥 handleMoreLines: 收到 ${newLines.length} 行, startLine = ${startLine}, baseLineOffset = ${baseLineOffset}`);
 
     // 确保新数据与当前缓冲区在文件中的位置是连续的：
@@ -193,21 +195,21 @@ function handleMoreLines(data) {
         allLines = allLines.concat(newLines);
         originalLines = originalLines.concat(newLines);
     }
-    
+
     // 如果已计算过统计信息，增量更新统计数据，避免重新扫描整个文件
     if (fileStats) {
         updateStatsWithNewLines(newLines);
     }
-    
+
     // 检查是否已加载全部数据
     if (allLines.length >= totalLinesInFile) {
         allDataLoaded = true;
         isBackgroundLoading = false;
     }
-    
+
     // 更新加载状态显示
     updateLoadingStatus();
-    
+
     // 加载更多数据时不重置页码，但需要重新计算
     handleDataChange({
         resetPage: false,           // 不重置页码
@@ -221,14 +223,15 @@ function handleSearchResults(data) {
     console.log('🔍 搜索结果数量:', data.results ? data.results.length : 'undefined');
     console.log('🔍 搜索关键词:', data.keyword);
     console.log('🔍 修改前 allLines 数量:', allLines.length);
-    
+
     currentSearchKeyword = data.keyword;
     currentSearchIsRegex = !!data.isRegex;
+    currentSearchIsMultiple = !!data.isMultiple;
     allLines = data.results || [];
-    
+
     console.log('🔍 修改后 allLines 数量:', allLines.length);
     console.log('🔍 修改后 currentSearchKeyword:', currentSearchKeyword);
-    
+
     // 如果搜索结果为空，给出提示
     if (allLines.length === 0) {
         vscode.postMessage({
@@ -239,7 +242,7 @@ function handleSearchResults(data) {
     } else {
         console.log('✅ 搜索成功，准备渲染', allLines.length, '条结果');
     }
-    
+
     // 统一处理数据变更
     console.log('🔍 即将调用 handleDataChange');
     handleDataChange();
@@ -256,10 +259,11 @@ function handleFilterResults(data) {
     searchBackup = null;
     currentSearchKeyword = '';
     currentSearchIsRegex = false;
-    
+    currentSearchIsMultiple = false;
+
     // 统一处理数据变更
     handleDataChange();
-    
+
     // 如果过滤结果为空，给出友好提示
     if (allLines.length === 0) {
         const levelText = (data.levels || []).join('、');
@@ -275,7 +279,7 @@ function handleStatisticsResults(data) {
     // 保存统计信息
     fileStats = data;
     console.log('📊 保存文件统计信息:', fileStats);
-    
+
     showStatsModal(data);
 }
 
@@ -324,13 +328,13 @@ function updateStatsWithNewLines(newLines) {
 
 function handleTimelineData(data) {
     console.log('📈 收到时间线采样数据:', data);
-    
+
     if (!data || !data.startTime || !data.endTime || !data.samples || data.samples.length === 0) {
         console.log('⚠️ 时间线数据不完整，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
-    
+
     generateTimelineFromSamples(data);
 }
 
@@ -339,7 +343,7 @@ function handleJumpToLineInFullLogResult(data) {
     document.getElementById('fileName').textContent = data.fileName;
     document.getElementById('fileSize').textContent = data.fileSize;
     document.getElementById('totalLines').textContent = data.totalLines;
-    
+
     totalLinesInFile = data.totalLines;
     allDataLoaded = data.allLoaded || false;
     // 后端可能返回从中间位置开始的一段日志，记录偏移量（默认 0）
@@ -347,17 +351,18 @@ function handleJumpToLineInFullLogResult(data) {
     isFiltering = false; // 重置过滤状态
     currentSearchKeyword = ''; // 重置搜索关键词
     currentSearchIsRegex = false;
+    currentSearchIsMultiple = false;
     isInSearchMode = false;
     searchBackup = null;
-    
+
     allLines = data.lines;
     originalLines = [...data.lines];
-    
+
     // 统一处理数据变更（但不重置页码，因为要跳转到目标行）
     handleDataChange({
         resetPage: false  // 不重置页码，由 jumpToLine 决定
     });
-    
+
     // 跳转到目标行
     jumpToLine(data.targetLineNumber);
 
@@ -369,7 +374,7 @@ function handleJumpToLineInFullLogResult(data) {
         isBackgroundLoading = false;
         startBackgroundLoading();
     }
-    
+
     // 显示成功提示
     showToast('✅ 已跳转到完整日志');
 }
@@ -378,10 +383,10 @@ function renderLines() {
     const container = document.getElementById('logContainer');
     const oldContent = container.innerHTML;
     container.innerHTML = '';
-    
+
     console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length, '，折叠模式:', isCollapseMode, '，搜索关键词:', currentSearchKeyword, '，过滤模式:', isFiltering);
     console.log('🗑️ 已清空容器，旧内容长度:', oldContent.length);
-    
+
     if (allLines.length === 0) {
         container.innerHTML = '<div class="loading">没有日志数据</div>';
         document.getElementById('pagination').style.display = 'none';
@@ -389,10 +394,10 @@ function renderLines() {
         console.log('⚠️ 渲染结果: 显示"没有日志数据"');
         return;
     }
-    
+
     // 计算分页
     let startIndex, endIndex;
-    
+
     if (isCollapseMode && pageRanges.has(currentPage)) {
         // 折叠模式且已记录过该页范围，直接使用
         const range = pageRanges.get(currentPage);
@@ -411,7 +416,7 @@ function renderLines() {
         endIndex = Math.min(startIndex + pageSize, allLines.length);
         console.log(`📖 标准分页计算第 ${currentPage} 页: ${startIndex}-${endIndex}`);
     }
-    
+
     // 如果开启折叠模式，动态调整加载数量以填满页面
     if (isCollapseMode) {
         const targetDisplayLines = pageSize; // 目标显示数量（折叠后）
@@ -420,7 +425,7 @@ function renderLines() {
         let attempts = 0;
         const maxAttempts = 5; // 最多尝试5次，避免死循环
         const maxLoadLines = pageSize * 50; // 最多加载50倍，避免过度加载
-        
+
         // 尝试加载更多数据直到达到目标显示数量
         while (displayCount < targetDisplayLines && tempEndIndex < allLines.length && attempts < maxAttempts) {
             // 限制最大加载范围
@@ -428,18 +433,18 @@ function renderLines() {
                 console.log(`⚠️ 已达到最大加载限制 ${maxLoadLines} 行，停止加载`);
                 break;
             }
-            
+
             const testLines = allLines.slice(startIndex, tempEndIndex);
             const collapsed = collapseRepeatedLines(testLines, startIndex);
             displayCount = collapsed.length;
-            
+
             console.log(`🔄 尝试 ${attempts + 1}：加载 ${tempEndIndex - startIndex} 行，折叠后得到 ${displayCount} 条，目标 ${targetDisplayLines} 条`);
-            
+
             if (displayCount < targetDisplayLines) {
                 // 需要加载更多，但要限制增量
                 const needed = targetDisplayLines - displayCount;
                 const ratio = displayCount > 0 ? (tempEndIndex - startIndex) / displayCount : 1;
-                
+
                 // 根据重复率动态调整增量
                 let increment;
                 if (ratio > 50) {
@@ -452,34 +457,34 @@ function renderLines() {
                     // 重复率较低，适度增加
                     increment = Math.ceil(needed * ratio * 0.5);
                 }
-                
+
                 increment = Math.max(increment, 100); // 至少增加100条
                 increment = Math.min(increment, pageSize * 10); // 最多增加10倍pageSize
-                
+
                 tempEndIndex = Math.min(tempEndIndex + increment, allLines.length);
                 attempts++;
             } else {
                 break;
             }
         }
-        
+
         endIndex = tempEndIndex;
         console.log(`📎 折叠模式：最终加载范围 ${startIndex}-${endIndex}（${endIndex - startIndex} 行），折叠后显示 ${displayCount} 条`);
-        
+
         // 记录该页的实际范围
         pageRanges.set(currentPage, { start: startIndex, end: endIndex });
     } else if (isCollapseMode) {
         // 折叠模式但没有智能加载，也要记录范围
         pageRanges.set(currentPage, { start: startIndex, end: endIndex });
     }
-    
+
     let pageLines = allLines.slice(startIndex, endIndex);
-    
+
     // 如果开启折叠模式，进行折叠处理
     if (isCollapseMode) {
         pageLines = collapseRepeatedLines(pageLines, startIndex);
     }
-    
+
     pageLines.forEach((item, index) => {
         // item 可能是单条日志或折叠组
         if (item.isCollapsed) {
@@ -491,25 +496,25 @@ function renderLines() {
             renderSingleLine(container, line, startIndex, index);
         }
     });
-    
+
     document.getElementById('loadedLines').textContent = allLines.length;
     document.getElementById('pagination').style.display = 'flex';
-    
+
     console.log(`✅ 渲染完成！实际显示 ${pageLines.length} 条（原始 ${endIndex - startIndex} 行）`);
 }
 
 // 计算指定页面的范围（不渲染，只计算）
 function calculatePageRange(pageNum) {
     console.log(`🧮 计算第 ${pageNum} 页范围...`);
-    
+
     if (allLines.length === 0) {
         pageRanges.set(pageNum, { start: 0, end: 0 });
         return;
     }
-    
+
     // 计算分页
     let startIndex, endIndex;
-    
+
     if (pageNum === 1) {
         startIndex = 0;
         endIndex = Math.min(pageSize, allLines.length);
@@ -521,7 +526,7 @@ function calculatePageRange(pageNum) {
         console.log(`⚠️ 无法计算第 ${pageNum} 页，缺少上一页数据`);
         return;
     }
-    
+
     // 如果开启折叠模式，动态调整加载数量以填满页面
     if (isCollapseMode) {
         const targetDisplayLines = pageSize;
@@ -530,22 +535,22 @@ function calculatePageRange(pageNum) {
         let attempts = 0;
         const maxAttempts = 5;
         const maxLoadLines = pageSize * 50;
-        
+
         while (displayCount < targetDisplayLines && tempEndIndex < allLines.length && attempts < maxAttempts) {
             if (tempEndIndex - startIndex > maxLoadLines) {
                 break;
             }
-            
+
             const testLines = allLines.slice(startIndex, tempEndIndex);
             const collapsed = collapseRepeatedLines(testLines, startIndex);
             displayCount = collapsed.length;
-            
+
             console.log(`🔄 折叠尝试 ${attempts + 1}: 加载 ${tempEndIndex - startIndex} 行 -> 折叠后 ${displayCount} 条`);
-            
+
             if (displayCount < targetDisplayLines) {
                 const needed = targetDisplayLines - displayCount;
                 const ratio = displayCount > 0 ? (tempEndIndex - startIndex) / displayCount : 1;
-                
+
                 // 根据重复率动态调整增量
                 // 如果折叠率很高（ratio大），说明重复很多，需要加载更多行
                 let increment;
@@ -559,7 +564,7 @@ function calculatePageRange(pageNum) {
                     // 重复率较低，适度增加
                     increment = Math.ceil(needed * ratio * 0.5);
                 }
-                
+
                 increment = Math.max(increment, 100);  // 最少增加100行
                 increment = Math.min(increment, pageSize * 10);  // 最多一次增加1000行
                 tempEndIndex = Math.min(tempEndIndex + increment, allLines.length);
@@ -568,10 +573,10 @@ function calculatePageRange(pageNum) {
                 break;
             }
         }
-        
+
         endIndex = tempEndIndex;
     }
-    
+
     pageRanges.set(pageNum, { start: startIndex, end: endIndex });
     console.log(`✅ 第 ${pageNum} 页范围: ${startIndex}-${endIndex}`);
 }
@@ -581,26 +586,26 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
     if (allLines.length === 0 || !isCollapseMode) {
         return;
     }
-    
+
     // 生成新的计算任务ID，取消旧任务
     currentCalculationId++;
     const myCalculationId = currentCalculationId;
     console.log(`📊 开始新的计算任务 #${myCalculationId}，取消旧任务... (清空范围: ${shouldClearRanges})`);
-    
+
     isCalculatingPages = true;
     calculationProgress = 0;
-    
+
     // 只在需要时清空页面范围
     if (shouldClearRanges) {
         pageRanges.clear();
     }
-    
+
     updatePagination(); // 更新UI显示"计算中..."
-    
+
     // 如果不清空范围，从已计算的最后一页继续
     let pageNum = 1;
     let lastEndIndex = 0;
-    
+
     if (!shouldClearRanges && pageRanges.size > 0) {
         // 找到最后已计算的页面
         const lastPage = Math.max(...Array.from(pageRanges.keys()));
@@ -611,7 +616,7 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
             console.log(`📊 任务 #${myCalculationId} 从第 ${pageNum} 页继续计算 (上次结束位置: ${lastEndIndex})`);
         }
     }
-    
+
     // 使用分批处理，每次计算5页，然后让出CPU时间
     while (lastEndIndex < allLines.length && isCollapseMode) {
         // 检查是否被新任务取代
@@ -619,12 +624,12 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
             console.log(`⚠️ 计算任务 #${myCalculationId} 被新任务取代，停止计算`);
             return;
         }
-        
+
         // 批量计算5页
         for (let i = 0; i < 5 && lastEndIndex < allLines.length; i++) {
             // 检查折叠模式和任务ID
             if (!isCollapseMode || myCalculationId !== currentCalculationId) break;
-            
+
             calculatePageRange(pageNum);
             const range = pageRanges.get(pageNum);
             if (range) {
@@ -634,7 +639,7 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
                 break;
             }
         }
-        
+
         // 如果已经取消折叠模式或被新任务取代，退出计算
         if (!isCollapseMode) {
             console.log(`⚠️ 计算任务 #${myCalculationId} - 折叠模式已取消，停止计算`);
@@ -642,21 +647,21 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
             calculationProgress = 0;
             return;
         }
-        
+
         if (myCalculationId !== currentCalculationId) {
             console.log(`⚠️ 计算任务 #${myCalculationId} 被取代，停止计算`);
             return;
         }
-        
+
         // 计算进度
         calculationProgress = Math.min(99, Math.floor((lastEndIndex / allLines.length) * 100));
         console.log(`📊 计算任务 #${myCalculationId} 进度: ${calculationProgress}% (已计算 ${pageNum - 1} 页，处理到第 ${lastEndIndex} 行)`);
         updatePagination(); // 更新进度显示
-        
+
         // 让出CPU时间，保持页面响应
         await new Promise(resolve => setTimeout(resolve, 10));
     }
-    
+
     // 最后再次确认是否仍是当前任务
     if (myCalculationId === currentCalculationId) {
         calculationProgress = 100;
@@ -671,23 +676,23 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
 // 提取日志的核心内容（去除时间戳）
 function extractLogContent(line) {
     const content = (line.content || line).toString();
-    
+
     // 尝试移除常见的时间戳格式
     // 格式1: 2025-11-20 08:16:50.054
     let result = content.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+\s*/, '');
-    
+
     // 格式2: [2025-11-20 08:16:50.054]
     result = result.replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?\]\s*/, '');
-    
+
     // 格式3: 2025-11-20 08:16:50
     result = result.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*/, '');
-    
+
     // 格式4: [2025-11-20 08:16:50]
     result = result.replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\]\s*/, '');
-    
+
     // 格式5: 2025/11/20 08:16:50.054
     result = result.replace(/^\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?\s*/, '');
-    
+
     return result.trim();
 }
 
@@ -697,12 +702,12 @@ function collapseRepeatedLines(lines, startIndex) {
     const result = [];
     let i = 0;
     let totalCollapsed = 0;
-    
+
     while (i < lines.length) {
         // 尝试不同的模式长度（1行、2行、3行...最多10行）
         let bestPatternLength = 0;
         let bestRepeatCount = 0;
-        
+
         for (let patternLength = 1; patternLength <= Math.min(10, Math.floor((lines.length - i) / 2)); patternLength++) {
             // 获取当前模式（去除时间戳）
             const pattern = [];
@@ -711,13 +716,13 @@ function collapseRepeatedLines(lines, startIndex) {
                 const content = extractLogContent(lines[i + k]);
                 pattern.push(content);
             }
-            
+
             if (pattern.length < patternLength) break;
-            
+
             // 检测这个模式重复了多少次
             let repeatCount = 1;
             let j = i + patternLength;
-            
+
             while (j + patternLength <= lines.length) {
                 let matches = true;
                 for (let k = 0; k < patternLength; k++) {
@@ -727,7 +732,7 @@ function collapseRepeatedLines(lines, startIndex) {
                         break;
                     }
                 }
-                
+
                 if (matches) {
                     repeatCount++;
                     j += patternLength;
@@ -735,27 +740,27 @@ function collapseRepeatedLines(lines, startIndex) {
                     break;
                 }
             }
-            
+
             // 如果这个模式至少重复2次，且比之前找到的更好
             if (repeatCount >= 2 && repeatCount > bestRepeatCount) {
                 bestPatternLength = patternLength;
                 bestRepeatCount = repeatCount;
             }
         }
-        
+
         const minRepeat = Math.max(1, userSettings.collapseMinRepeatCount || 2);
         if (bestPatternLength > 0 && bestRepeatCount >= minRepeat) {
             // 找到了重复模式
             const firstLineNumber = lines[i].lineNumber || (startIndex + i + 1);
             const groupId = `group_${firstLineNumber}`;
             const totalLines = bestPatternLength * bestRepeatCount;
-            
+
             console.log(`✅ 找到重复模式：从行 ${firstLineNumber} 开始，${bestPatternLength} 行为一组，重复 ${bestRepeatCount} 次，共 ${totalLines} 行`);
             if (bestPatternLength > 1) {
                 console.log('  模式第一行:', extractLogContent(lines[i]).substring(0, 80));
             }
             totalCollapsed++;
-            
+
             result.push({
                 isCollapsed: true,
                 groupId: groupId,
@@ -765,7 +770,7 @@ function collapseRepeatedLines(lines, startIndex) {
                 firstLine: lines[i],
                 isExpanded: expandedGroups.has(groupId)
             });
-            
+
             i += totalLines;
         } else {
             // 没有重复，直接添加
@@ -773,7 +778,7 @@ function collapseRepeatedLines(lines, startIndex) {
             i++;
         }
     }
-    
+
     console.log(`📊 折叠完成！找到 ${totalCollapsed} 个重复组，最终输出 ${result.length} 条`);
     return result;
 }
@@ -783,21 +788,21 @@ function renderCollapsedGroup(container, group) {
     const lineDiv = document.createElement('div');
     lineDiv.className = 'log-line collapsed';
     lineDiv.dataset.groupId = group.groupId;
-    
+
     // 添加级别样式
     if (group.firstLine.level) {
         lineDiv.classList.add(group.firstLine.level.toLowerCase());
     }
-    
+
     const firstLineNumber = group.firstLine.lineNumber || group.lines[0].lineNumber;
-    
+
     const lineNumber = document.createElement('span');
     lineNumber.className = 'log-line-number';
     lineNumber.textContent = firstLineNumber.toString();
-    
+
     const lineContent = document.createElement('span');
     lineContent.className = 'log-line-content';
-    
+
     // 显示模式的第一行
     const content = group.firstLine.content || group.firstLine;
     let highlightedContent = highlightKeywords(content, currentSearchKeyword);
@@ -809,6 +814,14 @@ function renderCollapsedGroup(container, group) {
             let matcher = null;
             if (currentSearchIsRegex) {
                 matcher = new RegExp(currentSearchKeyword, 'i');
+            } else if (currentSearchIsMultiple) {
+                // 多关键词模式：简单的全匹配检查
+                matcher = {
+                    test: (text) => {
+                        const keywords = currentSearchKeyword.trim().split(/\s+/);
+                        return keywords.every(k => text.toLowerCase().includes(k.toLowerCase()));
+                    }
+                };
             }
             for (const line of group.lines) {
                 const text = (line.content || line || '').toString();
@@ -827,12 +840,12 @@ function renderCollapsedGroup(container, group) {
             console.warn('搜索匹配统计失败:', e);
         }
     }
-    
+
     let matchInfo = '';
     if (matchCount > 0) {
         matchInfo = `，匹配 ${matchCount} 条`;
     }
-    
+
     // 添加重复次数徽章 + 匹配计数
     if (group.patternLength === 1) {
         // 单行重复
@@ -841,18 +854,18 @@ function renderCollapsedGroup(container, group) {
         // 多行模式重复
         highlightedContent += `<span class="repeat-count" title="点击${group.isExpanded ? '折叠' : '展开'}详情">${group.patternLength} 行为一组，重复 ${group.repeatCount} 次${matchInfo}</span>`;
     }
-    
+
     lineContent.innerHTML = highlightedContent;
-    
+
     // 点击展开/折叠
     lineDiv.onclick = () => {
         toggleGroup(group.groupId);
     };
-    
+
     lineDiv.appendChild(lineNumber);
     lineDiv.appendChild(lineContent);
     container.appendChild(lineDiv);
-    
+
     // 如果已展开，显示所有行
     if (group.isExpanded) {
         group.lines.forEach((line, index) => {
@@ -860,25 +873,25 @@ function renderCollapsedGroup(container, group) {
             expandedLineDiv.className = 'log-line';
             expandedLineDiv.style.marginLeft = '20px';
             expandedLineDiv.style.opacity = '0.8';
-            
+
             // 每个模式组之间加个分隔线
             if (index > 0 && index % group.patternLength === 0) {
                 expandedLineDiv.style.borderTop = '1px dashed rgba(139, 92, 246, 0.3)';
                 expandedLineDiv.style.marginTop = '3px';
                 expandedLineDiv.style.paddingTop = '3px';
             }
-            
+
             const actualLineNumber = line.lineNumber || (firstLineNumber + index);
-            
+
             const expandedLineNumber = document.createElement('span');
             expandedLineNumber.className = 'log-line-number';
             expandedLineNumber.textContent = actualLineNumber.toString();
-            
+
             const expandedLineContent = document.createElement('span');
             expandedLineContent.className = 'log-line-content';
             const expandedContent = line.content || line;
             expandedLineContent.innerHTML = highlightKeywords(expandedContent, currentSearchKeyword);
-            
+
             expandedLineDiv.appendChild(expandedLineNumber);
             expandedLineDiv.appendChild(expandedLineContent);
             container.appendChild(expandedLineDiv);
@@ -890,73 +903,73 @@ function renderCollapsedGroup(container, group) {
 function renderSingleLine(container, line, startIndex, index) {
     const lineDiv = document.createElement('div');
     lineDiv.className = 'log-line';
-    
+
     const actualLineNumber = line.lineNumber || startIndex + index + 1;
-    
+
     // 根据日志级别添加样式
     if (line.level) {
         lineDiv.classList.add(line.level.toLowerCase());
     }
-    
+
     // 如果是书签行，添加书签标记
     if (bookmarks.has(actualLineNumber)) {
         lineDiv.style.backgroundColor = 'rgba(255, 193, 7, 0.1)';
         lineDiv.style.borderRight = '3px solid #ffc107';
     }
-    
+
     const lineNumber = document.createElement('span');
     lineNumber.className = 'log-line-number';
     lineNumber.textContent = actualLineNumber.toString();
-    
+
     // 如果是书签，显示书签图标
     if (bookmarks.has(actualLineNumber)) {
         lineNumber.textContent = '📌 ' + lineNumber.textContent;
     }
-    
+
     const lineContent = document.createElement('span');
     lineContent.className = 'log-line-content';
-    
+
     const content = line.content || line;
-    
+
     // 尝试解析JSON/XML并添加到日志内容后面
     const parsedStructure = detectAndParseStructuredData(content);
-    
+
     // 增强高亮功能
     let highlightedContent = highlightKeywords(content, currentSearchKeyword);
-    
+
     // 如果有注释，添加注释徽章
     if (comments.has(actualLineNumber)) {
         highlightedContent += `<span class="comment-badge" onclick="event.stopPropagation(); editComment(${actualLineNumber})" title="点击编辑注释">📝 有注释</span>`;
     }
-    
+
     lineContent.innerHTML = highlightedContent;
-    
+
     // 添加右键菜单复制功能
     lineDiv.oncontextmenu = (e) => {
         e.preventDefault();
         showContextMenu(e, content, actualLineNumber);
     };
-    
+
     // 添加双击书签功能（只有在没有选中文本时才触发）
     lineDiv.ondblclick = (e) => {
         // 检查是否有文本被选中
         const selection = window.getSelection();
         const selectedText = selection.toString();
-        
+
         // 如果有文本被选中，说明用户想复制，不触发书签
         if (selectedText && selectedText.trim().length > 0) {
             console.log('📋 用户选中了文本，不触发书签');
             return;
         }
-        
+
         e.stopPropagation();
         toggleBookmark(actualLineNumber);
     };
-    
+
     // 先添加行号和内容
     lineDiv.appendChild(lineNumber);
     lineDiv.appendChild(lineContent);
-    
+
     // 搜索/过滤模式下，在行号前添加跳转按钮（不再自动点击跳转）
     if (currentSearchKeyword || isFiltering) {
         // 添加一个小的跳转按钮
@@ -971,14 +984,14 @@ function renderSingleLine(container, line, startIndex, index) {
         // 在行号之前插入跳转按钮
         lineDiv.insertBefore(jumpBtn, lineNumber);
     }
-    
+
     // 如果解析出JSON/XML结构，添加到下方
     if (parsedStructure) {
         const structDiv = document.createElement('div');
         structDiv.innerHTML = parsedStructure;
         lineDiv.appendChild(structDiv);
     }
-    
+
     // 如果有注释，在下方显示注释内容
     if (comments.has(actualLineNumber)) {
         const commentDiv = document.createElement('div');
@@ -986,7 +999,7 @@ function renderSingleLine(container, line, startIndex, index) {
         commentDiv.textContent = '📝 ' + comments.get(actualLineNumber);
         lineDiv.appendChild(commentDiv);
     }
-    
+
     container.appendChild(lineDiv);
 }
 
@@ -1004,9 +1017,9 @@ function toggleGroup(groupId) {
 function toggleCollapseMode() {
     isCollapseMode = document.getElementById('collapseRepeated').checked;
     console.log('🔍 切换折叠模式:', isCollapseMode);
-    
+
     expandedGroups.clear(); // 清空展开状态
-    
+
     // 统一处理数据变更
     handleDataChange();
 }
@@ -1014,29 +1027,29 @@ function toggleCollapseMode() {
 // 增强的关键词高亮功能 - 使用自定义规则
 function highlightKeywords(content, keyword) {
     if (!content) return '';
-    
+
     let result = escapeHtml(content);
-    
+
     // 应用所有启用的自定义高亮规则
     customHighlightRules.forEach(rule => {
         if (!rule.enabled) return;
-        
+
         try {
             if (rule.type === 'text') {
                 // 文本匹配
                 const escaped = escapeRegex(rule.pattern);
                 const regex = new RegExp('(' + escaped + ')', 'gi');
-                result = result.replace(regex, function(match) {
+                result = result.replace(regex, function (match) {
                     return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
                 });
             } else {
                 // 正则表达式匹配
                 const regex = new RegExp(rule.pattern, 'g');
-                
+
                 // 根据规则名称判断是否需要添加点击事件
                 if (rule.name === '线程名') {
                     // 线程名 - 添加筛选图标
-                    result = result.replace(regex, function(match) {
+                    result = result.replace(regex, function (match) {
                         // 提取方括号内的线程名
                         const threadNameMatch = match.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
                         if (threadNameMatch) {
@@ -1047,13 +1060,13 @@ function highlightKeywords(content, keyword) {
                     });
                 } else if (rule.name === '类名') {
                     // 类名 - 添加筛选图标
-                    result = result.replace(regex, function(match) {
+                    result = result.replace(regex, function (match) {
                         const className = match.trim();
                         return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${className.replace(/'/g, "\\'")}')" title="点击筛选类: ${className}">🔍</span></span>`;
                     });
                 } else if (rule.name === '方法名') {
                     // 方法名 - 添加筛选图标（匹配 [methodName:lineNumber]）
-                    result = result.replace(regex, function(match) {
+                    result = result.replace(regex, function (match) {
                         // 提取方括号内的方法名（去掉行号）
                         const methodMatch = match.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
                         if (methodMatch) {
@@ -1064,7 +1077,7 @@ function highlightKeywords(content, keyword) {
                     });
                 } else {
                     // 其他规则 - 不添加点击事件
-                    result = result.replace(regex, function(match) {
+                    result = result.replace(regex, function (match) {
                         return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
                     });
                 }
@@ -1073,13 +1086,24 @@ function highlightKeywords(content, keyword) {
             console.error(`规则 "${rule.name}" 应用失败:`, e);
         }
     });
-    
+
     // 高亮搜索关键词（最后处理，避免覆盖其他高亮）
     if (keyword) {
-        const regex = new RegExp('(' + escapeRegex(keyword) + ')', 'gi');
-        result = result.replace(regex, '<span class="highlight">$1</span>');
+        if (currentSearchIsMultiple) {
+            // 多关键词模式：拆分并分别高亮
+            const keywords = keyword.trim().split(/\s+/);
+            keywords.forEach(k => {
+                if (k) {
+                    const regex = new RegExp('(' + escapeRegex(k) + ')', 'gi');
+                    result = result.replace(regex, '<span class="highlight">$1</span>');
+                }
+            });
+        } else {
+            const regex = new RegExp('(' + escapeRegex(keyword) + ')', 'gi');
+            result = result.replace(regex, '<span class="highlight">$1</span>');
+        }
     }
-    
+
     return result;
 }
 
@@ -1097,11 +1121,12 @@ function search() {
     const keyword = document.getElementById('searchInput').value;
     const isRegex = document.getElementById('regexMode').checked;
     const isReverse = document.getElementById('reverseMode').checked;
-    
+
     // 关键字为空：如果之前在搜索模式下，则恢复到搜索前的位置和数据
     if (!keyword) {
         currentSearchKeyword = '';
         currentSearchIsRegex = false;
+        currentSearchIsMultiple = false;
 
         if (isInSearchMode && searchBackup) {
             console.log('🔙 清空搜索，恢复到搜索前状态');
@@ -1151,11 +1176,13 @@ function search() {
         isInSearchMode = true;
         console.log('💾 已备份搜索前的分页与滚动位置:', searchBackup);
     }
-    
+
     // 保存搜索关键词和模式用于高亮与折叠组统计
     currentSearchKeyword = keyword;
     currentSearchIsRegex = isRegex;
-    
+    const isMultiple = document.getElementById('multipleMode').checked;
+    currentSearchIsMultiple = isMultiple;
+
     if (isRegex) {
         vscode.postMessage({
             command: 'regexSearch',
@@ -1167,10 +1194,11 @@ function search() {
         vscode.postMessage({
             command: 'search',
             keyword: keyword,
-            reverse: isReverse
+            reverse: isReverse,
+            isMultiple: isMultiple
         });
     }
-    
+
     if (isReverse) {
         showToast('🔽 反向搜索中...');
     }
@@ -1183,22 +1211,22 @@ function applyFilter() {
     const infoChecked = document.getElementById('filterInfo').checked;
     const debugChecked = document.getElementById('filterDebug').checked;
     const otherChecked = document.getElementById('filterOther').checked;
-    
+
     if (errorChecked) { levels.push('ERROR'); }
     if (warnChecked) { levels.push('WARN'); }
     if (infoChecked) { levels.push('INFO'); }
     if (debugChecked) { levels.push('DEBUG'); }
-    
+
     console.log('Filter applied:', levels);
     console.log('Checkboxes:', { errorChecked, warnChecked, infoChecked, debugChecked, otherChecked });
-    
+
     // 更新全选框状态
     const allChecked = errorChecked && warnChecked && infoChecked && debugChecked && otherChecked;
     const allUnchecked = !errorChecked && !warnChecked && !infoChecked && !debugChecked && !otherChecked;
     const filterAllCheckbox = document.getElementById('filterAll');
-    
+
     console.log('🔵 检查全选状态 - allChecked:', allChecked, 'allUnchecked:', allUnchecked);
-    
+
     if (allChecked) {
         filterAllCheckbox.checked = true;
         filterAllCheckbox.indeterminate = false;
@@ -1208,7 +1236,7 @@ function applyFilter() {
     } else {
         filterAllCheckbox.indeterminate = true;
     }
-    
+
     // 如果全部选中，刷新显示所有数据
     if (allChecked) {
         console.log('⚠️ 全部选中，刷新...');
@@ -1217,7 +1245,7 @@ function applyFilter() {
         }
         return;
     }
-    
+
     // 如果全部不选，显示空
     if (levels.length === 0) {
         console.log('⚠️ 没有选择任何级别');
@@ -1225,7 +1253,7 @@ function applyFilter() {
         renderLines();
         return;
     }
-    
+
     // 发送筛选请求
     console.log('📤 发送过滤请求:', levels);
     vscode.postMessage({
@@ -1237,13 +1265,13 @@ function applyFilter() {
 function toggleAll() {
     const filterAll = document.getElementById('filterAll');
     const checked = filterAll.checked;
-    
+
     document.getElementById('filterError').checked = checked;
     document.getElementById('filterWarn').checked = checked;
     document.getElementById('filterInfo').checked = checked;
     document.getElementById('filterDebug').checked = checked;
     document.getElementById('filterOther').checked = checked;
-    
+
     filterAll.indeterminate = false;
     applyFilter();
 }
@@ -1256,15 +1284,15 @@ function showStats() {
 
 function showStatsModal(stats) {
     const grid = document.getElementById('statsGrid');
-    
+
     // 转换 Map 为数组并排序
-    const classStats = stats.classCounts ? 
+    const classStats = stats.classCounts ?
         Array.from(Object.entries(stats.classCounts)).sort((a, b) => b[1] - a[1]).slice(0, 10) : [];
-    const methodStats = stats.methodCounts ? 
+    const methodStats = stats.methodCounts ?
         Array.from(Object.entries(stats.methodCounts)).sort((a, b) => b[1] - a[1]).slice(0, 10) : [];
-    const threadStats = stats.threadCounts ? 
+    const threadStats = stats.threadCounts ?
         Array.from(Object.entries(stats.threadCounts)).sort((a, b) => b[1] - a[1]).slice(0, 10) : [];
-    
+
     grid.innerHTML = `
         <div class="stats-card">
             <h3>总行数</h3>
@@ -1291,7 +1319,7 @@ function showStatsModal(stats) {
             <div class="value">${stats.otherCount}</div>
         </div>
     `;
-    
+
     if (stats.timeRange && stats.timeRange.start) {
         grid.innerHTML += `
             <div class="stats-card" style="grid-column: 1 / -1;">
@@ -1303,15 +1331,15 @@ function showStatsModal(stats) {
             </div>
         `;
     }
-    
+
     // 添加类名统计
     if (classStats.length > 0) {
         grid.innerHTML += `
             <div class="stats-card" style="grid-column: 1 / -1;">
                 <h3>📊 最活跃的类 (Top 10)</h3>
                 <div style="font-size: 13px; margin-top: 10px;">
-                    ${classStats.map(([name, count]) => 
-                        `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
+                    ${classStats.map(([name, count]) =>
+            `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
                               onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
                               onmouseout="this.style.backgroundColor='transparent'"
                               onclick="filterByClassName('${name.replace(/'/g, "\\'")}')"
@@ -1319,20 +1347,20 @@ function showStatsModal(stats) {
                             <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
                             <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
                         </div>`
-                    ).join('')}
+        ).join('')}
                 </div>
             </div>
         `;
     }
-    
+
     // 添加方法名统计
     if (methodStats.length > 0) {
         grid.innerHTML += `
             <div class="stats-card" style="grid-column: 1 / -1;">
                 <h3>🔧 最常调用的方法 (Top 10)</h3>
                 <div style="font-size: 13px; margin-top: 10px;">
-                    ${methodStats.map(([name, count]) => 
-                        `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
+                    ${methodStats.map(([name, count]) =>
+            `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
                               onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
                               onmouseout="this.style.backgroundColor='transparent'"
                               onclick="filterByMethodName('${name.replace(/'/g, "\\'")}')"
@@ -1340,20 +1368,20 @@ function showStatsModal(stats) {
                             <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
                             <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
                         </div>`
-                    ).join('')}
+        ).join('')}
                 </div>
             </div>
         `;
     }
-    
+
     // 添加线程名统计
     if (threadStats.length > 0) {
         grid.innerHTML += `
             <div class="stats-card" style="grid-column: 1 / -1;">
                 <h3>🧵 最活跃的线程 (Top 10)</h3>
                 <div style="font-size: 13px; margin-top: 10px;">
-                    ${threadStats.map(([name, count]) => 
-                        `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
+                    ${threadStats.map(([name, count]) =>
+            `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
                               onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
                               onmouseout="this.style.backgroundColor='transparent'"
                               onclick="filterByThreadName('${name.replace(/'/g, "\\'")}')"
@@ -1361,12 +1389,12 @@ function showStatsModal(stats) {
                             <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
                             <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
                         </div>`
-                    ).join('')}
+        ).join('')}
                 </div>
             </div>
         `;
     }
-    
+
     document.getElementById('statsModal').style.display = 'block';
 }
 
@@ -1389,7 +1417,7 @@ function toggleBookmark(lineNumber) {
 function showBookmarksModal() {
     const modal = document.getElementById('bookmarksModal');
     const list = document.getElementById('bookmarksList');
-    
+
     if (bookmarks.size === 0) {
         list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无书签<br>双击日志行可添加书签</div>';
     } else {
@@ -1398,7 +1426,7 @@ function showBookmarksModal() {
             const line = allLines.find(l => l.lineNumber === lineNum);
             const content = line ? (line.content || line) : '（已不存在）';
             const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
-            
+
             return `
                 <div style="padding: 10px; margin-bottom: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #ffc107; cursor: pointer; transition: background-color 0.2s;"
                      onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'"
@@ -1415,7 +1443,7 @@ function showBookmarksModal() {
             `;
         }).join('');
     }
-    
+
     modal.style.display = 'block';
 }
 
@@ -1491,25 +1519,25 @@ function showCustomConfirm(message, title = '确认') {
         // 创建遮罩层
         const overlay = document.createElement('div');
         overlay.className = 'confirm-overlay';
-        
+
         // 创建对话框
         const dialog = document.createElement('div');
         dialog.className = 'confirm-dialog';
-        
+
         // 标题
         const titleEl = document.createElement('div');
         titleEl.className = 'confirm-title';
         titleEl.textContent = title;
-        
+
         // 消息
         const messageEl = document.createElement('div');
         messageEl.className = 'confirm-message';
         messageEl.textContent = message;
-        
+
         // 按钮容器
         const buttonsDiv = document.createElement('div');
         buttonsDiv.className = 'confirm-buttons';
-        
+
         // 取消按钮
         const cancelBtn = document.createElement('button');
         cancelBtn.textContent = '取消';
@@ -1517,7 +1545,7 @@ function showCustomConfirm(message, title = '确认') {
             document.body.removeChild(overlay);
             resolve(false);
         });
-        
+
         // 确认按钮
         const confirmBtn = document.createElement('button');
         confirmBtn.textContent = '确认';
@@ -1525,17 +1553,17 @@ function showCustomConfirm(message, title = '确认') {
             document.body.removeChild(overlay);
             resolve(true);
         });
-        
+
         buttonsDiv.appendChild(cancelBtn);
         buttonsDiv.appendChild(confirmBtn);
-        
+
         dialog.appendChild(titleEl);
         dialog.appendChild(messageEl);
         dialog.appendChild(buttonsDiv);
-        
+
         overlay.appendChild(dialog);
         document.body.appendChild(overlay);
-        
+
         // 点击遮罩层关闭
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
@@ -1543,7 +1571,7 @@ function showCustomConfirm(message, title = '确认') {
                 resolve(false);
             }
         });
-        
+
         // 聚焦确认按钮
         confirmBtn.focus();
     });
@@ -1561,7 +1589,7 @@ function closeMoreMenu() {
 }
 
 // 点击外部关闭下拉菜单
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
     const dropdown = document.querySelector('.dropdown');
     if (dropdown && !dropdown.contains(event.target)) {
         dropdown.classList.remove('show');
@@ -1570,29 +1598,29 @@ document.addEventListener('click', function(event) {
 
 function addOrEditComment(lineNumber) {
     console.log('📝 addOrEditComment 被调用，行号:', lineNumber);
-    
+
     currentCommentLineNumber = lineNumber;
     const existingComment = comments.get(lineNumber) || '';
     const line = allLines.find(l => l.lineNumber === lineNumber);
     const content = line ? (line.content || line) : '';
     const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
-    
+
     // 设置弹窗内容
     document.getElementById('commentInputTitle').textContent = existingComment ? '✏️ 编辑注释' : '📝 添加注释';
     document.getElementById('commentInputLineNumber').textContent = lineNumber;
     document.getElementById('commentInputPreview').textContent = content;
     document.getElementById('commentInputText').value = existingComment;
-    
+
     // 显示弹窗
     document.getElementById('commentInputModal').style.display = 'block';
-    
+
     // 自动聚焦到输入框
     setTimeout(() => {
         const textarea = document.getElementById('commentInputText');
         textarea.focus();
         textarea.select();
     }, 100);
-    
+
 }
 
 function closeCommentInputModal() {
@@ -1604,11 +1632,11 @@ function confirmCommentInput() {
     if (currentCommentLineNumber === null) {
         return;
     }
-    
+
     const lineNumber = currentCommentLineNumber;
     const commentText = document.getElementById('commentInputText').value;
     const existingComment = comments.get(lineNumber) || '';
-    
+
     if (commentText.trim()) {
         comments.set(lineNumber, commentText.trim());
         showToast(`✅ 注释已${existingComment ? '更新' : '添加'}`);
@@ -1617,7 +1645,7 @@ function confirmCommentInput() {
         comments.delete(lineNumber);
         showToast('❌ 注释已删除');
     }
-    
+
     renderLines();
     closeCommentInputModal();
 }
@@ -1637,7 +1665,7 @@ function deleteComment(lineNumber) {
 function showCommentsModal() {
     const modal = document.getElementById('commentsModal');
     const list = document.getElementById('commentsList');
-    
+
     if (comments.size === 0) {
         list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无注释<br>右键点击日志行可添加注释</div>';
     } else {
@@ -1647,7 +1675,7 @@ function showCommentsModal() {
             const line = allLines.find(l => l.lineNumber === lineNum);
             const content = line ? (line.content || line) : '（已不存在）';
             const preview = content.substring(0, 80) + (content.length > 80 ? '...' : '');
-            
+
             return `
                 <div style="padding: 12px; margin-bottom: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #10b981;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -1667,7 +1695,7 @@ function showCommentsModal() {
             `;
         }).join('');
     }
-    
+
     modal.style.display = 'block';
 }
 
@@ -1705,7 +1733,7 @@ function showToast(message) {
         animation: fadeInOut 2s ease-in-out;
     `;
     document.body.appendChild(toast);
-    
+
     setTimeout(() => {
         if (document.body.contains(toast)) {
             document.body.removeChild(toast);
@@ -1716,19 +1744,19 @@ function showToast(message) {
 // ========== 复制功能 ==========
 let currentContextMenu = null;
 
-function showContextMenu(event, content, lineNumber) {            
+function showContextMenu(event, content, lineNumber) {
     // 移除旧的菜单
     if (currentContextMenu) {
         document.body.removeChild(currentContextMenu);
     }
-    
+
     // 获取选中的文本
     const selectedText = window.getSelection().toString();
-    
+
     // 创建菜单
     const menu = document.createElement('div');
     menu.className = 'context-menu';
-    
+
     // 复制选中文本
     if (selectedText) {
         const copySelectedItem = document.createElement('div');
@@ -1740,13 +1768,13 @@ function showContextMenu(event, content, lineNumber) {
             closeContextMenu();
         };
         menu.appendChild(copySelectedItem);
-        
+
         // 分隔线
         const separator1 = document.createElement('div');
         separator1.className = 'context-menu-separator';
         menu.appendChild(separator1);
     }
-    
+
     // 复制整行
     const copyLineItem = document.createElement('div');
     copyLineItem.className = 'context-menu-item';
@@ -1757,18 +1785,18 @@ function showContextMenu(event, content, lineNumber) {
         closeContextMenu();
     };
     menu.appendChild(copyLineItem);
-    
+
     // 分隔线
     const separator2 = document.createElement('div');
     separator2.className = 'context-menu-separator';
     menu.appendChild(separator2);
-    
+
     // 添加/移除书签
     const bookmarkItem = document.createElement('div');
     bookmarkItem.className = 'context-menu-item';
     const isBookmarked = bookmarks.has(lineNumber);
-    bookmarkItem.innerHTML = isBookmarked 
-        ? '<span>❌</span><span>移除书签</span>' 
+    bookmarkItem.innerHTML = isBookmarked
+        ? '<span>❌</span><span>移除书签</span>'
         : '<span>📌</span><span>添加书签</span>';
     bookmarkItem.onclick = (e) => {
         e.stopPropagation();
@@ -1776,7 +1804,7 @@ function showContextMenu(event, content, lineNumber) {
         closeContextMenu();
     };
     menu.appendChild(bookmarkItem);
-    
+
     // 添加/编辑注释
     const commentItem = document.createElement('div');
     commentItem.className = 'context-menu-item';
@@ -1794,7 +1822,7 @@ function showContextMenu(event, content, lineNumber) {
         }, 100);
     };
     menu.appendChild(commentItem);
-    
+
     // 如果已有注释，显示删除注释选项
     if (hasComment) {
         const deleteCommentItem = document.createElement('div');
@@ -1807,12 +1835,12 @@ function showContextMenu(event, content, lineNumber) {
         };
         menu.appendChild(deleteCommentItem);
     }
-    
+
     // 分隔线
     const separator3 = document.createElement('div');
     separator3.className = 'context-menu-separator';
     menu.appendChild(separator3);
-    
+
     // 定位到此行（当前视图）
     const jumpItem = document.createElement('div');
     jumpItem.className = 'context-menu-item';
@@ -1823,7 +1851,7 @@ function showContextMenu(event, content, lineNumber) {
         closeContextMenu();
     };
     menu.appendChild(jumpItem);
-    
+
     // 如果是搜索/过滤模式，添加"跳转到完整日志"选项
     if (currentSearchKeyword || isFiltering) {
         const jumpToFullLogItem = document.createElement('div');
@@ -1836,14 +1864,14 @@ function showContextMenu(event, content, lineNumber) {
         };
         menu.appendChild(jumpToFullLogItem);
     }
-    
+
     // 设置位置
     menu.style.left = event.pageX + 'px';
     menu.style.top = event.pageY + 'px';
-    
+
     document.body.appendChild(menu);
     currentContextMenu = menu;
-    
+
     // 点击其他地方关闭菜单
     setTimeout(() => {
         document.addEventListener('click', closeContextMenu);
@@ -1884,7 +1912,7 @@ function showCopyToast() {
         animation: fadeInOut 2s ease-in-out;
     `;
     document.body.appendChild(toast);
-    
+
     setTimeout(() => {
         document.body.removeChild(toast);
     }, 2000);
@@ -1903,17 +1931,17 @@ function confirmAdvancedSearch() {
     const keyword = document.getElementById('advSearchKeyword').value.trim();
     const startTime = document.getElementById('advSearchStartTime').value.trim();
     const endTime = document.getElementById('advSearchEndTime').value.trim();
-    
+
     const levels = [];
     if (document.getElementById('advSearchError').checked) levels.push('ERROR');
     if (document.getElementById('advSearchWarn').checked) levels.push('WARN');
     if (document.getElementById('advSearchInfo').checked) levels.push('INFO');
     if (document.getElementById('advSearchDebug').checked) levels.push('DEBUG');
     if (document.getElementById('advSearchOther').checked) levels.push('OTHER');
-                
+
     // 在已加载的数据中进行过滤
     let results = [...allLines];
-    
+
     // 过滤关键词
     if (keyword) {
         results = results.filter(line => {
@@ -1921,27 +1949,27 @@ function confirmAdvancedSearch() {
             return content.includes(keyword);
         });
     }
-    
+
     // 过滤时间范围
     if (startTime || endTime) {
         results = results.filter(line => {
             if (!line.timestamp) return false;
             const lineTime = new Date(line.timestamp);
-            
+
             if (startTime) {
                 const start = new Date(startTime);
                 if (lineTime < start) return false;
             }
-            
+
             if (endTime) {
                 const end = new Date(endTime);
                 if (lineTime > end) return false;
             }
-            
+
             return true;
         });
     }
-    
+
     // 过滤级别
     if (levels.length > 0 && levels.length < 5) {
         results = results.filter(line => {
@@ -1949,16 +1977,16 @@ function confirmAdvancedSearch() {
             return levels.includes(level);
         });
     }
-    
-    
+
+
     allLines = results;
     currentPage = 1;
     isFiltering = true;
     updatePagination();
     renderLines();
-    
+
     closeAdvancedSearchModal();
-    
+
     if (results.length === 0) {
         alert('未找到符合条件的日志！');
     }
@@ -1970,7 +1998,7 @@ function toggleTimeline() {
     isTimelineExpanded = !isTimelineExpanded;
     const content = document.getElementById('timelineContent');
     const icon = document.getElementById('timelineToggleIcon');
-    
+
     if (isTimelineExpanded) {
         content.style.display = 'block';
         icon.textContent = '▼';
@@ -1983,21 +2011,21 @@ function toggleTimeline() {
 function generateTimeline() {
     // 提取所有带时间戳的日志
     const logsWithTime = allLines.filter(line => line.timestamp);
-    
+
     if (logsWithTime.length === 0) {
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
-    
+
     // 显示时间线面板
     document.getElementById('timelinePanel').style.display = 'block';
-    
+
     // 获取时间范围
     const timestamps = logsWithTime.map(line => new Date(line.timestamp).getTime());
     const minTime = Math.min(...timestamps);
     const maxTime = Math.max(...timestamps);
     const timeRange = maxTime - minTime;
-    
+
     // 分成20个时间段
     const bucketCount = 20;
     const bucketSize = timeRange / bucketCount;
@@ -2009,32 +2037,32 @@ function generateTimeline() {
         debug: 0,
         lines: []
     }));
-    
+
     // 统计每个时间段的日志数量
     logsWithTime.forEach(line => {
         const time = new Date(line.timestamp).getTime();
         const bucketIndex = Math.min(Math.floor((time - minTime) / bucketSize), bucketCount - 1);
-        
+
         buckets[bucketIndex].count++;
         buckets[bucketIndex].lines.push(line);
-        
+
         const level = (line.level || 'OTHER').toUpperCase();
         if (level === 'ERROR') buckets[bucketIndex].error++;
         else if (level === 'WARN') buckets[bucketIndex].warn++;
         else if (level === 'INFO') buckets[bucketIndex].info++;
         else if (level === 'DEBUG') buckets[bucketIndex].debug++;
     });
-    
+
     timelineData = {
         buckets,
         minTime,
         maxTime,
         bucketSize
     };
-    
+
     // 绘制时间线
     drawTimeline();
-    
+
     // 显示时间范围
     const startDate = new Date(minTime);
     const endDate = new Date(maxTime);
@@ -2044,32 +2072,32 @@ function generateTimeline() {
 
 function drawTimeline() {
     if (!timelineData) return;
-    
+
     const canvas = document.getElementById('timelineCanvas');
     const ctx = canvas.getContext('2d');
-    
+
     // 设置画布大小
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = 80;
-    
+
     // 清空画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
+
     const { buckets } = timelineData;
     const maxCount = Math.max(...buckets.map(b => b.count));
-    
+
     const barWidth = canvas.width / buckets.length;
     const maxHeight = canvas.height - 20;
-    
+
     // 绘制柱状图
     buckets.forEach((bucket, i) => {
         const x = i * barWidth;
         const heightRatio = bucket.count / maxCount;
-        
+
         // 绘制分层柱状图（按级别）
         let currentY = canvas.height - 20;
-        
+
         // ERROR (红色)
         if (bucket.error > 0) {
             const h = (bucket.error / bucket.count) * heightRatio * maxHeight;
@@ -2077,7 +2105,7 @@ function drawTimeline() {
             ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
             currentY -= h;
         }
-        
+
         // WARN (橙色)
         if (bucket.warn > 0) {
             const h = (bucket.warn / bucket.count) * heightRatio * maxHeight;
@@ -2085,7 +2113,7 @@ function drawTimeline() {
             ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
             currentY -= h;
         }
-        
+
         // INFO (蓝色)
         if (bucket.info > 0) {
             const h = (bucket.info / bucket.count) * heightRatio * maxHeight;
@@ -2093,7 +2121,7 @@ function drawTimeline() {
             ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
             currentY -= h;
         }
-        
+
         // DEBUG (紫色)
         if (bucket.debug > 0) {
             const h = (bucket.debug / bucket.count) * heightRatio * maxHeight;
@@ -2101,16 +2129,16 @@ function drawTimeline() {
             ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
         }
     });
-    
+
     // 绘制当前浏览位置指示器
     drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth);
-    
+
     // 添加点击事件
     canvas.onclick = (e) => {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const bucketIndex = Math.floor(x / barWidth);
-        
+
         if (bucketIndex >= 0 && bucketIndex < buckets.length) {
             const bucket = buckets[bucketIndex];
             if (bucket.lines.length > 0) {
@@ -2120,13 +2148,13 @@ function drawTimeline() {
             }
         }
     };
-    
+
     // 添加鼠标悬停提示
     canvas.onmousemove = (e) => {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const bucketIndex = Math.floor(x / barWidth);
-        
+
         if (bucketIndex >= 0 && bucketIndex < buckets.length) {
             const bucket = buckets[bucketIndex];
             const startTime = new Date(timelineData.minTime + bucketIndex * timelineData.bucketSize);
@@ -2136,18 +2164,18 @@ function drawTimeline() {
 }
 
 function formatDate(date) {
-    return date.toLocaleString('zh-CN', { 
-        year: 'numeric', 
-        month: '2-digit', 
-        day: '2-digit', 
-        hour: '2-digit', 
-        minute: '2-digit' 
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
     });
 }
 
 function formatTime(date) {
-    return date.toLocaleString('zh-CN', { 
-        hour: '2-digit', 
+    return date.toLocaleString('zh-CN', {
+        hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
     });
@@ -2159,29 +2187,29 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
         console.log('⚠️ 指示器：没有时间线数据');
         return;
     }
-    
+
     // 获取当前可见区域中间的行号
     const visibleLines = getVisibleLines();
     console.log('👀 可见行数量:', visibleLines.length);
-    
+
     if (visibleLines.length === 0) {
         console.log('⚠️ 指示器：没有可见行');
         return;
     }
-    
+
     // 取可见区域中间的日志行
     const middleIndex = Math.floor(visibleLines.length / 2);
     const currentLine = visibleLines[middleIndex];
     console.log('📍 当前中间行:', currentLine);
-    
+
     if (!currentLine || !currentLine.lineNumber) {
         console.log('⚠️ 指示器：当前行无效');
         return;
     }
-    
+
     // 在所有bucket中查找这条日志对应的时间戳
     let currentTime = null;
-    
+
     for (let i = 0; i < buckets.length; i++) {
         const bucket = buckets[i];
         if (bucket.lines && bucket.lines.length > 0) {
@@ -2193,7 +2221,7 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
             }
         }
     }
-    
+
     // 如果没找到精确匹配，根据行号比例估算位置
     if (!currentTime) {
         // 计算当前行在整个文件中的相对位置
@@ -2202,36 +2230,36 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
             console.log('⚠️ 指示器：总行数为0');
             return;
         }
-        
+
         const relativePosition = currentLine.lineNumber / totalLines;
         const timeRange = timelineData.maxTime - timelineData.minTime;
         currentTime = timelineData.minTime + relativePosition * timeRange;
         console.log('📊 估算时间戳（行号比例）:', new Date(currentTime).toLocaleString(), '比例:', relativePosition);
     }
-    
+
     // 计算指示器在时间线上的位置
     const timeRange = timelineData.maxTime - timelineData.minTime;
     if (timeRange <= 0) {
         console.log('⚠️ 指示器：时间范围无效');
         return;
     }
-    
+
     const relativePosition = (currentTime - timelineData.minTime) / timeRange;
     const indicatorX = Math.max(0, Math.min(canvas.width, relativePosition * canvas.width));
     console.log('🎯 指示器X位置:', indicatorX, '画布宽度:', canvas.width, '相对位置:', relativePosition);
-    
+
     // 绘制指示器（一条垂直的红线）
     ctx.save();
     ctx.strokeStyle = '#ff3333';
     ctx.lineWidth = 3;
     ctx.setLineDash([]);
-    
+
     // 绘制垂直线
     ctx.beginPath();
     ctx.moveTo(indicatorX, 0);
     ctx.lineTo(indicatorX, canvas.height - 20);
     ctx.stroke();
-    
+
     // 绘制顶部三角形标记
     ctx.fillStyle = '#ff3333';
     ctx.beginPath();
@@ -2240,7 +2268,7 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
     ctx.lineTo(indicatorX + 6, 10);
     ctx.closePath();
     ctx.fill();
-    
+
     // 绘制底部三角形标记
     ctx.beginPath();
     ctx.moveTo(indicatorX, canvas.height - 20);
@@ -2248,7 +2276,7 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
     ctx.lineTo(indicatorX + 6, canvas.height - 30);
     ctx.closePath();
     ctx.fill();
-    
+
     ctx.restore();
     console.log('✅ 指示器绘制完成');
 }
@@ -2260,13 +2288,13 @@ function getVisibleLines() {
         console.log('⚠️ getVisibleLines: 找不到 logContainer');
         return [];
     }
-    
+
     const lines = container.querySelectorAll('.log-line');
     console.log('📋 总日志行数:', lines.length);
-    
+
     const visibleLines = [];
     const containerRect = container.getBoundingClientRect();
-    
+
     lines.forEach(lineEl => {
         const rect = lineEl.getBoundingClientRect();
         // 检查该行是否在可视区域内
@@ -2280,7 +2308,7 @@ function getVisibleLines() {
             }
         }
     });
-    
+
     console.log('👀 可见行:', visibleLines.length, '条');
     return visibleLines;
 }
@@ -2288,15 +2316,15 @@ function getVisibleLines() {
 // 按类名筛选
 function filterByClassName(className) {
     closeStatsModal();
-    
+
     // 保存筛选前的位置
     savePositionBeforeFilter();
-    
+
     // 记录筛选状态
     currentFilterType = 'class';
     currentFilterValue = className;
     showFilterStatus(`类名: ${className}`);
-    
+
     // 使用正则搜索
     vscode.postMessage({
         command: 'regexSearch',
@@ -2308,15 +2336,15 @@ function filterByClassName(className) {
 // 按方法名筛选
 function filterByMethodName(methodName) {
     closeStatsModal();
-    
+
     // 保存筛选前的位置
     savePositionBeforeFilter();
-    
+
     // 记录筛选状态
     currentFilterType = 'method';
     currentFilterValue = methodName;
     showFilterStatus(`方法名: ${methodName}`);
-    
+
     // 搜索 [methodName:xxx]
     vscode.postMessage({
         command: 'regexSearch',
@@ -2328,15 +2356,15 @@ function filterByMethodName(methodName) {
 // 按线程名筛选
 function filterByThreadName(threadName) {
     closeStatsModal();
-    
+
     // 保存筛选前的位置
     savePositionBeforeFilter();
-    
+
     // 记录筛选状态
     currentFilterType = 'thread';
     currentFilterValue = threadName;
     showFilterStatus(`线程名: ${threadName}`);
-    
+
     // 搜索 [线程名]
     vscode.postMessage({
         command: 'regexSearch',
@@ -2348,7 +2376,7 @@ function filterByThreadName(threadName) {
 // 保存筛选前的位置
 function savePositionBeforeFilter() {
     savedPageBeforeFilter = currentPage;
-    
+
     // 保存当前页第一行的行号
     if (allLines.length > 0) {
         const startIndex = (currentPage - 1) * pageSize;
@@ -2356,7 +2384,7 @@ function savePositionBeforeFilter() {
             savedFirstLineBeforeFilter = allLines[startIndex].lineNumber || (startIndex + 1);
         }
     }
-    
+
 }
 
 // 显示筛选状态
@@ -2380,17 +2408,17 @@ function clearCustomFilter() {
     currentTimelineBucketIndex = null;
     currentFilterValue = null;
     hideFilterStatus();
-    
+
     // 请求后端重新加载完整日志，并跳转到保存的位置
     console.log('🔙 恢复到筛选前位置 - 行号:', savedFirstLineBeforeFilter);
-    
+
     if (savedFirstLineBeforeFilter) {
         // 有保存的行号，跳转到那行
         vscode.postMessage({
             command: 'jumpToLineInFullLog',
             lineNumber: savedFirstLineBeforeFilter
         });
-        
+
         // 重置保存的位置
         savedPageBeforeFilter = 1;
         savedFirstLineBeforeFilter = null;
@@ -2431,24 +2459,24 @@ function selectDeleteByLine() {
 function confirmDeleteByTime() {
     const timeStr = document.getElementById('deleteTimeInput').value.trim();
     const mode = document.getElementById('deleteTimeMode').value;
-    
+
     if (!timeStr) {
         alert('请输入时间！');
         return;
     }
-    
+
     // 简单验证时间格式
     if (!/^\d{4}-\d{2}-\d{2}/.test(timeStr)) {
         alert('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
         return;
     }
-    
+
     vscode.postMessage({
         command: 'deleteByTime',
         timeStr: timeStr,
         mode: mode
     });
-    
+
     closeDeleteByTimeModal();
 }
 
@@ -2476,7 +2504,7 @@ function switchJumpMode() {
     const mode = document.getElementById('jumpMode').value;
     const lineSection = document.getElementById('jumpByLineSection');
     const timeSection = document.getElementById('jumpByTimeSection');
-    
+
     if (mode === 'line') {
         lineSection.style.display = 'block';
         timeSection.style.display = 'none';
@@ -2484,7 +2512,7 @@ function switchJumpMode() {
     } else {
         lineSection.style.display = 'none';
         timeSection.style.display = 'block';
-        
+
         // 自动设置当前时间
         const timeInput = document.getElementById('jumpTimeInput');
         if (!timeInput.value) {
@@ -2497,14 +2525,14 @@ function switchJumpMode() {
             const minutes = String(now.getMinutes()).padStart(2, '0');
             timeInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
         }
-        
+
         timeInput.focus();
     }
 }
 
 function confirmJump() {
     const mode = document.getElementById('jumpMode').value;
-    
+
     if (mode === 'line') {
         const lineNumber = parseInt(document.getElementById('jumpLineInput').value);
         if (!lineNumber || lineNumber < 1) {
@@ -2522,30 +2550,30 @@ function confirmJump() {
             alert('请选择或输入时间！');
             return;
         }
-        
+
         // datetime-local 格式：YYYY-MM-DDTHH:mm 或 YYYY-MM-DDTHH:mm:ss
         // 转换为后端期望的格式：YYYY-MM-DD HH:mm:ss
         let timeStr = timeInputValue.replace('T', ' ');
-        
+
         // 如果没有秒，添加 :00
         if (timeStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
             timeStr += ':00';
         }
-        
+
         console.log('🕐 跳转到时间:', timeStr);
         jumpToTime(timeStr);
     }
-    
+
     closeJumpModal();
 }
 
 function jumpToLine(lineNumber) {
     console.log('🎯 定位到行号:', lineNumber);
-    
+
     // 在折叠模式下，需要智能查找目标页
     if (isCollapseMode && pageRanges.size > 0) {
         console.log('📏 折叠模式 - 智能查找目标页');
-        
+
         // 先尝试在已计算的页面中查找
         for (let [pageNum, range] of pageRanges.entries()) {
             // 查找该页范围内的日志是否包含目标行号
@@ -2554,14 +2582,14 @@ function jumpToLine(lineNumber) {
                 const actualLineNumber = line.lineNumber || 0;
                 return actualLineNumber === lineNumber;
             });
-            
+
             if (hasTargetLine) {
                 console.log(`✅ 在第 ${pageNum} 页找到目标行`);
                 currentPage = pageNum;
                 updatePagination();
                 renderLines();
                 drawTimeline(); // 重绘时间线以更新高亮位置
-                
+
                 // 等待渲染完成后高亮目标行
                 setTimeout(() => {
                     highlightTargetLine(lineNumber);
@@ -2569,11 +2597,11 @@ function jumpToLine(lineNumber) {
                 return;
             }
         }
-        
+
         // 如果在已计算的页面中没找到，尝试在数组中查找索引位置
         console.log('⚠️ 已计算页面中未找到，在数组中查找');
         const targetIndex = allLines.findIndex(line => line.lineNumber === lineNumber);
-        
+
         if (targetIndex !== -1) {
             // 根据索引位置估算页码（折叠模式下可能不准确，但比直接用行号好）
             const estimatedPage = Math.ceil((targetIndex + 1) / pageSize);
@@ -2589,7 +2617,7 @@ function jumpToLine(lineNumber) {
         // 非折叠模式或未计算页面，使用标准计算
         // 🔧 修复：在 allLines 数组中查找目标行号的索引位置
         const targetIndex = allLines.findIndex(line => line.lineNumber === lineNumber);
-        
+
         if (targetIndex !== -1) {
             // 根据索引位置计算页码
             const targetPage = Math.ceil((targetIndex + 1) / pageSize);
@@ -2602,11 +2630,11 @@ function jumpToLine(lineNumber) {
             console.log(`⚠️ 未找到目标行 ${lineNumber}，使用估算跳转到第 ${targetPage} 页`);
         }
     }
-    
+
     updatePagination();
     renderLines();
     drawTimeline(); // 重绘时间线以更新高亮位置
-    
+
     // 等待渲染完成后高亮目标行
     setTimeout(() => {
         highlightTargetLine(lineNumber);
@@ -2616,15 +2644,15 @@ function jumpToLine(lineNumber) {
 // 从搜索结果跳转到完整日志的指定行
 function jumpToLineInFullLog(lineNumber) {
     console.log('🚀 跳转到完整日志的行:', lineNumber);
-    
+
     // 清除搜索关键词和过滤状态
     currentSearchKeyword = '';
     document.getElementById('searchInput').value = '';
     isFiltering = false;
-    
+
     // 显示加载提示
     showToast('📦 正在加载完整日志...');
-    
+
     // 请求后端重新加载完整日志，并跳转到指定行
     vscode.postMessage({
         command: 'jumpToLineInFullLog',
@@ -2634,7 +2662,7 @@ function jumpToLineInFullLog(lineNumber) {
 
 function jumpToTime(timeStr) {
     console.log('🎯 定位到时间:', timeStr);
-    
+
     // 直接请求后端查找
     vscode.postMessage({
         command: 'jumpToTime',
@@ -2645,7 +2673,7 @@ function jumpToTime(timeStr) {
 function handleJumpToTimeResult(data) {
     if (data.success) {
         console.log('✅ 找到目标时间的日志，行号:', data.targetLineNumber);
-        
+
         // 如果正在筛选或搜索模式，需要先退出到完整日志
         if (isFiltering || currentSearchKeyword) {
             console.log('🔄 退出筛选/搜索模式，重新加载完整日志...');
@@ -2655,7 +2683,7 @@ function handleJumpToTimeResult(data) {
             currentFilterValue = null;
             hideFilterStatus();
             document.getElementById('searchInput').value = '';
-            
+
             // 请求重新加载完整日志并跳转
             vscode.postMessage({
                 command: 'jumpToLineInFullLog',
@@ -2663,10 +2691,10 @@ function handleJumpToTimeResult(data) {
             });
             return;
         }
-        
+
         // 检查目标行是否在已加载的数据中
         const targetIndex = allLines.findIndex(line => line.lineNumber === data.targetLineNumber);
-        
+
         if (targetIndex !== -1) {
             // 目标行已在内存中，直接跳转，不重新加载数据
             console.log(`✅ 目标行已在内存中（索引: ${targetIndex}），直接跳转`);
@@ -2674,26 +2702,26 @@ function handleJumpToTimeResult(data) {
             showToast(`✅ 已跳转到第 ${data.targetLineNumber} 行`);
             return;
         }
-        
+
         // 目标行不在已加载数据中，需要加载
         console.log('⚠️ 目标行不在已加载范围，需要加载新数据');
-        
+
         // 合并新加载的数据
         const newLines = data.lines;
         const startLine = typeof data.startLine === 'number' ? data.startLine : 0;
-        
+
         console.log(`📥 接收到 ${newLines.length} 行数据，起始行号: ${startLine}`);
-        
+
         // 检查数据重叠情况
         if (allLines.length > 0) {
             const firstLoadedLineNum = allLines[0].lineNumber || 1;
             const lastLoadedLineNum = allLines[allLines.length - 1].lineNumber || allLines.length;
             const newFirstLineNum = newLines[0].lineNumber || startLine + 1;
             const newLastLineNum = newLines[newLines.length - 1].lineNumber || startLine + newLines.length;
-            
+
             console.log(`📊 当前数据范围: ${firstLoadedLineNum} - ${lastLoadedLineNum}`);
             console.log(`📊 新数据范围: ${newFirstLineNum} - ${newLastLineNum}`);
-            
+
             // 如果新数据和已有数据有连续性，尝试合并
             if (newFirstLineNum > lastLoadedLineNum && newFirstLineNum - lastLoadedLineNum < 1000) {
                 // 新数据在后面且相近，追加
@@ -2721,19 +2749,19 @@ function handleJumpToTimeResult(data) {
 
         // 记录当前缓冲区在文件中的起始行，用于统一后台加载
         baseLineOffset = startLine;
-        
+
         // 重新计算页面（保持折叠状态）
         handleDataChange({
             resetPage: true,
             clearPageRanges: true,
             triggerAsyncCalc: isCollapseMode  // 只在折叠模式下触发异步计算
         });
-        
+
         // 更新页面信息显示
         document.getElementById('totalLinesInPage').textContent = allLines.length;
         document.getElementById('totalLines').textContent = totalLinesInFile;
         document.getElementById('loadedLines').textContent = allLines.length;
-        
+
         // 显示行范围信息（如果是部分数据）
         if (allLines.length > 0 && allLines.length < totalLinesInFile) {
             const firstLine = allLines[0].lineNumber || 1;
@@ -2744,7 +2772,7 @@ function handleJumpToTimeResult(data) {
         } else {
             document.getElementById('lineRangeInfo').style.display = 'none';
         }
-        
+
         // 延迟跳转，确保页面已渲染
         setTimeout(() => {
             jumpToLine(data.targetLineNumber);
@@ -2764,58 +2792,58 @@ function handleJumpToTimeResult(data) {
 
 function highlightTargetLine(lineNumber) {
     console.log('🔆 高亮目标行:', lineNumber);
-    
+
     // 移除之前的高亮
     document.querySelectorAll('.log-line.highlight-target').forEach(el => {
         el.classList.remove('highlight-target');
     });
-    
+
     // 查找目标行（通过行号匹配，而不是索引）
     const logLines = document.querySelectorAll('.log-line');
-    
+
     for (let i = 0; i < logLines.length; i++) {
         const logLine = logLines[i];
         const lineNumberSpan = logLine.querySelector('.log-line-number');
-        
+
         if (lineNumberSpan) {
             // 提取行号（去除书签图标）
             const displayedLineNumber = parseInt(lineNumberSpan.textContent.replace(/📌\s*/, ''));
-            
+
             if (displayedLineNumber === lineNumber) {
                 console.log(`✅ 找到目标行，索引: ${i}`);
                 logLine.classList.add('highlight-target');
-                
+
                 // 滚动到可见区域
                 logLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                
+
                 // 3秒后移除高亮
                 setTimeout(() => {
                     logLine.classList.remove('highlight-target');
                 }, 3000);
-                
+
                 return;
             }
         }
     }
-    
+
     console.log('⚠️ 未找到目标行，可能不在当前页面');
 }
 
 function confirmDeleteByLine() {
     const lineNumber = parseInt(document.getElementById('deleteLineInput').value);
     const mode = document.getElementById('deleteLineMode').value;
-    
+
     if (!lineNumber || lineNumber < 1) {
         alert('请输入有效的行号（大于0的整数）！');
         return;
     }
-    
+
     vscode.postMessage({
         command: 'deleteByLine',
         lineNumber: lineNumber,
         mode: mode
     });
-    
+
     closeDeleteByLineModal();
 }
 
@@ -2839,14 +2867,14 @@ function refresh() {
 // 分页功能
 function updatePagination() {
     let isEstimated = false; // 标记总页数是否为估算值
-    
+
     // 在折叠模式下，总页数难以精确计算，需要动态估算
     if (isCollapseMode) {
         // 如果已经有页面范围记录，根据最后一页的结束位置估算
         if (pageRanges.size > 0) {
             const maxPage = Math.max(...pageRanges.keys());
             const maxRange = pageRanges.get(maxPage);
-            
+
             if (maxRange.end >= allLines.length) {
                 // 已经到达最后，总页数就是已知的最大页
                 totalPages = maxPage;
@@ -2866,12 +2894,12 @@ function updatePagination() {
         totalPages = Math.ceil(allLines.length / pageSize);
         isEstimated = false;
     }
-    
+
     if (totalPages < 1) totalPages = 1;
     if (currentPage > totalPages) currentPage = totalPages;
-    
+
     document.getElementById('currentPageInput').value = currentPage;
-    
+
     // 显示总页数：计算中、估算值或精确值
     const totalPagesElement = document.getElementById('totalPages');
     if (isCalculatingPages) {
@@ -2884,13 +2912,13 @@ function updatePagination() {
         // 精确值
         totalPagesElement.textContent = totalPages;
     }
-    
+
     document.getElementById('totalLinesInPage').textContent = allLines.length;
-    
+
     // 更新按钮状态
     document.getElementById('firstPageBtn').disabled = currentPage === 1;
     document.getElementById('prevPageBtn').disabled = currentPage === 1;
-    
+
     // 在折叠模式下，如果是估算值，说明还有更多数据，不禁用“下一页”按钮
     if (isCollapseMode && isEstimated) {
         document.getElementById('nextPageBtn').disabled = false;
@@ -2899,7 +2927,7 @@ function updatePagination() {
         document.getElementById('nextPageBtn').disabled = currentPage === totalPages;
         document.getElementById('lastPageBtn').disabled = currentPage === totalPages;
     }
-    
+
     // 检查是否需要加载更多数据
     checkAndLoadMore();
 }
@@ -2907,17 +2935,17 @@ function updatePagination() {
 function checkAndLoadMore() {
     // 如果已加载全部数据，不再加载
     if (allDataLoaded) return;
-    
+
     // 如果处于过滤模式或搜索模式，不自动加载更多数据
     if (isFiltering || currentSearchKeyword) {
         console.log('🚫 处于过滤/搜索模式，不加载更多数据');
         return;
     }
-    
+
     // 如果当前页接近已加载数据的末尾，自动加载更多
     const loadedLines = allLines.length;
     const currentMaxLine = currentPage * pageSize;
-    
+
     if (currentMaxLine >= loadedLines - 500 && loadedLines < totalLinesInFile) {
         loadMoreData();
     }
@@ -2925,11 +2953,11 @@ function checkAndLoadMore() {
 
 function loadMoreData() {
     if (allDataLoaded) return;
-    
+
     const currentLoaded = allLines.length;
     const remaining = totalLinesInFile - currentLoaded;
     const toLoad = Math.min(remaining, 10000); // 每次加载10000行
-    
+
     vscode.postMessage({
         command: 'loadMore',
         startLine: currentLoaded,
@@ -2941,37 +2969,37 @@ function showLoadMoreHint() {
     // 在页面底部显示加载更多按钮
     const pagination = document.getElementById('pagination');
     let loadMoreBtn = document.getElementById('loadMoreBtn');
-    
+
     if (!loadMoreBtn) {
         loadMoreBtn = document.createElement('button');
         loadMoreBtn.id = 'loadMoreBtn';
         loadMoreBtn.style.backgroundColor = '#0e7490';
         loadMoreBtn.style.marginLeft = '20px';
         loadMoreBtn.innerHTML = '📂 加载更多数据';
-        loadMoreBtn.onclick = function() {
+        loadMoreBtn.onclick = function () {
             loadAllRemainingData();
         };
         pagination.appendChild(loadMoreBtn);
     }
-    
+
     loadMoreBtn.style.display = allDataLoaded ? 'none' : 'inline-block';
 }
 
 function loadAllRemainingData() {
     if (allDataLoaded) return;
-    
+
     const remaining = totalLinesInFile - allLines.length;
     if (remaining <= 0) {
         allDataLoaded = true;
         return;
     }
-    
+
     vscode.postMessage({
         command: 'loadMore',
         startLine: allLines.length,
         count: remaining
     });
-    
+
     // 隐藏加载按钮
     const loadMoreBtn = document.getElementById('loadMoreBtn');
     if (loadMoreBtn) {
@@ -2984,13 +3012,13 @@ function startBackgroundLoading() {
     if (isBackgroundLoading || allDataLoaded) {
         return;
     }
-    
+
     isBackgroundLoading = true;
     console.log('🔄 开始后台加载数据...');
-    
+
     // 更新状态栏显示
     updateLoadingStatus();
-    
+
     loadNextChunk();
 }
 
@@ -2999,7 +3027,7 @@ function loadNextChunk() {
         isBackgroundLoading = false;
         return;
     }
-    
+
     const remaining = totalLinesInFile - (baseLineOffset + allLines.length);
     if (remaining <= 0) {
         allDataLoaded = true;
@@ -3008,17 +3036,17 @@ function loadNextChunk() {
         updateLoadingStatus();
         return;
     }
-    
+
     const chunkSize = Math.min(backgroundLoadChunkSize, remaining);
     const startLine = baseLineOffset + allLines.length;
     console.log(`📥 后台加载: 第 ${startLine} - ${startLine + chunkSize} 行（baseOffset=${baseLineOffset}）`);
-    
+
     vscode.postMessage({
         command: 'loadMore',
         startLine: startLine,
         count: chunkSize
     });
-    
+
     // 延迟加载下一批，避免阻塞UI（每批间隔500ms）
     setTimeout(() => {
         loadNextChunk();
@@ -3096,10 +3124,10 @@ function goToPage(page) {
     page = parseInt(page);
     if (page >= 1 && page <= totalPages) {
         currentPage = page;
-        
+
         // 在折叠模式下，如果跳转到未计算过的页面，需要先计算中间的所有页面
         if (isCollapseMode && !pageRanges.has(page)) {
-            
+
             // 从第一页开始顺序计算到目标页
             pageRanges.clear();
             for (let p = 1; p <= page; p++) {
@@ -3108,7 +3136,7 @@ function goToPage(page) {
                 calculatePageRange(p);
             }
         }
-        
+
         updatePagination();
         renderLines();
         drawTimeline(); // 重绘时间线以更新高亮位置
@@ -3147,7 +3175,7 @@ function toggleTimeline() {
     isTimelineExpanded = !isTimelineExpanded;
     const content = document.getElementById('timelineContent');
     const icon = document.getElementById('timelineToggleIcon');
-    
+
     if (isTimelineExpanded) {
         content.style.display = 'block';
         icon.textContent = '▼';
@@ -3160,26 +3188,26 @@ function toggleTimeline() {
 // 使用采样数据生成时间线（快速异步加载）
 function generateTimelineFromSamples(sampledData) {
     console.log('📈 使用采样数据生成时间线');
-    
+
     const startTime = new Date(sampledData.startTime);
     const endTime = new Date(sampledData.endTime);
     const timeRange = endTime - startTime;
-    
+
     console.log('📊 完整时间范围（采样）:', startTime.toLocaleString(), '-', endTime.toLocaleString());
-    
+
     // 如果时间范围太小，不显示时间线
     if (timeRange < 1000) {
         console.log('⚠️ 时间范围太小，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
-    
+
     // 将时间分成若干个桶（bucket）
     const bucketCount = 50;
     const bucketSize = timeRange / bucketCount;
     const buckets = new Array(bucketCount).fill(0);
     const bucketLevels = new Array(bucketCount).fill(null).map(() => ({ ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0, OTHER: 0 }));
-    
+
     // 将采样点分配到各个桶中
     for (let sample of sampledData.samples) {
         if (sample.timestamp) {
@@ -3187,7 +3215,7 @@ function generateTimelineFromSamples(sampledData) {
             const bucketIndex = Math.min(Math.floor((time - startTime) / bucketSize), bucketCount - 1);
             if (bucketIndex >= 0) {
                 buckets[bucketIndex]++;
-                
+
                 const level = (sample.level || 'OTHER').toUpperCase();
                 if (bucketLevels[bucketIndex][level] !== undefined) {
                     bucketLevels[bucketIndex][level]++;
@@ -3197,7 +3225,7 @@ function generateTimelineFromSamples(sampledData) {
             }
         }
     }
-    
+
     // 保存时间线数据
     timelineData = {
         startTime,
@@ -3208,12 +3236,12 @@ function generateTimelineFromSamples(sampledData) {
         bucketSize,
         bucketCount
     };
-    
+
     console.log('✅ 基于采样的时间线数据生成完成，采样点数:', sampledData.samples.length);
-    
+
     // 显示时间线面板
     document.getElementById('timelinePanel').style.display = 'block';
-    
+
     // 更新时间信息（主信息 + 悬停附加信息占位）
     const info = document.getElementById('timelineInfo');
     info.innerHTML = `
@@ -3223,7 +3251,7 @@ function generateTimelineFromSamples(sampledData) {
         </span>
         <span id="timelineHoverExtra" style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);"></span>
     `;
-    
+
     // 延迟绘制
     setTimeout(() => {
         drawTimeline();
@@ -3232,54 +3260,54 @@ function generateTimelineFromSamples(sampledData) {
 
 function generateTimeline() {
     console.log('📊 开始生成时间线，allLines 数量:', allLines.length);
-    
+
     // 从allLines中提取时间戳
     const timestamps = [];
     const levelCounts = { ERROR: [], WARN: [], INFO: [], DEBUG: [], OTHER: [] };
-    
+
     for (let line of allLines) {
         if (line.timestamp) {
             timestamps.push(new Date(line.timestamp));
         }
     }
-    
+
     console.log('📊 提取到的时间戳数量:', timestamps.length);
-    
+
     // 如果没有时间戳，隐藏时间线
     if (timestamps.length === 0) {
         console.log('⚠️ 没有找到时间戳，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
-    
+
     // 找出时间范围
     timestamps.sort((a, b) => a - b);
     const startTime = timestamps[0];
     const endTime = timestamps[timestamps.length - 1];
     const timeRange = endTime - startTime;
-    
+
     console.log('📊 时间范围:', startTime.toLocaleString(), '-', endTime.toLocaleString(), '，范围:', timeRange, 'ms');
-    
+
     // 如果时间范围太小（比如都是同一秒），不显示时间线
     if (timeRange < 1000) { // 小于1秒
         console.log('⚠️ 时间范围太小，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
-    
+
     // 将时间分成若干个桶（bucket）
     const bucketCount = 50; // 时间线分成50段
     const bucketSize = timeRange / bucketCount;
     const buckets = new Array(bucketCount).fill(0);
     const bucketLevels = new Array(bucketCount).fill(null).map(() => ({ ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0, OTHER: 0 }));
-    
+
     // 统计每个桶的日志数量和级别分布
     for (let line of allLines) {
         if (line.timestamp) {
             const time = new Date(line.timestamp);
             const bucketIndex = Math.min(Math.floor((time - startTime) / bucketSize), bucketCount - 1);
             buckets[bucketIndex]++;
-            
+
             const level = (line.level || 'OTHER').toUpperCase();
             if (bucketLevels[bucketIndex][level] !== undefined) {
                 bucketLevels[bucketIndex][level]++;
@@ -3288,7 +3316,7 @@ function generateTimeline() {
             }
         }
     }
-    
+
     // 保存时间线数据
     timelineData = {
         startTime,
@@ -3299,12 +3327,12 @@ function generateTimeline() {
         bucketSize,
         bucketCount
     };
-    
+
     console.log('✅ 时间线数据生成完成，准备绘制');
-    
+
     // 显示时间线面板
     document.getElementById('timelinePanel').style.display = 'block';
-    
+
     // 更新时间信息（主信息 + 悬停附加信息占位）
     const info = document.getElementById('timelineInfo');
     info.innerHTML = `
@@ -3314,7 +3342,7 @@ function generateTimeline() {
         </span>
         <span id="timelineHoverExtra" style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);"></span>
     `;
-    
+
     // 延迟绘制，确保Canvas元素已经渲染好
     setTimeout(() => {
         drawTimeline();
@@ -3326,22 +3354,22 @@ function drawTimeline() {
         console.log('⚠️ drawTimeline: timelineData 为空');
         return;
     }
-    
+
     const canvas = document.getElementById('timelineCanvas');
     if (!canvas) {
         console.log('⚠️ drawTimeline: 找不到 canvas 元素');
         return;
     }
-    
+
     const ctx = canvas.getContext('2d');
     if (!ctx) {
         console.log('⚠️ drawTimeline: 无法获取 2d context');
         return;
     }
-    
+
     // 设置canvas实际尺寸（高分辨率）
     const rect = canvas.getBoundingClientRect();
-    
+
     // 确保canvas有有效尺寸
     if (rect.width === 0 || rect.height === 0) {
         console.log('⚠️ drawTimeline: canvas 尺寸为0，等待渲染...');
@@ -3349,38 +3377,38 @@ function drawTimeline() {
         setTimeout(() => drawTimeline(), 200);
         return;
     }
-    
+
     console.log('🎨 开始绘制时间线，canvas 尺寸:', rect.width, 'x', rect.height);
-    
+
     canvas.width = rect.width * 2;
     canvas.height = 160;
     ctx.scale(2, 2);
-    
+
     const width = rect.width;
     const height = 80;
-    
+
     // 清空画布
     ctx.clearRect(0, 0, width, height);
-    
+
     // 找出最大值用于归一化
     const maxCount = Math.max(...timelineData.buckets, 1);
-    
+
     // 计算每个柱子的宽度
     const barWidth = width / timelineData.bucketCount;
-    
+
     console.log('🎨 绘制参数 - 最大值:', maxCount, '，柱宽:', barWidth);
-    
+
     // 绘制柱状图
     for (let i = 0; i < timelineData.bucketCount; i++) {
         const count = timelineData.buckets[i];
         const barHeight = (count / maxCount) * (height - 10);
         const x = i * barWidth;
         const y = height - barHeight;
-        
+
         // 根据级别分布决定颜色
         const levels = timelineData.bucketLevels[i];
         let color = '#888888'; // 默认灰色
-        
+
         if (levels.ERROR > 0) {
             color = '#f14c4c'; // 红色 - ERROR
         } else if (levels.WARN > 0) {
@@ -3390,15 +3418,15 @@ function drawTimeline() {
         } else if (levels.DEBUG > 0) {
             color = '#b267e6'; // 紫色 - DEBUG
         }
-        
+
         // 绘制柱子
         ctx.fillStyle = color;
         ctx.fillRect(x, y, Math.max(barWidth - 1, 1), barHeight);
     }
-    
+
     // 绘制当前浏览位置指示器
     drawTimelineIndicator(ctx, width, height);
-    
+
     console.log('✅ 时间线绘制完成');
 }
 
@@ -3408,7 +3436,7 @@ function getCurrentBucketIndex() {
         console.log('⚠️ getCurrentBucketIndex: timelineData 不完整');
         return -1;
     }
-    
+
     // 计算当前页的起始索引
     let startIndex, endIndex;
     if (isCollapseMode && pageRanges.has(currentPage)) {
@@ -3419,7 +3447,7 @@ function getCurrentBucketIndex() {
         startIndex = (currentPage - 1) * pageSize;
         endIndex = Math.min(startIndex + pageSize, allLines.length);
     }
-    
+
     // 从当前页的日志中找到第一个有时间戳的行
     let currentTime = null;
     for (let i = startIndex; i < endIndex && i < allLines.length; i++) {
@@ -3428,21 +3456,21 @@ function getCurrentBucketIndex() {
             break;
         }
     }
-    
+
     if (!currentTime) {
         console.log('⚠️ getCurrentBucketIndex: 当前页没有时间戳');
         return -1;
     }
-    
+
     // 计算当前时间在整个时间轴上的相对位置
     const timeOffset = currentTime - timelineData.startTime;
     const timeProgress = timeOffset / timelineData.timeRange;
-    
+
     // 计算对应的bucket索引
     const bucketIndex = Math.floor(timeProgress * timelineData.bucketCount);
-    
+
     console.log('🎯 当前位置 - 页码:', currentPage, '索引范围:', startIndex, '-', endIndex, '时间:', currentTime.toLocaleString(), '时间进度:', (timeProgress * 100).toFixed(1) + '%', '对应bucket:', bucketIndex);
-    
+
     // 限制在有效范围内
     return Math.max(0, Math.min(timelineData.bucketCount - 1, bucketIndex));
 }
@@ -3453,23 +3481,23 @@ function drawTimelineIndicator(ctx, width, height) {
     if (currentBucket === -1 || currentBucket == null) {
         return;
     }
-    
+
     console.log('🎯 高亮当前时间块:', currentBucket);
-    
+
     // 计算当前bucket的位置和宽度
     const barWidth = width / timelineData.bucketCount;
     const x = currentBucket * barWidth;
-    
+
     // 绘制半透明的白色高亮覆盖层
     ctx.save();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.fillRect(x, 0, barWidth, height);
-    
+
     // 绘制边框强调
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.strokeRect(x + 1, 1, barWidth - 2, height - 2);
-    
+
     ctx.restore();
 }
 
@@ -3482,19 +3510,19 @@ function getDisplayedLines() {
 }
 
 // 点击时间线跳转
-document.getElementById('timelineCanvas').addEventListener('click', function(e) {
+document.getElementById('timelineCanvas').addEventListener('click', function (e) {
     if (!timelineData) return;
-    
+
     const canvas = this;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const clickRatio = x / rect.width;
-    
+
     // 计算点击位置对应的时间
     const targetTime = new Date(timelineData.startTime.getTime() + clickRatio * timelineData.timeRange);
-    
+
     console.log('🕐 时间线点击 - 目标时间:', targetTime.toLocaleString());
-    
+
     // 格式化时间为字符串（YYYY-MM-DD HH:mm:ss）
     const year = targetTime.getFullYear();
     const month = String(targetTime.getMonth() + 1).padStart(2, '0');
@@ -3503,10 +3531,10 @@ document.getElementById('timelineCanvas').addEventListener('click', function(e) 
     const minutes = String(targetTime.getMinutes()).padStart(2, '0');
     const seconds = String(targetTime.getSeconds()).padStart(2, '0');
     const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-    
+
     console.log('🔍 请求后端查找时间:', timeStr);
     showToast('🔍 正在查找目标时间点...');
-    
+
     // 请求后端查找该时间点的日志行
     vscode.postMessage({
         command: 'jumpToTime',
@@ -3515,24 +3543,24 @@ document.getElementById('timelineCanvas').addEventListener('click', function(e) 
 });
 
 // 鼠标悬停显示时间信息 + 快捷筛选入口
-document.getElementById('timelineCanvas').addEventListener('mousemove', function(e) {
+document.getElementById('timelineCanvas').addEventListener('mousemove', function (e) {
     if (!timelineData) return;
-    
+
     const canvas = this;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const hoverRatio = x / rect.width;
-    
+
     // 计算悬停位置对应的时间
     const hoverTime = new Date(timelineData.startTime.getTime() + hoverRatio * timelineData.timeRange);
-    
+
     // 找到对应的桶
     const bucketIndex = Math.min(Math.floor(hoverRatio * timelineData.bucketCount), timelineData.bucketCount - 1);
     const count = timelineData.buckets[bucketIndex];
     const levels = timelineData.bucketLevels[bucketIndex];
 
     lastHoveredBucketIndex = bucketIndex;
-    
+
     // 更新标题显示详细信息
     canvas.title = `${hoverTime.toLocaleString()}\n日志数: ${count}\nERROR: ${levels.ERROR} | WARN: ${levels.WARN} | INFO: ${levels.INFO} | DEBUG: ${levels.DEBUG}`;
 
@@ -3598,7 +3626,7 @@ function extractJSONAt(str, startIndex, openChar, closeChar) {
     let depth = 0;
     let inString = false;
     let escapeNext = false;
-    
+
     for (let i = startIndex; i < str.length; i++) {
         const char = str[i];
         if (escapeNext) {
@@ -3614,7 +3642,7 @@ function extractJSONAt(str, startIndex, openChar, closeChar) {
             continue;
         }
         if (inString) continue;
-        
+
         if (char === openChar) {
             depth++;
         } else if (char === closeChar) {
@@ -3635,15 +3663,15 @@ function extractJSONAt(str, startIndex, openChar, closeChar) {
 function extractAllJSON(content) {
     const results = [];
     let currentIndex = 0;
-    
+
     while (currentIndex < content.length) {
         const nextObjStart = content.indexOf('{', currentIndex);
         const nextArrStart = content.indexOf('[', currentIndex);
-        
+
         let nextStart = -1;
         let openChar = '';
         let closeChar = '';
-        
+
         if (nextObjStart !== -1 && (nextArrStart === -1 || nextObjStart < nextArrStart)) {
             nextStart = nextObjStart;
             openChar = '{';
@@ -3653,9 +3681,9 @@ function extractAllJSON(content) {
             openChar = '[';
             closeChar = ']';
         }
-        
+
         if (nextStart === -1) break;
-        
+
         const extracted = extractJSONAt(content, nextStart, openChar, closeChar);
         if (extracted) {
             try {
@@ -3665,7 +3693,7 @@ function extractAllJSON(content) {
                     currentIndex = extracted.endIndex + 1;
                     continue;
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
         currentIndex = nextStart + 1;
     }
@@ -3678,7 +3706,7 @@ function renderMixedContent(content, jsonObjects) {
     // 这样可以保持日志前缀的高亮样式
     let html = '';
     let lastIndex = 0;
-    
+
     jsonObjects.forEach((item, index) => {
         // 添加JSON之前的普通文本（但不包括第一个JSON之前的）
         if (index > 0 && item.startIndex > lastIndex) {
@@ -3687,7 +3715,7 @@ function renderMixedContent(content, jsonObjects) {
                 html += `<span class="json-separator">${escapeHtml(text)}</span>`;
             }
         }
-        
+
         // 渲染JSON
         try {
             const parsed = JSON.parse(item.json);
@@ -3697,10 +3725,10 @@ function renderMixedContent(content, jsonObjects) {
         } catch (e) {
             html += `<span class="json-error">${escapeHtml(item.json)}</span>`;
         }
-        
+
         lastIndex = item.endIndex + 1;
     });
-    
+
     // 添加最后的普通文本
     if (lastIndex < content.length) {
         const text = content.substring(lastIndex);
@@ -3708,19 +3736,19 @@ function renderMixedContent(content, jsonObjects) {
             html += `<span class="json-separator">${escapeHtml(text)}</span>`;
         }
     }
-    
+
     return html;
 }
 
 function detectAndParseStructuredData(content) {
     // 如果功能未启用，直接返回
     if (!enableJsonParse) return null;
-    
+
     if (!content || typeof content !== 'string') return null;
-    
+
     // 提取所有JSON对象和数组
     const jsonObjects = extractAllJSON(content);
-    
+
     if (jsonObjects.length === 0) {
         // 没有找到JSON，尝试检测XML
         const xmlMatch = content.match(/<[^>]+>[\s\S]*<\/[^>]+>/);
@@ -3734,7 +3762,7 @@ function detectAndParseStructuredData(content) {
         }
         return null;
     }
-    
+
     // 如果只有一个JSON对象，直接返回
     if (jsonObjects.length === 1) {
         const item = jsonObjects[0];
@@ -3749,7 +3777,7 @@ function detectAndParseStructuredData(content) {
         }
         return null;
     }
-    
+
     // 多个JSON对象：渲染混合内容
     console.log(`📊 检测到${jsonObjects.length}个JSON对象，使用混合模式渲染`);
     return renderMixedContent(content, jsonObjects);
@@ -3759,34 +3787,34 @@ function detectAndParseStructuredData(content) {
 function extractJSON(str, openChar, closeChar) {
     const startIndex = str.indexOf(openChar);
     if (startIndex === -1) return null;
-    
+
     let depth = 0;
     let inString = false;
     let escapeNext = false;
-    
+
     for (let i = startIndex; i < str.length; i++) {
         const char = str[i];
-        
+
         // 处理转义字符
         if (escapeNext) {
             escapeNext = false;
             continue;
         }
-        
+
         if (char === '\\') {
             escapeNext = true;
             continue;
         }
-        
+
         // 处理字符串
         if (char === '"') {
             inString = !inString;
             continue;
         }
-        
+
         // 在字符串内部，忽略括号
         if (inString) continue;
-        
+
         // 只匹配目标类型的括号，忽略其他类型
         if (char === openChar) {
             depth++;
@@ -3800,41 +3828,41 @@ function extractJSON(str, openChar, closeChar) {
             }
         }
     }
-    
+
     console.debug(`未找到匹配的括号 (${openChar}${closeChar})`);
     return null; // 没有找到匹配的括号
 }
 
 function renderJSONTree(obj, depth = 0, parentCollapsed = false) {
     const id = 'json_' + Math.random().toString(36).substr(2, 9);
-    
+
     if (obj === null) {
         return `<span class="json-null">null</span>`;
     }
-    
+
     if (typeof obj === 'string') {
         return `<span class="json-string">"${escapeHtml(obj)}"</span>`;
     }
-    
+
     if (typeof obj === 'number') {
         return `<span class="json-number">${obj}</span>`;
     }
-    
+
     if (typeof obj === 'boolean') {
         return `<span class="json-boolean">${obj}</span>`;
     }
-    
+
     const isArray = Array.isArray(obj);
     const keys = Object.keys(obj);
     const len = keys.length;
-    
+
     if (len === 0) {
         return isArray ? '<span>[]</span>' : '<span>{}</span>';
     }
-    
+
     // 计算渲染后的预估行数
     const estimatedLines = estimateJSONLines(obj, depth);
-    
+
     // 根据行数和深度决定是否折叠
     let defaultCollapsed = false;
     if (depth === 0) {
@@ -3844,29 +3872,29 @@ function renderJSONTree(obj, depth = 0, parentCollapsed = false) {
         // 嵌套层级：如果父级折叠了，全部折叠；否则全部展开，不再嵌套折叠
         defaultCollapsed = parentCollapsed;
     }
-    
+
     console.log(`  → 是否折叠: ${defaultCollapsed}`);
 
     // 只有第一层级添加 json-tree 容器和折叠控件
     const isRootLevel = depth === 0;
-    
+
     let html = '';
-    
+
     if (isRootLevel) {
         // 根层级：添加完整的折叠控件
         html += '<div class="json-tree">';
         html += `<span class="json-tree-toggle" onclick="toggleJSONNode('${id}')">${defaultCollapsed ? '\u25b6' : '\u25bc'}</span>`;
-        
+
         // 折叠按钮（折叠时显示）
         html += `<span class="json-expand-btn" onclick="toggleJSONNode('${id}')" id="${id}_btn" style="display:${defaultCollapsed ? 'inline-block' : 'none'};cursor:pointer;">${isArray ? '[' : '{'} ${len} items, ~${estimatedLines} lines ${isArray ? ']' : '}'}</span>`;
-        
+
         // 开始括号（展开时显示）
         html += `<span id="${id}_open" style="display:${defaultCollapsed ? 'none' : 'inline'}">${isArray ? '[' : '{'}</span>`;
     } else {
         // 嵌套层级：不添加任何折叠控件，直接显示
         html += `<span>${isArray ? '[' : '{'}</span>`;
     }
-    
+
     // 只有根层级才使用 json-tree-item 和折叠类
     if (isRootLevel) {
         html += `<div id="${id}" class="json-tree-item${defaultCollapsed ? ' json-tree-collapsed' : ''}">`;
@@ -3874,33 +3902,33 @@ function renderJSONTree(obj, depth = 0, parentCollapsed = false) {
         // 嵌套层级不使用折叠类，直接用普通div
         html += '<div>';
     };
-    
+
     keys.forEach((key, index) => {
         const value = obj[key];
         const isLast = index === len - 1;
-        
+
         html += '<div style="margin-left: 15px;">';
-        
+
         if (!isArray) {
             html += `<span class="json-key">"${escapeHtml(key)}"</span>: `;
         }
-        
+
         if (typeof value === 'object' && value !== null) {
             // 传递当前层级的折叠状态给子级
             html += renderJSONTree(value, depth + 1, defaultCollapsed);
         } else {
             html += renderJSONTree(value, depth + 1, defaultCollapsed);
         }
-        
+
         if (!isLast) {
             html += ',';
         }
-        
+
         html += '</div>';
     });
-    
+
     html += '</div>';
-    
+
     // 结束括号：根层级需要根据折叠状态控制显示/隐藏，嵌套层级总是显示
     if (isRootLevel) {
         // 根层级：结束括号（展开时显示，折叠时隐藏）
@@ -3909,11 +3937,11 @@ function renderJSONTree(obj, depth = 0, parentCollapsed = false) {
         // 嵌套层级：总是显示结束括号
         html += `<span>${isArray ? ']' : '}'}</span>`;
     }
-    
+
     if (isRootLevel) {
         html += '</div>';
     }
-    
+
     return html;
 }
 
@@ -3922,20 +3950,20 @@ function estimateJSONLines(obj, depth = 0) {
     if (obj === null || typeof obj !== 'object') {
         return 1; // 基本类型占用1行
     }
-    
+
     const isArray = Array.isArray(obj);
     const keys = Object.keys(obj);
     const len = keys.length;
-    
+
     if (len === 0) {
         return 1; // 空对象/数组占用1行
     }
-    
+
     let totalLines = 0;
-    
+
     keys.forEach(key => {
         const value = obj[key];
-        
+
         if (typeof value === 'object' && value !== null) {
             // 递归计算嵌套对象的行数
             totalLines += estimateJSONLines(value, depth + 1);
@@ -3944,26 +3972,26 @@ function estimateJSONLines(obj, depth = 0) {
             totalLines += 1;
         }
     });
-    
+
     // 加上开始和结束符号的行数（如果有内容）
     if (totalLines > 0) {
         totalLines += 2; // { 和 } 各占一行
     }
-    
+
     return totalLines;
 }
 
 function renderXMLTree(xmlStr) {
     const id = 'xml_' + Math.random().toString(36).substr(2, 9);
-    
+
     try {
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
-        
+
         if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
             return null;
         }
-        
+
         return renderXMLNode(xmlDoc.documentElement, 0);
     } catch (e) {
         return null;
@@ -3972,26 +4000,26 @@ function renderXMLTree(xmlStr) {
 
 function renderXMLNode(node, depth = 0) {
     if (!node) return '';
-    
+
     const id = 'xml_' + Math.random().toString(36).substr(2, 9);
     const tagName = node.tagName;
     const hasChildren = node.children.length > 0;
     const hasText = node.childNodes.length === 1 && node.childNodes[0].nodeType === 3;
-    
+
     // 默认折叠深度>1的节点
     const defaultCollapsed = depth > 1;
-    
+
     let html = '<div class="xml-tree">';
-    
+
     if (hasChildren) {
         html += `<span class="xml-tree-toggle" onclick="toggleXMLNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
     } else {
         html += '<span style="display:inline-block;width:14px;"></span>';
     }
-    
+
     // 开始标签
     html += '<span class="xml-tag">&lt;' + escapeHtml(tagName);
-    
+
     // 属性
     if (node.attributes) {
         for (let i = 0; i < node.attributes.length; i++) {
@@ -4000,48 +4028,48 @@ function renderXMLNode(node, depth = 0) {
             html += '<span class="xml-attr-value">"' + escapeHtml(attr.value) + '"</span>';
         }
     }
-    
+
     if (!hasChildren && !hasText) {
         html += '/&gt;</span>';
     } else {
         html += '&gt;</span>';
-        
+
         if (hasText) {
             html += escapeHtml(node.textContent.trim());
         } else if (hasChildren) {
             html += `<div id="${id}" class="xml-tree-item${defaultCollapsed ? ' xml-tree-collapsed' : ''}">`;
-            
+
             for (let i = 0; i < node.children.length; i++) {
                 html += renderXMLNode(node.children[i], depth + 1);
             }
-            
+
             html += '</div>';
         }
-        
+
         html += '<span class="xml-tag">&lt;/' + escapeHtml(tagName) + '&gt;</span>';
     }
-    
+
     html += '</div>';
-    
+
     return html;
 }
 
 function toggleJSONNode(id) {
     const contentNode = document.getElementById(id);
     if (!contentNode) return;
-    
+
     // 根层级才有 json-tree 容器
     const container = contentNode.closest('.json-tree');
     if (!container) {
         console.warn('未找到 json-tree 容器，这个节点可能不支持折叠');
         return;
     }
-    
+
     const btn = document.getElementById(id + '_btn');
     const openBracket = document.getElementById(id + '_open');
     const closeBracket = document.getElementById(id + '_close');
     const toggle = container.querySelector('.json-tree-toggle');
-    
+
     if (contentNode.classList.contains('json-tree-collapsed')) {
         // 展开：隐藏按钮，显示大括号和内容
         contentNode.classList.remove('json-tree-collapsed');
@@ -4062,7 +4090,7 @@ function toggleJSONNode(id) {
 function toggleXMLNode(id) {
     const node = document.getElementById(id);
     const toggle = node.previousElementSibling.previousElementSibling;
-    
+
     if (node.classList.contains('xml-tree-collapsed')) {
         node.classList.remove('xml-tree-collapsed');
         toggle.textContent = '▼';
@@ -4115,19 +4143,19 @@ function saveHighlightRule() {
     const bgColor = document.getElementById('ruleBgColor').value;
     const textColor = document.getElementById('ruleTextColor').value;
     const enabled = document.getElementById('ruleEnabled').checked;
-    
+
     if (!name) {
         showToast('⚠️ 请输入规则名称');
         document.getElementById('ruleName').focus();
         return;
     }
-    
+
     if (!pattern) {
         showToast('⚠️ 请输入匹配内容');
         document.getElementById('rulePattern').focus();
         return;
     }
-    
+
     // 验证正则表达式
     if (type === 'regex') {
         try {
@@ -4138,7 +4166,7 @@ function saveHighlightRule() {
             return;
         }
     }
-    
+
     const rule = {
         id: editingRuleIndex >= 0 ? customHighlightRules[editingRuleIndex].id : Date.now(),
         name,
@@ -4149,7 +4177,7 @@ function saveHighlightRule() {
         enabled,
         builtin: false
     };
-    
+
     if (editingRuleIndex >= 0) {
         // 更新现有规则
         customHighlightRules[editingRuleIndex] = rule;
@@ -4157,7 +4185,7 @@ function saveHighlightRule() {
         // 添加新规则
         customHighlightRules.push(rule);
     }
-    
+
     saveCustomRulesToStorage();
     closeAddRuleModal();
     renderHighlightRulesList();
@@ -4240,7 +4268,7 @@ function saveSettings() {
 function editHighlightRule(index) {
     editingRuleIndex = index;
     const rule = customHighlightRules[index];
-    
+
     document.getElementById('ruleModalTitle').textContent = '✏️ 编辑高亮规则';
     document.getElementById('ruleName').value = rule.name;
     document.getElementById('ruleType').value = rule.type;
@@ -4262,21 +4290,21 @@ function toggleHighlightRule(index) {
 function deleteHighlightRule(index) {
     console.log('🗑️ 删除规则被调用, index:', index);
     console.log('当前规则数量:', customHighlightRules.length);
-    
+
     if (index < 0 || index >= customHighlightRules.length) {
         console.error('无效的索引:', index);
         showToast('❌ 规则索引错误');
         return;
     }
-    
+
     const rule = customHighlightRules[index];
     console.log('要删除的规则:', rule);
-    
+
     if (rule.builtin) {
         showToast('⚠️ 内置规则不能删除，但可以禁用');
         return;
     }
-    
+
     // 使用自定义确认对话框
     showCustomConfirm(`确定要删除规则 "${rule.name}" 吗？`, '删除规则').then(confirmed => {
         if (confirmed) {
@@ -4311,61 +4339,61 @@ function resetToDefault() {
 
 function renderHighlightRulesList() {
     const container = document.getElementById('highlightRulesList');
-    
+
     if (customHighlightRules.length === 0) {
         container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无规则</div>';
         return;
     }
-    
+
     // 清空容器
     container.innerHTML = '';
-    
+
     customHighlightRules.forEach((rule, index) => {
         const typeLabel = rule.type === 'text' ? '文本' : '正则';
         const currentIndex = index; // 保存当前索引，避免闭包问题
-        
+
         // 创建规则项
         const ruleItem = document.createElement('div');
         ruleItem.className = 'rule-item';
         ruleItem.style.borderLeftColor = rule.bgColor;
         ruleItem.setAttribute('data-index', currentIndex); // 添加数据属性
-        
+
         // 复选框
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = rule.enabled;
         checkbox.style.cursor = 'pointer';
-        checkbox.addEventListener('change', function() {
+        checkbox.addEventListener('change', function () {
             toggleHighlightRule(currentIndex);
         });
-        
+
         // 内容区域
         const contentDiv = document.createElement('div');
         contentDiv.style.flex = '1';
-        
+
         // 规则名称行
         const nameDiv = document.createElement('div');
         nameDiv.style.fontWeight = 'bold';
         nameDiv.style.marginBottom = '5px';
         nameDiv.textContent = rule.name + ' ';
-        
+
         if (rule.builtin) {
             const builtinTag = document.createElement('span');
             builtinTag.style.cssText = 'background-color: #6366f1; color: white; font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-left: 5px;';
             builtinTag.textContent = '内置';
             nameDiv.appendChild(builtinTag);
         }
-        
+
         const typeTag = document.createElement('span');
         typeTag.style.cssText = 'background-color: var(--vscode-editorWidget-background); color: var(--vscode-descriptionForeground); font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-left: 5px;';
         typeTag.textContent = typeLabel;
         nameDiv.appendChild(typeTag);
-        
+
         // 匹配内容行
         const patternDiv = document.createElement('div');
         patternDiv.style.cssText = 'font-size: 11px; color: var(--vscode-descriptionForeground); font-family: "Consolas", monospace;';
         patternDiv.textContent = rule.pattern;
-        
+
         // 示例效果
         const exampleDiv = document.createElement('div');
         exampleDiv.style.marginTop = '5px';
@@ -4374,47 +4402,47 @@ function renderHighlightRulesList() {
         exampleSpan.style.cssText = `background-color: ${rule.bgColor}; color: ${rule.textColor}; font-size: 11px;`;
         exampleSpan.textContent = '示例效果';
         exampleDiv.appendChild(exampleSpan);
-        
+
         contentDiv.appendChild(nameDiv);
         contentDiv.appendChild(patternDiv);
         contentDiv.appendChild(exampleDiv);
-        
+
         // 按钮区域
         const buttonsDiv = document.createElement('div');
         buttonsDiv.style.display = 'flex';
         buttonsDiv.style.gap = '5px';
-        
+
         if (!rule.builtin) {
             // 编辑按钮
             const editBtn = document.createElement('button');
             editBtn.textContent = '编辑';
             editBtn.style.cssText = 'padding: 5px 10px; font-size: 11px;';
-            editBtn.addEventListener('click', function() {
+            editBtn.addEventListener('click', function () {
                 console.log('📝 编辑按钮被点击, index:', currentIndex);
                 editHighlightRule(currentIndex);
             });
-            
+
             // 删除按钮
             const deleteBtn = document.createElement('button');
             deleteBtn.textContent = '删除';
             deleteBtn.style.cssText = 'padding: 5px 10px; font-size: 11px;';
-            deleteBtn.addEventListener('click', function(e) {
+            deleteBtn.addEventListener('click', function (e) {
                 console.log('🔴 删除按钮被点击, index:', currentIndex);
                 e.stopPropagation(); // 阻止事件冒泡
                 deleteHighlightRule(currentIndex);
             });
-            
+
             buttonsDiv.appendChild(editBtn);
             buttonsDiv.appendChild(deleteBtn);
         }
-        
+
         ruleItem.appendChild(checkbox);
         ruleItem.appendChild(contentDiv);
         ruleItem.appendChild(buttonsDiv);
-        
+
         container.appendChild(ruleItem);
     });
-    
+
     // 重置按钮
     const resetDiv = document.createElement('div');
     resetDiv.style.cssText = 'margin-top: 20px; text-align: center;';
@@ -4422,7 +4450,7 @@ function renderHighlightRulesList() {
     resetBtn.textContent = '🔄 重置为默认规则';
     resetBtn.addEventListener('click', resetToDefault);
     resetDiv.appendChild(resetBtn);
-    
+
     container.appendChild(resetDiv);
 }
 
@@ -4439,10 +4467,10 @@ function updateColorPreview() {
 // ========== 结束自定义高亮规则管理 ==========
 
 // 键盘快捷键支持
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
     // 不在输入框中时才响应
     if (e.target.tagName === 'INPUT') return;
-    
+
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
         goToPrevPage();
@@ -4462,7 +4490,7 @@ document.addEventListener('keydown', function(e) {
 let scrollUpdateTimer = null;
 const logContainer = document.getElementById('logContainer');
 if (logContainer) {
-    logContainer.addEventListener('scroll', function() {
+    logContainer.addEventListener('scroll', function () {
         // 使用防抖，避免频繁重绘
         if (scrollUpdateTimer) {
             clearTimeout(scrollUpdateTimer);

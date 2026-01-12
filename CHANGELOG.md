@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- 新增多关键词搜索功能，支持通过空格分隔的多个关键词进行 AND 逻辑匹配，并支持对应的高亮显示
+
 ### Fixed
 - 修复时间线加载不完整的问题
 - 优化加载日志逻辑，提升用户体验

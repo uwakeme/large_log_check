@@ -30,7 +30,7 @@ export interface LogStats {
 export class LogProcessor {
     private filePath: string;
     private totalLines: number = 0;
-    
+
     // 常见的日志时间戳格式正则表达式
     private timePatterns = [
         // 2024-01-01 12:00:00
@@ -111,7 +111,7 @@ export class LogProcessor {
                     });
                 }
                 currentLine++;
-                
+
                 // 如果已经读取了足够的行,关闭流
                 if (currentLine >= endLine) {
                     rl.close();
@@ -132,11 +132,20 @@ export class LogProcessor {
     /**
      * 搜索包含关键词的行
      */
-    async search(keyword: string, reverse: boolean = false): Promise<LogLine[]> {
+    async search(keyword: string, reverse: boolean = false, isMultiple: boolean = false): Promise<LogLine[]> {
         return new Promise((resolve, reject) => {
             const results: LogLine[] = [];
             let currentLine = 0;
-            const searchRegex = new RegExp(keyword, 'i');
+
+            let searchRegex: RegExp;
+            let keywords: string[] = [];
+
+            if (isMultiple) {
+                // 多关键词模式：预处理关键词
+                keywords = keyword.trim().split(/\s+/).map(k => k.toLowerCase());
+            } else {
+                searchRegex = new RegExp(keyword, 'i');
+            }
 
             const stream = fs.createReadStream(this.filePath);
             const rl = readline.createInterface({
@@ -145,7 +154,20 @@ export class LogProcessor {
             });
 
             rl.on('line', (line) => {
-                if (searchRegex.test(line)) {
+                let isMatch = false;
+
+                if (isMultiple) {
+                    // 多关键词模式：检查是否包含所有关键词
+                    if (keywords.length > 0) {
+                        const lowerLine = line.toLowerCase();
+                        isMatch = keywords.every(k => lowerLine.includes(k));
+                    }
+                } else {
+                    // 正则模式
+                    isMatch = searchRegex.test(line);
+                }
+
+                if (isMatch) {
                     const timestamp = this.extractTimestamp(line);
                     const level = this.extractLogLevel(line);
                     results.push({
@@ -254,7 +276,7 @@ export class LogProcessor {
                 if (found) {
                     return; // 已经找到，跳过后续行
                 }
-                
+
                 const timestamp = this.extractTimestamp(line);
                 if (timestamp && timestamp >= targetTime) {
                     found = true;
@@ -402,7 +424,7 @@ export class LogProcessor {
 
             rl.on('error', (error) => {
                 writeStream.end();
-                fs.unlink(tempFilePath, () => {});
+                fs.unlink(tempFilePath, () => { });
                 reject(error);
             });
         });
@@ -468,7 +490,7 @@ export class LogProcessor {
 
             rl.on('error', (error) => {
                 writeStream.end();
-                fs.unlink(tempFilePath, () => {});
+                fs.unlink(tempFilePath, () => { });
                 reject(error);
             });
         });
@@ -551,7 +573,7 @@ export class LogProcessor {
             if (level === 'INFO' || level === 'INFORMATION') return 'INFO';
             if (level === 'DEBUG' || level === 'TRACE' || level === 'VERBOSE') return 'DEBUG';
         }
-        
+
         // 使用原有的模式匹配作为后备
         for (const levelPattern of this.logLevelPatterns) {
             if (levelPattern.pattern.test(line)) {
@@ -604,15 +626,15 @@ export class LogProcessor {
 
                 sampleRl.on('line', (line) => {
                     currentLine++;
-                    
+
                     // 均匀采样：每隔 sampleInterval 行采样一次
                     if (currentLine === 1 || currentLine === totalLines || currentLine % sampleInterval === 0) {
                         const timestamp = this.extractTimestamp(line);
                         const level = this.extractLogLevel(line);
-                        
+
                         if (timestamp) {
                             samples.push({ timestamp, lineNumber: currentLine, level });
-                            
+
                             if (!startTime || timestamp < startTime) {
                                 startTime = timestamp;
                             }
@@ -664,7 +686,7 @@ export class LogProcessor {
 
             rl.on('line', (line) => {
                 stats.totalLines++;
-                
+
                 // 统计日志级别
                 const level = this.extractLogLevel(line);
                 if (level === 'ERROR') {
@@ -742,13 +764,13 @@ export class LogProcessor {
             let sampleLines = 0;
             rl.on('line', (line) => {
                 const level = this.extractLogLevel(line);
-                
+
                 // 输出前5条日志的级别提取结果
                 if (sampleLines < 5) {
                     console.log(`第 ${currentLine + 1} 行: 提取到的级别='${level}' 内容:`, line.substring(0, 100));
                     sampleLines++;
                 }
-                
+
                 if (level && levelsSet.has(level)) {
                     const timestamp = this.extractTimestamp(line);
                     results.push({
@@ -783,7 +805,7 @@ export class LogProcessor {
         return new Promise((resolve, reject) => {
             const results: LogLine[] = [];
             let currentLine = 0;
-            
+
             let searchRegex: RegExp;
             try {
                 searchRegex = new RegExp(pattern, flags);
@@ -832,16 +854,16 @@ export class LogProcessor {
     async exportLogs(lines: LogLine[], outputPath: string): Promise<void> {
         return new Promise((resolve, reject) => {
             const writeStream = fs.createWriteStream(outputPath);
-            
+
             for (const line of lines) {
                 writeStream.write(line.content + '\n');
             }
-            
+
             writeStream.end();
             writeStream.on('finish', () => {
                 resolve();
             });
-            
+
             writeStream.on('error', (error) => {
                 reject(error);
             });
@@ -854,20 +876,20 @@ export class LogProcessor {
     private parseTimeString(timeStr: string): Date | undefined {
         // 标准化时间字符串
         let normalized = timeStr.trim();
-        
+
         // 替换 / 为 -
         normalized = normalized.replace(/\//g, '-');
-        
+
         // 处理 T 分隔符
         normalized = normalized.replace('T', ' ');
-        
+
         // 尝试解析
         const date = new Date(normalized);
-        
+
         if (!isNaN(date.getTime())) {
             return date;
         }
-        
+
         // 尝试其他格式 DD-MM-YYYY
         const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})(.*)$/;
         const match = normalized.match(ddmmyyyy);
@@ -878,7 +900,7 @@ export class LogProcessor {
                 return date2;
             }
         }
-        
+
         return undefined;
     }
 }

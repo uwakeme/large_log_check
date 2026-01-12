@@ -65,7 +65,7 @@ export class LogViewerPanel {
                         await this.loadMoreLines(message.startLine, message.count);
                         break;
                     case 'search':
-                        await this.searchLogs(message.keyword, message.reverse);
+                        await this.searchLogs(message.keyword, message.reverse, message.isMultiple);
                         break;
                     case 'refresh':
                         await this.loadFile(this._fileUri);
@@ -128,18 +128,18 @@ export class LogViewerPanel {
     private async loadFile(fileUri: vscode.Uri) {
         this._fileUri = fileUri;
         this._logProcessor = new LogProcessor(fileUri.fsPath);
-        
+
         try {
             const fileStats = await fs.promises.stat(fileUri.fsPath);
             const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(2);
-            
+
             // 获取总行数
             const totalLines = await this._logProcessor.getTotalLines();
-            
+
             // 根据文件大小决定加载策略
             let initialLines;
             let initialLoadCount = 2000; // 初始加载行数
-            
+
             if (totalLines <= 10000) {
                 // 小于1万行，一次性加载所有数据
                 initialLines = await this._logProcessor.readLines(0, totalLines);
@@ -149,9 +149,9 @@ export class LogViewerPanel {
                 initialLines = await this._logProcessor.readLines(0, initialLoadCount);
                 vscode.window.showInformationMessage(`文件较大 (${totalLines}行)，已快速加载前 ${initialLoadCount} 行，后续数据将在后台加载...`);
             }
-            
+
             this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
-            
+
             this._panel.webview.postMessage({
                 command: 'fileLoaded',
                 data: {
@@ -163,7 +163,7 @@ export class LogViewerPanel {
                     allLoaded: totalLines <= 10000
                 }
             });
-            
+
             // 立即请求时间线采样（不等待后续数据加载）
             this.sampleTimeline(this._timelineSampleCount);
         } catch (error) {
@@ -186,14 +186,15 @@ export class LogViewerPanel {
         }
     }
 
-    private async searchLogs(keyword: string, reverse: boolean = false) {
+    private async searchLogs(keyword: string, reverse: boolean = false, isMultiple: boolean = false) {
         try {
-            const results = await this._logProcessor.search(keyword, reverse);
+            const results = await this._logProcessor.search(keyword, reverse, isMultiple);
             this._panel.webview.postMessage({
                 command: 'searchResults',
                 data: {
                     keyword: keyword,
-                    results: results
+                    results: results,
+                    isMultiple: isMultiple
                 }
             });
         } catch (error) {
@@ -237,7 +238,7 @@ export class LogViewerPanel {
                     },
                     defaultUri: vscode.Uri.file(path.join(path.dirname(this._fileUri.fsPath), `filtered_${path.basename(this._fileUri.fsPath)}`))
                 });
-                
+
                 if (uri) {
                     await this._logProcessor.exportLogs(results, uri.fsPath);
                     vscode.window.showInformationMessage(`成功导出 ${results.length} 行日志到: ${uri.fsPath}`);
@@ -287,7 +288,7 @@ export class LogViewerPanel {
                     },
                     defaultUri: vscode.Uri.file(path.join(path.dirname(this._fileUri.fsPath), `filtered_${path.basename(this._fileUri.fsPath)}`))
                 });
-                
+
                 if (uri) {
                     await this._logProcessor.exportLogs(results, uri.fsPath);
                     vscode.window.showInformationMessage(`成功导出 ${results.length} 行日志到: ${uri.fsPath}`);
@@ -345,13 +346,13 @@ export class LogViewerPanel {
         try {
             vscode.window.showInformationMessage(`正在查找时间 ${timeStr} 的日志...`);
             const result = await this._logProcessor.findLineByTime(timeStr);
-            
+
             if (result) {
                 // 找到了，加载该行及周围的日志
                 const startLine = Math.max(0, result.lineNumber - 500);
                 const count = 1000; // 加载1000行
                 const lines = await this._logProcessor.readLines(startLine, count);
-                
+
                 this._panel.webview.postMessage({
                     command: 'jumpToTimeResult',
                     data: {
@@ -361,7 +362,7 @@ export class LogViewerPanel {
                         startLine: startLine
                     }
                 });
-                
+
                 vscode.window.showInformationMessage(`已定位到第 ${result.lineNumber} 行`);
             } else {
                 this._panel.webview.postMessage({
@@ -387,15 +388,15 @@ export class LogViewerPanel {
     private async jumpToLineInFullLog(lineNumber: number) {
         try {
             vscode.window.showInformationMessage(`正在加载完整日志并跳转到第 ${lineNumber} 行...`);
-            
+
             // 获取总行数
             const totalLines = await this._logProcessor.getTotalLines();
-            
+
             // 根据文件大小决定加载策略
             let lines;
             let allLoaded = false;
             let startLine = 0;
-            
+
             if (totalLines <= 50000) {
                 // 小文件，一次性加载所有数据
                 startLine = 0;
@@ -407,11 +408,11 @@ export class LogViewerPanel {
                 const count = 10000;
                 lines = await this._logProcessor.readLines(startLine, count);
             }
-            
+
             // 获取文件信息
             const fileStats = await fs.promises.stat(this._fileUri.fsPath);
             const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(2);
-            
+
             // 发送完整日志数据和跳转指令
             this._panel.webview.postMessage({
                 command: 'jumpToLineInFullLogResult',
@@ -426,7 +427,7 @@ export class LogViewerPanel {
                     targetLineNumber: lineNumber
                 }
             });
-            
+
             vscode.window.showInformationMessage(`已跳转到第 ${lineNumber} 行`);
         } catch (error) {
             vscode.window.showErrorMessage(`跳转失败: ${error}`);
@@ -456,7 +457,7 @@ export class LogViewerPanel {
     private async getStatistics() {
         try {
             const stats = await this._logProcessor.getStatistics();
-            
+
             // 将 Map 转换为普通对象，以便通过 postMessage 传输
             const serializedStats = {
                 ...stats,
@@ -464,7 +465,7 @@ export class LogViewerPanel {
                 methodCounts: stats.methodCounts ? Object.fromEntries(stats.methodCounts) : {},
                 threadCounts: stats.threadCounts ? Object.fromEntries(stats.threadCounts) : {}
             };
-            
+
             this._panel.webview.postMessage({
                 command: 'statisticsResults',
                 data: serializedStats
