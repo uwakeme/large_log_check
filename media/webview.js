@@ -1180,7 +1180,8 @@ function search() {
     // 保存搜索关键词和模式用于高亮与折叠组统计
     currentSearchKeyword = keyword;
     currentSearchIsRegex = isRegex;
-    const isMultiple = document.getElementById('multipleMode').checked;
+    // 多关键词模式现在是默认行为（除非使用正则模式）
+    const isMultiple = !isRegex; // 正则模式下不使用多关键词
     currentSearchIsMultiple = isMultiple;
 
     if (isRegex) {
@@ -1919,76 +1920,311 @@ function showCopyToast() {
 }
 
 // ========== 高级搜索 ==========
+let advSearchConditionId = 0;
+
 function showAdvancedSearchModal() {
     document.getElementById('advancedSearchModal').style.display = 'block';
+    // 如果没有条件，自动添加第一个
+    const conditionsContainer = document.getElementById('advSearchConditions');
+    if (conditionsContainer.children.length === 0) {
+        addAdvSearchCondition();
+    }
 }
 
 function closeAdvancedSearchModal() {
     document.getElementById('advancedSearchModal').style.display = 'none';
+    // 清空所有条件
+    document.getElementById('advSearchConditions').innerHTML = '';
+    advSearchConditionId = 0;
+}
+
+function addAdvSearchCondition() {
+    const conditionId = advSearchConditionId++;
+    const conditionsContainer = document.getElementById('advSearchConditions');
+    
+    const conditionDiv = document.createElement('div');
+    conditionDiv.id = `advSearchCondition_${conditionId}`;
+    conditionDiv.style.cssText = 'display: flex; gap: 10px; align-items: flex-start; padding: 10px; background-color: var(--vscode-editor-background); border-radius: 3px; border: 1px solid var(--vscode-panel-border);';
+    
+    conditionDiv.innerHTML = `
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="advSearchType_${conditionId}" onchange="onAdvSearchTypeChange(${conditionId})" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
+                    <option value="keyword">关键词</option>
+                    <option value="thread">线程名</option>
+                    <option value="class">类名</option>
+                    <option value="method">方法名</option>
+                    <option value="level">日志级别</option>
+                    <option value="time">时间范围</option>
+                </select>
+                <div id="advSearchMatchType_${conditionId}" style="display: none;">
+                    <select id="advSearchMatch_${conditionId}" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
+                        <option value="exact">精确匹配</option>
+                        <option value="contains">包含</option>
+                    </select>
+                </div>
+            </div>
+            <div id="advSearchValue_${conditionId}">
+                <input type="text" id="advSearchInput_${conditionId}" placeholder="输入搜索内容（多关键词用空格分隔）" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
+            </div>
+        </div>
+        <button onclick="removeAdvSearchCondition(${conditionId})" title="删除此条件" style="padding: 6px 10px; font-size: 12px; background-color: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);">❌</button>
+    `;
+    
+    conditionsContainer.appendChild(conditionDiv);
+}
+
+function removeAdvSearchCondition(conditionId) {
+    const conditionDiv = document.getElementById(`advSearchCondition_${conditionId}`);
+    if (conditionDiv) {
+        conditionDiv.remove();
+    }
+}
+
+function onAdvSearchTypeChange(conditionId) {
+    const type = document.getElementById(`advSearchType_${conditionId}`).value;
+    const valueContainer = document.getElementById(`advSearchValue_${conditionId}`);
+    const matchTypeContainer = document.getElementById(`advSearchMatchType_${conditionId}`);
+    
+    // 显示/隐藏匹配类型选择器
+    if (type === 'thread' || type === 'class' || type === 'method') {
+        matchTypeContainer.style.display = 'block';
+    } else {
+        matchTypeContainer.style.display = 'none';
+    }
+    
+    // 根据类型渲染不同的输入控件
+    switch (type) {
+        case 'keyword':
+        case 'thread':
+        case 'class':
+        case 'method':
+            valueContainer.innerHTML = `<input type="text" id="advSearchInput_${conditionId}" placeholder="${getPlaceholder(type)}" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">`;
+            break;
+        case 'level':
+            valueContainer.innerHTML = `
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_ERROR" checked> <span style="color: #f14c4c;">■</span> ERROR</label>
+                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_WARN" checked> <span style="color: #cca700;">■</span> WARN</label>
+                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_INFO" checked> <span style="color: #4fc1ff;">■</span> INFO</label>
+                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_DEBUG" checked> <span style="color: #b267e6;">■</span> DEBUG</label>
+                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_OTHER" checked> 其他</label>
+                </div>
+            `;
+            break;
+        case 'time':
+            valueContainer.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <input type="text" id="advSearchStartTime_${conditionId}" placeholder="开始时间 (2024-01-01 10:00:00)" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
+                    <input type="text" id="advSearchEndTime_${conditionId}" placeholder="结束时间 (2024-01-01 18:00:00)" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
+                </div>
+            `;
+            break;
+    }
+}
+
+function getPlaceholder(type) {
+    switch (type) {
+        case 'keyword': return '输入搜索内容（多关键词用空格分隔）';
+        case 'thread': return '输入线程名，例如：http-nio-8080-exec-1';
+        case 'class': return '输入类名，例如：com.example.UserService';
+        case 'method': return '输入方法名，例如：getUserById';
+        default: return '';
+    }
+}
+
+// 提取日志行中的字段
+function extractLogFields(line) {
+    let content = line.content || line;
+    
+    // 如果 content 是字符串且包含 HTML 标签，需要先移除 HTML 标签
+    if (typeof content === 'string' && content.includes('<')) {
+        // 创建临时 DOM 元素来提取纯文本
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = content;
+        content = tempDiv.textContent || tempDiv.innerText || content;
+    }
+    
+    // 提取线程名 [threadName]
+    const threadMatch = content.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
+    const threadName = threadMatch ? threadMatch[1] : '';
+    
+    // 提取类名 package.ClassName
+    const classMatch = content.match(/\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.[A-Z][a-zA-Z0-9_]*)\b/);
+    const className = classMatch ? classMatch[1] : '';
+    
+    // 提取方法名 [methodName:lineNumber]
+    const methodMatch = content.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
+    const methodName = methodMatch ? methodMatch[1] : '';
+    
+    return { threadName, className, methodName, content };
 }
 
 function confirmAdvancedSearch() {
-    const keyword = document.getElementById('advSearchKeyword').value.trim();
-    const startTime = document.getElementById('advSearchStartTime').value.trim();
-    const endTime = document.getElementById('advSearchEndTime').value.trim();
-
-    const levels = [];
-    if (document.getElementById('advSearchError').checked) levels.push('ERROR');
-    if (document.getElementById('advSearchWarn').checked) levels.push('WARN');
-    if (document.getElementById('advSearchInfo').checked) levels.push('INFO');
-    if (document.getElementById('advSearchDebug').checked) levels.push('DEBUG');
-    if (document.getElementById('advSearchOther').checked) levels.push('OTHER');
-
-    // 在已加载的数据中进行过滤
+    const logic = document.getElementById('advSearchLogic').value;
+    const conditionsContainer = document.getElementById('advSearchConditions');
+    
+    if (conditionsContainer.children.length === 0) {
+        showToast('⚠️ 请至少添加一个搜索条件');
+        return;
+    }
+    
+    // 收集所有条件
+    const conditions = [];
+    for (let i = 0; i < conditionsContainer.children.length; i++) {
+        const child = conditionsContainer.children[i];
+        const conditionId = child.id.split('_')[1];
+        const type = document.getElementById(`advSearchType_${conditionId}`).value;
+        
+        const condition = { type };
+        
+        switch (type) {
+            case 'keyword':
+            case 'thread':
+            case 'class':
+            case 'method':
+                const input = document.getElementById(`advSearchInput_${conditionId}`);
+                if (!input || !input.value.trim()) continue;
+                condition.value = input.value.trim();
+                if (type !== 'keyword') {
+                    condition.matchType = document.getElementById(`advSearchMatch_${conditionId}`).value;
+                }
+                break;
+            case 'level':
+                const levels = [];
+                if (document.getElementById(`advSearchLevel_${conditionId}_ERROR`)?.checked) levels.push('ERROR');
+                if (document.getElementById(`advSearchLevel_${conditionId}_WARN`)?.checked) levels.push('WARN');
+                if (document.getElementById(`advSearchLevel_${conditionId}_INFO`)?.checked) levels.push('INFO');
+                if (document.getElementById(`advSearchLevel_${conditionId}_DEBUG`)?.checked) levels.push('DEBUG');
+                if (document.getElementById(`advSearchLevel_${conditionId}_OTHER`)?.checked) levels.push('OTHER');
+                if (levels.length === 0 || levels.length === 5) continue; // 全选或全不选，跳过
+                condition.levels = levels;
+                break;
+            case 'time':
+                const startTime = document.getElementById(`advSearchStartTime_${conditionId}`)?.value.trim();
+                const endTime = document.getElementById(`advSearchEndTime_${conditionId}`)?.value.trim();
+                if (!startTime && !endTime) continue;
+                condition.startTime = startTime;
+                condition.endTime = endTime;
+                break;
+        }
+        
+        conditions.push(condition);
+    }
+    
+    if (conditions.length === 0) {
+        showToast('⚠️ 请至少填写一个有效的搜索条件');
+        return;
+    }
+    
+    console.log('🔍 高级搜索条件:', { logic, conditions });
+    
+    // 进入搜索模式前备份
+    if (!isInSearchMode) {
+        const container = document.getElementById('logContainer');
+        searchBackup = {
+            allLines: allLines,
+            originalLines: originalLines,
+            totalLinesInFile,
+            allDataLoaded,
+            isCollapseMode,
+            currentPage,
+            pageRanges: new Map(pageRanges),
+            scrollTop: container ? container.scrollTop : 0
+        };
+        isInSearchMode = true;
+    }
+    
+    // 应用过滤条件
     let results = [...allLines];
-
-    // 过滤关键词
-    if (keyword) {
+    
+    if (logic === 'AND') {
+        // AND 逻辑：所有条件都必须满足
         results = results.filter(line => {
-            const content = line.content || line;
-            return content.includes(keyword);
+            return conditions.every(condition => matchCondition(line, condition));
+        });
+    } else {
+        // OR 逻辑：满足任一条件即可
+        results = results.filter(line => {
+            return conditions.some(condition => matchCondition(line, condition));
         });
     }
-
-    // 过滤时间范围
-    if (startTime || endTime) {
-        results = results.filter(line => {
-            if (!line.timestamp) return false;
-            const lineTime = new Date(line.timestamp);
-
-            if (startTime) {
-                const start = new Date(startTime);
-                if (lineTime < start) return false;
-            }
-
-            if (endTime) {
-                const end = new Date(endTime);
-                if (lineTime > end) return false;
-            }
-
-            return true;
-        });
-    }
-
-    // 过滤级别
-    if (levels.length > 0 && levels.length < 5) {
-        results = results.filter(line => {
-            const level = line.level ? line.level.toUpperCase() : 'OTHER';
-            return levels.includes(level);
-        });
-    }
-
 
     allLines = results;
     currentPage = 1;
     isFiltering = true;
-    updatePagination();
-    renderLines();
+    
+    handleDataChange({
+        resetPage: true,
+        clearPageRanges: true,
+        triggerAsyncCalc: true
+    });
 
     closeAdvancedSearchModal();
 
     if (results.length === 0) {
-        alert('未找到符合条件的日志！');
+        showToast('❌ 未找到符合条件的日志');
+    } else {
+        showToast(`✅ 找到 ${results.length} 条匹配的日志`);
+    }
+}
+
+function matchCondition(line, condition) {
+    const fields = extractLogFields(line);
+    const content = fields.content;
+    
+    switch (condition.type) {
+        case 'keyword':
+            // 多关键词搜索
+            const keywords = condition.value.split(/\s+/).filter(k => k);
+            return keywords.every(keyword => content.toLowerCase().includes(keyword.toLowerCase()));
+            
+        case 'thread':
+            if (!fields.threadName) return false;
+            if (condition.matchType === 'exact') {
+                return fields.threadName === condition.value;
+            } else {
+                return fields.threadName.toLowerCase().includes(condition.value.toLowerCase());
+            }
+            
+        case 'class':
+            if (!fields.className) return false;
+            if (condition.matchType === 'exact') {
+                return fields.className === condition.value;
+            } else {
+                return fields.className.toLowerCase().includes(condition.value.toLowerCase());
+            }
+            
+        case 'method':
+            if (!fields.methodName) return false;
+            if (condition.matchType === 'exact') {
+                return fields.methodName === condition.value;
+            } else {
+                return fields.methodName.toLowerCase().includes(condition.value.toLowerCase());
+            }
+            
+        case 'level':
+            const level = line.level ? line.level.toUpperCase() : 'OTHER';
+            return condition.levels.includes(level);
+            
+        case 'time':
+            if (!line.timestamp) return false;
+            const lineTime = new Date(line.timestamp);
+            
+            if (condition.startTime) {
+                const start = new Date(condition.startTime);
+                if (lineTime < start) return false;
+            }
+            
+            if (condition.endTime) {
+                const end = new Date(condition.endTime);
+                if (lineTime > end) return false;
+            }
+            
+            return true;
+            
+        default:
+            return true;
     }
 }
 

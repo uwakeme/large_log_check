@@ -18,14 +18,10 @@
             </div>
         </div>
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="搜索日志内容...">
+            <input type="text" id="searchInput" placeholder="搜索日志内容（多关键词用空格分隔）...">
             <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
                 <input type="checkbox" id="regexMode">
                 <span>正则</span>
-            </label>
-            <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" id="multipleMode">
-                <span>多关键词</span>
             </label>
             <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
                 <input type="checkbox" id="reverseMode">
@@ -339,39 +335,41 @@
     
     <!-- 高级搜索弹窗 -->
     <div id="advancedSearchModal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
                 <h2>🔍 高级搜索</h2>
                 <span class="modal-close" onclick="closeAdvancedSearchModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">关键词：</label>
-                    <input type="text" id="advSearchKeyword" placeholder="输入搜索关键词" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
-                </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">时间范围：</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <input type="text" id="advSearchStartTime" placeholder="开始时间 (2024-01-01 10:00:00)" style="padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
-                        <input type="text" id="advSearchEndTime" placeholder="结束时间 (2024-01-01 18:00:00)" style="padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <label style="font-weight: bold;">搜索条件：</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
+                                <span>逻辑关系：</span>
+                                <select id="advSearchLogic" style="padding: 4px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                                    <option value="AND">AND（且）</option>
+                                    <option value="OR">OR（或）</option>
+                                </select>
+                            </label>
+                            <button onclick="addAdvSearchCondition()" style="padding: 5px 12px; font-size: 12px;">➕ 添加条件</button>
+                        </div>
                     </div>
-                </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">日志级别：</label>
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                        <label><input type="checkbox" id="advSearchError" checked> <span style="color: #f14c4c;">■</span> ERROR</label>
-                        <label><input type="checkbox" id="advSearchWarn" checked> <span style="color: #cca700;">■</span> WARN</label>
-                        <label><input type="checkbox" id="advSearchInfo" checked> <span style="color: #4fc1ff;">■</span> INFO</label>
-                        <label><input type="checkbox" id="advSearchDebug" checked> <span style="color: #b267e6;">■</span> DEBUG</label>
-                        <label><input type="checkbox" id="advSearchOther" checked> 其他</label>
+                    <div id="advSearchConditions" style="display: flex; flex-direction: column; gap: 10px;">
+                        <!-- 搜索条件将动态添加到这里 -->
                     </div>
                 </div>
                 <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #0e7490;">
-                    <strong>💡 提示：</strong>可以单独使用关键词、时间范围或级别，也可以组合使用
+                    <strong>💡 提示：</strong>
+                    <ul style="margin: 5px 0 0 20px; font-size: 12px; line-height: 1.6;">
+                        <li>支持多个搜索条件组合，可选择 AND（同时满足）或 OR（满足任一）</li>
+                        <li>线程名、类名、方法名支持精确匹配和模糊匹配</li>
+                        <li>关键词搜索支持多关键词（空格分隔）</li>
+                    </ul>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeAdvancedSearchModal()">取消</button>
-                    <button onclick="confirmAdvancedSearch()">搜索</button>
+                    <button onclick="confirmAdvancedSearch()">🔍 搜索</button>
                 </div>
             </div>
         </div>
