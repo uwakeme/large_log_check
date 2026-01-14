@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.2.0] - 2026-01-14
 ### Changed
 - 多关键词搜索现在是默认搜索方式，无需勾选复选框
 - 移除了"多关键词"复选框，简化界面操作
@@ -14,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 正则模式下自动禁用多关键词匹配，避免冲突
 
 ### Enhanced
-- 高级搜索功能全面升级，真正"高级"起来：
+- 高级搜索功能全面升级
   - 支持添加多个搜索条件，可自由组合
   - 支持 AND（且）/ OR（或）逻辑选择
   - 新增字段级搜索：线程名、类名、方法名
