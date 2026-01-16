@@ -358,6 +358,24 @@ function handleJumpToLineInFullLogResult(data) {
     allLines = data.lines;
     originalLines = [...data.lines];
 
+    console.log(`📦 跳转数据已加载 - baseLineOffset: ${baseLineOffset}, 数据行数: ${allLines.length}, 目标行号: ${data.targetLineNumber}`);
+
+    // 显示加载提示
+    if (allLines.length > 0) {
+        const firstLine = allLines[0].lineNumber || 0;
+        const lastLine = allLines[allLines.length - 1].lineNumber || 0;
+        
+        if (allDataLoaded) {
+            showToast(`✅ 已加载完整日志，跳转到第 ${data.targetLineNumber} 行`);
+        } else if (baseLineOffset === 0) {
+            // 从文件开头加载
+            showToast(`✅ 已加载前 ${allLines.length} 行数据，跳转到第 ${data.targetLineNumber} 行`);
+        } else {
+            // 从中间加载（旧逻辑，现在应该不会走到这里了）
+            showToast(`✅ 已加载第 ${firstLine}~${lastLine} 行数据，定位到第 ${data.targetLineNumber} 行`);
+        }
+    }
+
     // 统一处理数据变更（但不重置页码，因为要跳转到目标行）
     handleDataChange({
         resetPage: false  // 不重置页码，由 jumpToLine 决定
@@ -368,15 +386,6 @@ function handleJumpToLineInFullLogResult(data) {
 
     // 时间线使用后端采样结果，这里只需要重绘当前位置指示器，无需重新统计全文件
     drawTimeline();
-
-    // 如有需要，重新启用后台加载（统一加载逻辑）
-    if (!allDataLoaded && allLines.length < totalLinesInFile) {
-        isBackgroundLoading = false;
-        startBackgroundLoading();
-    }
-
-    // 显示成功提示
-    showToast('✅ 已跳转到完整日志');
 }
 
 function renderLines() {
@@ -1028,80 +1037,119 @@ function toggleCollapseMode() {
 function highlightKeywords(content, keyword) {
     if (!content) return '';
 
-    let result = escapeHtml(content);
-
-    // 应用所有启用的自定义高亮规则
+    // 🔧 关键修复：先处理高亮规则（在原始文本上匹配），最后才转义HTML
+    // 创建一个标记数组来记录需要高亮的位置
+    const highlights = [];
+    
+    // 应用所有启用的自定义高亮规则（在原始文本上匹配）
     customHighlightRules.forEach(rule => {
         if (!rule.enabled) return;
 
         try {
+            let regex;
             if (rule.type === 'text') {
                 // 文本匹配
                 const escaped = escapeRegex(rule.pattern);
-                const regex = new RegExp('(' + escaped + ')', 'gi');
-                result = result.replace(regex, function (match) {
-                    return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
-                });
+                regex = new RegExp(escaped, 'gi');
             } else {
                 // 正则表达式匹配
-                const regex = new RegExp(rule.pattern, 'g');
+                regex = new RegExp(rule.pattern, 'g');
+            }
 
-                // 根据规则名称判断是否需要添加点击事件
+            let match;
+            while ((match = regex.exec(content)) !== null) {
+                const matchText = match[0];
+                const startPos = match.index;
+                const endPos = startPos + matchText.length;
+                
+                // 根据规则名称生成不同的HTML
+                let html;
                 if (rule.name === '线程名') {
-                    // 线程名 - 添加筛选图标
-                    result = result.replace(regex, function (match) {
-                        // 提取方括号内的线程名
-                        const threadNameMatch = match.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
-                        if (threadNameMatch) {
-                            const threadName = threadNameMatch[1];
-                            return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${threadName.replace(/'/g, "\\'")}')" title="点击筛选线程: ${threadName}">🔍</span></span>`;
-                        }
-                        return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
-                    });
+                    const threadNameMatch = matchText.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
+                    const threadName = threadNameMatch ? threadNameMatch[1] : '';
+                    const safeThreadName = threadName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${safeThreadName}')" title="点击筛选线程: ${threadName}">🔍</span></span>`;
                 } else if (rule.name === '类名') {
-                    // 类名 - 添加筛选图标
-                    result = result.replace(regex, function (match) {
-                        const className = match.trim();
-                        return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${className.replace(/'/g, "\\'")}')" title="点击筛选类: ${className}">🔍</span></span>`;
-                    });
+                    const className = matchText.trim();
+                    const safeClassName = className.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${safeClassName}')" title="点击筛选类: ${className}">🔍</span></span>`;
                 } else if (rule.name === '方法名') {
-                    // 方法名 - 添加筛选图标（匹配 [methodName:lineNumber]）
-                    result = result.replace(regex, function (match) {
-                        // 提取方括号内的方法名（去掉行号）
-                        const methodMatch = match.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
-                        if (methodMatch) {
-                            const methodName = methodMatch[1];
-                            return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${methodName.replace(/'/g, "\\'")}')" title="点击筛选方法: ${methodName}">🔍</span></span>`;
-                        }
-                        return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
-                    });
+                    const methodMatch = matchText.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
+                    const methodName = methodMatch ? methodMatch[1] : '';
+                    const safeMethodName = methodName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${safeMethodName}')" title="点击筛选方法: ${methodName}">🔍</span></span>`;
                 } else {
-                    // 其他规则 - 不添加点击事件
-                    result = result.replace(regex, function (match) {
-                        return `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${match}</span>`;
-                    });
+                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}</span>`;
                 }
+                
+                highlights.push({ start: startPos, end: endPos, html: html, priority: 1 });
             }
         } catch (e) {
             console.error(`规则 "${rule.name}" 应用失败:`, e);
         }
     });
 
-    // 高亮搜索关键词（最后处理，避免覆盖其他高亮）
+    // 处理搜索关键词高亮（优先级最高）
     if (keyword) {
-        if (currentSearchIsMultiple) {
-            // 多关键词模式：拆分并分别高亮
-            const keywords = keyword.trim().split(/\s+/);
-            keywords.forEach(k => {
-                if (k) {
-                    const regex = new RegExp('(' + escapeRegex(k) + ')', 'gi');
-                    result = result.replace(regex, '<span class="highlight">$1</span>');
+        const keywords = currentSearchIsMultiple ? keyword.trim().split(/\s+/) : [keyword];
+        keywords.forEach(k => {
+            if (k) {
+                const regex = new RegExp(escapeRegex(k), 'gi');
+                let match;
+                while ((match = regex.exec(content)) !== null) {
+                    const matchText = match[0];
+                    const startPos = match.index;
+                    const endPos = startPos + matchText.length;
+                    const html = `<span class="highlight">${escapeHtml(matchText)}</span>`;
+                    highlights.push({ start: startPos, end: endPos, html: html, priority: 2 });
                 }
-            });
-        } else {
-            const regex = new RegExp('(' + escapeRegex(keyword) + ')', 'gi');
-            result = result.replace(regex, '<span class="highlight">$1</span>');
+            }
+        });
+    }
+
+    // 如果没有高亮，直接返回转义后的文本
+    if (highlights.length === 0) {
+        return escapeHtml(content);
+    }
+
+    // 按优先级和位置排序，解决重叠问题（优先级高的优先，位置靠前的优先）
+    highlights.sort((a, b) => {
+        if (a.priority !== b.priority) return b.priority - a.priority; // 优先级高的在前
+        return a.start - b.start; // 位置靠前的在前
+    });
+
+    // 合并重叠的高亮区域，构建最终的HTML
+    const finalHighlights = [];
+    highlights.forEach(h => {
+        // 检查是否与已有的高亮重叠
+        const overlaps = finalHighlights.some(f => 
+            (h.start >= f.start && h.start < f.end) || 
+            (h.end > f.start && h.end <= f.end) ||
+            (h.start <= f.start && h.end >= f.end)
+        );
+        if (!overlaps) {
+            finalHighlights.push(h);
         }
+    });
+
+    // 按位置排序
+    finalHighlights.sort((a, b) => a.start - b.start);
+
+    // 构建最终的HTML字符串
+    let result = '';
+    let lastPos = 0;
+    finalHighlights.forEach(h => {
+        // 添加未高亮的部分
+        if (h.start > lastPos) {
+            result += escapeHtml(content.substring(lastPos, h.start));
+        }
+        // 添加高亮的部分
+        result += h.html;
+        lastPos = h.end;
+    });
+    // 添加剩余的未高亮部分
+    if (lastPos < content.length) {
+        result += escapeHtml(content.substring(lastPos));
     }
 
     return result;
@@ -2805,6 +2853,20 @@ function confirmJump() {
 
 function jumpToLine(lineNumber) {
     console.log('🎯 定位到行号:', lineNumber);
+    console.log(`📊 当前数据状态 - allLines: ${allLines.length} 行, baseLineOffset: ${baseLineOffset}, totalLinesInFile: ${totalLinesInFile}`);
+    
+    // 检查数据范围
+    if (allLines.length > 0) {
+        const firstLine = allLines[0].lineNumber || 0;
+        const lastLine = allLines[allLines.length - 1].lineNumber || 0;
+        console.log(`📄 已加载数据范围: ${firstLine} ~ ${lastLine}`);
+        
+        // 检查目标行是否在已加载范围内
+        if (lineNumber < firstLine || lineNumber > lastLine) {
+            console.warn(`⚠️ 目标行 ${lineNumber} 不在已加载数据范围内 (${firstLine} ~ ${lastLine})`);
+            showToast(`⚠️ 目标行不在当前加载的数据范围内，可能需要重新加载`);
+        }
+    }
 
     // 在折叠模式下，需要智能查找目标页
     if (isCollapseMode && pageRanges.size > 0) {
@@ -2855,15 +2917,31 @@ function jumpToLine(lineNumber) {
         const targetIndex = allLines.findIndex(line => line.lineNumber === lineNumber);
 
         if (targetIndex !== -1) {
-            // 根据索引位置计算页码
+            // 🔧 关键修复：根据索引位置计算页码
+            // 注意：这里计算的是在当前 allLines 数组中的页码，不是文件中的绝对页码
             const targetPage = Math.ceil((targetIndex + 1) / pageSize);
             currentPage = targetPage;
-            console.log(`✅ 找到目标行 ${lineNumber}，索引位置: ${targetIndex}，跳转到第 ${targetPage} 页`);
+            console.log(`✅ 找到目标行 ${lineNumber}，数组索引: ${targetIndex}，在当前数据中的页码: ${targetPage}`);
+            
+            // 如果数据是从中间加载的，显示提示信息
+            if (baseLineOffset > 0) {
+                console.log(`ℹ️ 当前数据从第 ${baseLineOffset + 1} 行开始加载，共 ${allLines.length} 行`);
+            }
         } else {
-            // 未找到目标行，使用原有的估算方法（适用于完整日志）
-            const targetPage = Math.ceil(lineNumber / pageSize);
-            currentPage = targetPage;
-            console.log(`⚠️ 未找到目标行 ${lineNumber}，使用估算跳转到第 ${targetPage} 页`);
+            // 🔧 修复：未找到目标行时，判断是否因为数据范围问题
+            if (baseLineOffset > 0 && allLines.length > 0) {
+                // 数据是从中间加载的，但目标行不在范围内
+                const firstLine = allLines[0].lineNumber || 0;
+                const lastLine = allLines[allLines.length - 1].lineNumber || 0;
+                console.error(`❌ 目标行 ${lineNumber} 不在已加载范围 (${firstLine}~${lastLine}) 内！`);
+                showToast(`❌ 目标行 ${lineNumber} 不在已加载数据范围内，请重新加载`);
+                currentPage = 1; // 跳转到第一页
+            } else {
+                // 数据从头开始，使用行号估算（适用于完整日志）
+                const targetPage = Math.ceil(lineNumber / pageSize);
+                currentPage = targetPage;
+                console.log(`⚠️ 未找到目标行 ${lineNumber}，使用行号估算跳转到第 ${targetPage} 页`);
+            }
         }
     }
 
@@ -2886,7 +2964,31 @@ function jumpToLineInFullLog(lineNumber) {
     document.getElementById('searchInput').value = '';
     isFiltering = false;
 
-    // 显示加载提示
+    // 🔧 关键修复：如果数据已经完全加载，直接在当前数据中跳转，不需要重新加载
+    if (allDataLoaded && allLines.length > 0) {
+        console.log('✅ 数据已完全加载，直接跳转到目标行');
+        
+        // 恢复到完整日志模式
+        isInSearchMode = false;
+        if (searchBackup) {
+            // 恢复原始数据（如果有备份的话）
+            if (searchBackup.allLines && searchBackup.allLines.length > allLines.length) {
+                allLines = searchBackup.allLines;
+                originalLines = searchBackup.originalLines || [...allLines];
+            }
+            searchBackup = null;
+        }
+        
+        // 重新渲染并跳转
+        handleDataChange({ resetPage: false });
+        jumpToLine(lineNumber);
+        drawTimeline();
+        showToast(`✅ 已跳转到第 ${lineNumber} 行`);
+        return;
+    }
+
+    // 数据未完全加载，需要请求后端重新加载
+    console.log('⚠️ 数据未完全加载，请求后端加载完整日志');
     showToast('📦 正在加载完整日志...');
 
     // 请求后端重新加载完整日志，并跳转到指定行
@@ -3116,7 +3218,7 @@ function updatePagination() {
                 totalPages = maxPage;
                 isEstimated = false; // 精确值
             } else {
-                // 还有更多数据，至少比当前已知最大页多1页，以便启用“下一页”按钮
+                // 还有更多数据，至少比当前已知最大页多1页，以便启用"下一页"按钮
                 totalPages = maxPage + 1;
                 isEstimated = true; // 估算值
             }
@@ -3127,8 +3229,17 @@ function updatePagination() {
         }
     } else {
         // 非折叠模式，使用标准计算
-        totalPages = Math.ceil(allLines.length / pageSize);
-        isEstimated = false;
+        // 🔧 修复：如果数据未全部加载（baseLineOffset > 0 或未全部加载），总页数应该基于整个文件
+        if (!allDataLoaded && baseLineOffset > 0) {
+            // 数据是从中间加载的，总页数基于文件总行数估算
+            totalPages = Math.ceil(totalLinesInFile / pageSize);
+            isEstimated = true; // 这是估算值
+            console.log(`📊 部分加载模式 - 总页数基于文件总行数: ${totalLinesInFile} 行 ≈ ${totalPages} 页`);
+        } else {
+            // 数据从头开始加载，总页数基于已加载数据
+            totalPages = Math.ceil(allLines.length / pageSize);
+            isEstimated = false;
+        }
     }
 
     if (totalPages < 1) totalPages = 1;

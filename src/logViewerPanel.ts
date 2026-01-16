@@ -397,16 +397,22 @@ export class LogViewerPanel {
             let allLoaded = false;
             let startLine = 0;
 
+            // 🔧 修复：如果前端数据未完全加载才需要重新加载
+            // 根据文件大小决定加载策略
             if (totalLines <= 50000) {
                 // 小文件，一次性加载所有数据
                 startLine = 0;
                 lines = await this._logProcessor.readLines(0, totalLines);
                 allLoaded = true;
             } else {
-                // 大文件，加载目标行附近的10000行
-                startLine = Math.max(0, lineNumber - 5000);
-                const count = 10000;
-                lines = await this._logProcessor.readLines(startLine, count);
+                // 大文件，从开头加载到目标行之后的数据
+                startLine = 0;
+                const loadCount = Math.max(lineNumber + 5000, 20000); // 至少加载2万行
+                const actualCount = Math.min(loadCount, totalLines); // 不超过总行数
+                lines = await this._logProcessor.readLines(0, actualCount);
+                allLoaded = actualCount >= totalLines;
+                
+                console.log(`跳转加载策略: 目标行${lineNumber}, 总行数${totalLines}, 加载${actualCount}行`);
             }
 
             // 获取文件信息
