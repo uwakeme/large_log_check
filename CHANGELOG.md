@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-01-16
 ### Fixed
 - 🔧 **修复严重的日志显示问题** - HTML代码被显示为文本
   - 重构 `highlightKeywords` 函数，先在原始文本上匹配高亮规则，最后才转义HTML
