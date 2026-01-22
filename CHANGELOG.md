@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-01-22
 ### Added
 - **多文件同时打开** - 支持同时打开多个日志文件
   - 每个日志文件在独立的 webview 面板中打开

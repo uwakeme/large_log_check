@@ -2,7 +2,7 @@
   "name": "big-log-viewer",
   "displayName": "大日志文件查看器",
   "description": "专业的大日志文件查看和处理工具，支持虚拟滚动、智能搜索、时间过滤、级别过滤、折叠重复日志等功能",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "license": "MIT",
   "publisher": "wake",
   "icon": "icon.png",
