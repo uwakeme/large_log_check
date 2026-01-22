@@ -4,7 +4,8 @@ import * as path from 'path';
 import { LogProcessor } from './logProcessor';
 
 export class LogViewerPanel {
-    public static currentPanel: LogViewerPanel | undefined;
+    // 使用 Map 来管理多个面板实例，key 为文件路径
+    private static _panels: Map<string, LogViewerPanel> = new Map();
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
@@ -17,17 +18,19 @@ export class LogViewerPanel {
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // 如果已经有面板打开,则显示它
-        if (LogViewerPanel.currentPanel) {
-            LogViewerPanel.currentPanel._panel.reveal(column);
-            LogViewerPanel.currentPanel.loadFile(fileUri);
-            return;
+        const filePath = fileUri.fsPath;
+        
+        // 如果该文件已经有面板打开，则显示它
+        if (LogViewerPanel._panels.has(filePath)) {
+            const existingPanel = LogViewerPanel._panels.get(filePath)!;
+            existingPanel._panel.reveal(column);
+            return existingPanel;
         }
 
-        // 否则,创建新面板
+        // 否则，创建新面板
         const panel = vscode.window.createWebviewPanel(
             'logViewer',
-            '日志查看器',
+            `日志查看器 - ${path.basename(filePath)}`,
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -36,7 +39,26 @@ export class LogViewerPanel {
             }
         );
 
-        LogViewerPanel.currentPanel = new LogViewerPanel(panel, extensionUri, fileUri);
+        const newPanel = new LogViewerPanel(panel, extensionUri, fileUri);
+        LogViewerPanel._panels.set(filePath, newPanel);
+        return newPanel;
+    }
+
+    // 获取当前活动的面板
+    public static getActivePanel(): LogViewerPanel | undefined {
+        // 返回当前可见的面板
+        for (const panel of LogViewerPanel._panels.values()) {
+            if (panel._panel.visible) {
+                return panel;
+            }
+        }
+        // 如果没有可见的面板，返回任意一个
+        return LogViewerPanel._panels.values().next().value;
+    }
+
+    // 获取所有面板
+    public static getAllPanels(): LogViewerPanel[] {
+        return Array.from(LogViewerPanel._panels.values());
     }
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, fileUri: vscode.Uri) {
@@ -672,7 +694,8 @@ export class LogViewerPanel {
     }
 
     public dispose() {
-        LogViewerPanel.currentPanel = undefined;
+        // 从面板集合中移除
+        LogViewerPanel._panels.delete(this._fileUri.fsPath);
 
         this._panel.dispose();
 

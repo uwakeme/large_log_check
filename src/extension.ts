@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册按时间删除日志命令
     let deleteByTimeCommand = vscode.commands.registerCommand('big-log-viewer.deleteByTime', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;
@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册按行数删除日志命令
     let deleteByLineCommand = vscode.commands.registerCommand('big-log-viewer.deleteByLine', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;
@@ -111,7 +111,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册刷新命令
     let refreshCommand = vscode.commands.registerCommand('big-log-viewer.refresh', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (panel) {
             await panel.refresh();
         } else {
@@ -121,7 +121,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册导出日志命令
     let exportLogsCommand = vscode.commands.registerCommand('big-log-viewer.exportLogs', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;
@@ -133,7 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册显示统计命令
     let showStatisticsCommand = vscode.commands.registerCommand('big-log-viewer.showStatistics', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;
@@ -145,7 +145,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册书签管理命令
     let toggleBookmarksCommand = vscode.commands.registerCommand('big-log-viewer.toggleBookmarks', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;
@@ -157,7 +157,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册注释管理命令
     let toggleCommentsCommand = vscode.commands.registerCommand('big-log-viewer.toggleComments', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;
@@ -169,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册跳转到行号命令
     let jumpToLineCommand = vscode.commands.registerCommand('big-log-viewer.jumpToLine', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;
@@ -202,7 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册高级搜索命令
     let showAdvancedSearchCommand = vscode.commands.registerCommand('big-log-viewer.showAdvancedSearch', async () => {
-        const panel = LogViewerPanel.currentPanel;
+        const panel = LogViewerPanel.getActivePanel();
         if (!panel) {
             vscode.window.showWarningMessage('请先打开一个日志文件');
             return;

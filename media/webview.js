@@ -1829,7 +1829,9 @@ function showBookmarksModal() {
     } else {
         const bookmarkArray = Array.from(bookmarks).sort((a, b) => a - b);
         list.innerHTML = bookmarkArray.map(lineNum => {
-            const line = allLines.find(l => l.lineNumber === lineNum);
+            // 从完整数据缓存中查找，而不是从当前显示的数据中查找
+            const dataSource = fullDataCache.length > 0 ? fullDataCache : allLines;
+            const line = dataSource.find(l => l.lineNumber === lineNum);
             const content = line ? (line.content || line) : '（已不存在）';
             const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
 
@@ -1877,8 +1879,9 @@ function exportBookmarkedLogs() {
         return;
     }
     
-    // 获取所有带书签的日志行
-    const bookmarkedLines = allLines.filter(line => {
+    // 从完整数据缓存中获取所有带书签的日志行
+    const dataSource = fullDataCache.length > 0 ? fullDataCache : allLines;
+    const bookmarkedLines = dataSource.filter(line => {
         const lineNumber = line.lineNumber || 0;
         return bookmarks.has(lineNumber);
     });
@@ -1922,7 +1925,7 @@ function initDefaultHighlightRules() {
         { id: 3, name: '日志级别 - INFO', type: 'regex', pattern: '\\b(INFO)\\b', bgColor: '#4fc1ff', textColor: '#000000', enabled: true, builtin: true },
         { id: 4, name: '日志级别 - DEBUG', type: 'regex', pattern: '\\b(DEBUG|TRACE|VERBOSE)\\b', bgColor: '#b267e6', textColor: '#ffffff', enabled: true, builtin: true },
         { id: 5, name: '时间戳', type: 'regex', pattern: '\\d{4}[-/]\\d{2}[-/]\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?', bgColor: '#b267e6', textColor: '#ffffff', enabled: true, builtin: true },
-        { id: 6, name: '线程名', type: 'regex', pattern: '\\[([a-zA-Z][a-zA-Z0-9-_]*)\\]', bgColor: '#06b6d4', textColor: '#ffffff', enabled: true, builtin: true },
+        { id: 6, name: '线程名', type: 'regex', pattern: '\\[(?!ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE\\])([a-zA-Z][a-zA-Z0-9-_]*)\\]', bgColor: '#06b6d4', textColor: '#ffffff', enabled: true, builtin: true },
         { id: 7, name: '类名', type: 'regex', pattern: '\\b([a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*\\.[A-Z][a-zA-Z0-9_]*)\\b', bgColor: '#10b981', textColor: '#ffffff', enabled: true, builtin: true },
         { id: 8, name: '方法名', type: 'regex', pattern: '\\[([a-zA-Z_][a-zA-Z0-9_]*):\\d+\\]', bgColor: '#f59e0b', textColor: '#ffffff', enabled: true, builtin: true }
     ];
