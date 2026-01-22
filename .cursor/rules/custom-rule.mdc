@@ -2,4 +2,5 @@
 alwaysApply: true
 ---
 
-+ 添加或修改功能后，需要即时更新README和CHANGELOG文档，保证实时性
++ 添加或修改功能后，需要即时更新README和CHANGELOG文档，保证实时性。
++ 在版本发布前新增或修改的功能，放在CHANGELOG的Unreleased下面就行，而且同一个功能在同一个版本下写一条即可。

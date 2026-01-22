@@ -24,8 +24,8 @@
                 <span>正则</span>
             </label>
             <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" id="reverseMode">
-                <span>反向搜索</span>
+                <input type="checkbox" id="currentPageOnlyMode">
+                <span>当前页</span>
             </label>
             <button onclick="search()">🔍 搜索</button>
             <button onclick="showAdvancedSearchModal()">🔍 高级搜索</button>
@@ -33,7 +33,7 @@
             <button onclick="showBookmarksModal()">📌 书签</button>
             <button onclick="showCommentsModal()">📝 注释</button>
             <button onclick="showCustomHighlightModal()">🎨 高亮规则</button>
-            <button onclick="showSettingsModal()">⚙ 设置</button>
+            <button onclick="console.log('🖱️ 设置按钮被点击'); showSettingsModal();">⚙ 设置</button>
             <div class="dropdown">
                 <button onclick="toggleMoreMenu()">⋯ 更多</button>
                 <div class="dropdown-content" id="moreMenu">
@@ -104,8 +104,42 @@
         </div>
     </div>
     
+    <!-- 加载进度覆盖层 -->
+    <div class="loading-overlay" id="loadingIndicator">
+        <div class="loading-content">
+            <div style="font-size: 18px; margin-bottom: 20px;">⏳ 正在加载日志文件...</div>
+            <div id="loadingStage" style="font-size: 14px; color: var(--vscode-descriptionForeground); margin-bottom: 15px;">
+                准备读取文件...
+            </div>
+            <div style="width: 400px; margin: 0 auto;">
+                <div style="background-color: var(--vscode-editorWidget-background); height: 20px; border-radius: 10px; overflow: hidden; border: 1px solid var(--vscode-panel-border);">
+                    <div id="loadingProgressBar" style="height: 100%; background: linear-gradient(90deg, #0e7490 0%, #06b6d4 100%); width: 0%; transition: width 0.3s ease;"></div>
+                </div>
+                <div id="loadingProgressText" style="margin-top: 8px; font-size: 12px; color: var(--vscode-descriptionForeground);">
+                    0%
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <div class="log-container" id="logContainer">
-        <div class="loading">等待加载日志文件...</div>
+    </div>
+    
+    <!-- 右下角后台加载进度提示 -->
+    <div class="background-loading-indicator" id="backgroundLoadingIndicator" style="display: none;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="flex: 1;">
+                <div style="background-color: var(--vscode-editorWidget-background); height: 6px; border-radius: 3px; overflow: hidden; border: 1px solid var(--vscode-panel-border); margin-bottom: 5px;">
+                    <div id="backgroundProgressBar" style="height: 100%; background: linear-gradient(90deg, #0e7490 0%, #06b6d4 100%); width: 0%; transition: width 0.3s ease;"></div>
+                </div>
+                <div id="backgroundProgressText" style="font-size: 11px; color: var(--vscode-descriptionForeground); text-align: center;">
+                    0%
+                </div>
+            </div>
+            <button onclick="cancelBackgroundLoading()" style="padding: 4px 8px; font-size: 11px; background: transparent; border: 1px solid var(--vscode-button-border); color: var(--vscode-button-foreground); cursor: pointer; border-radius: 3px;" title="停止后台加载">
+                ⏸️
+            </button>
+        </div>
     </div>
     
     <!-- 分页控件 -->
@@ -283,8 +317,13 @@
                 <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;">
                     <!-- 书签将动态生成 -->
                 </div>
-                <div style="margin-top: 15px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px;">
-                    💡 提示：双击日志行可添加/移除书签
+                <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="color: var(--vscode-descriptionForeground); font-size: 12px;">
+                        💡 提示：双击日志行可添加/移除书签
+                    </div>
+                    <button onclick="exportBookmarkedLogs()" style="padding: 8px 16px; font-size: 13px; font-weight: bold;">
+                        💾 导出书签日志
+                    </button>
                 </div>
             </div>
         </div>
@@ -391,35 +430,35 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- 设置面板 -->
-        <div id="settingsModal" class="modal">
-            <div class="modal-content small">
-                <div class="modal-header">
-                    <h3>⚙ 日志查看设置</h3>
-                    <button class="close-button" onclick="closeSettingsModal()">✕</button>
+    <!-- 设置面板 -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h3>⚙ 日志查看设置</h3>
+                <button class="close-button" onclick="closeSettingsModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="settingSearchDebounce">搜索防抖时间（毫秒）</label>
+                    <input type="number" id="settingSearchDebounce" min="0" step="50">
+                    <div class="hint">输入停止后等待多久自动触发搜索，值越大越省资源，但响应越慢。</div>
                 </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="settingSearchDebounce">搜索防抖时间（毫秒）</label>
-                        <input type="number" id="settingSearchDebounce" min="0" step="50">
-                        <div class="hint">输入停止后等待多久自动触发搜索，值越大越省资源，但响应越慢。</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="settingCollapseMinRepeat">折叠最小重复次数</label>
-                        <input type="number" id="settingCollapseMinRepeat" min="1" step="1">
-                        <div class="hint">连续重复达到多少次时才会被折叠（默认 2 次）。</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="settingTimelineSample">时间线采样点数</label>
-                        <input type="number" id="settingTimelineSample" min="20" max="1000" step="10">
-                        <div class="hint">用于生成时间线的采样点数量，建议 100~400 之间。</div>
-                    </div>
+                <div class="form-group">
+                    <label for="settingCollapseMinRepeat">折叠最小重复次数</label>
+                    <input type="number" id="settingCollapseMinRepeat" min="1" step="1">
+                    <div class="hint">连续重复达到多少次时才会被折叠（默认 2 次）。</div>
                 </div>
-                <div class="modal-footer">
-                    <button onclick="closeSettingsModal()">取消</button>
-                    <button onclick="saveSettings()">保存</button>
+                <div class="form-group">
+                    <label for="settingTimelineSample">时间线采样点数</label>
+                    <input type="number" id="settingTimelineSample" min="20" max="1000" step="10">
+                    <div class="hint">用于生成时间线的采样点数量，建议 100~400 之间。</div>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeSettingsModal()">取消</button>
+                <button onclick="saveSettings()">保存</button>
             </div>
         </div>
     </div>

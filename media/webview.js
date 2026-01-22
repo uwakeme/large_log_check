@@ -35,6 +35,239 @@ let currentFilterValue = null; // 当前筛选值
 let savedPageBeforeFilter = 1; // 筛选前的页码
 let savedFirstLineBeforeFilter = null; // 筛选前当前页第一行的行号
 
+// ========== 统一过滤系统 ==========
+// 所有过滤条件存储在这里，让各种过滤可以叠加生效
+let unifiedFilters = {
+    keyword: null,           // 搜索关键词
+    isRegex: false,          // 是否正则搜索
+    isMultiple: false,       // 是否多关键词搜索
+    threadName: null,        // 线程名筛选
+    className: null,         // 类名筛选
+    methodName: null,        // 方法名筛选
+    levels: null,            // 日志级别过滤 (数组，如 ['ERROR', 'WARN'])
+    timeRange: null,         // 时间范围 { start, end }
+};
+
+// 原始完整数据（用于统一过滤）
+let fullDataCache = [];
+
+// ========== 统一过滤系统核心函数 ==========
+
+/**
+ * 应用所有过滤条件到数据
+ * 这个函数会将所有已设置的过滤条件叠加应用
+ */
+function applyUnifiedFilters() {
+    console.log('🔍 应用统一过滤 - 当前条件:', unifiedFilters);
+    
+    // 如果没有任何过滤条件，显示全部数据
+    if (!hasAnyFilter()) {
+        console.log('✅ 没有过滤条件，显示全部数据');
+        allLines = [...fullDataCache];
+        isFiltering = false;
+        currentSearchKeyword = '';
+        return;
+    }
+    
+    // 从完整数据开始过滤
+    let results = [...fullDataCache];
+    
+    // 应用关键词搜索
+    if (unifiedFilters.keyword) {
+        currentSearchKeyword = unifiedFilters.keyword;
+        currentSearchIsRegex = unifiedFilters.isRegex;
+        currentSearchIsMultiple = unifiedFilters.isMultiple;
+        
+        results = results.filter(line => {
+            const content = (line.content || '').toLowerCase();
+            
+            if (unifiedFilters.isRegex) {
+                try {
+                    const regex = new RegExp(unifiedFilters.keyword, 'i');
+                    return regex.test(line.content || '');
+                } catch (e) {
+                    console.warn('正则表达式错误:', e);
+                    return false;
+                }
+            } else if (unifiedFilters.isMultiple) {
+                // 多关键词 AND 匹配
+                const keywords = unifiedFilters.keyword.trim().split(/\s+/).map(k => k.toLowerCase());
+                return keywords.every(k => content.includes(k));
+            } else {
+                return content.includes(unifiedFilters.keyword.toLowerCase());
+            }
+        });
+    } else {
+        currentSearchKeyword = '';
+    }
+    
+    // 应用线程名筛选
+    if (unifiedFilters.threadName) {
+        results = results.filter(line => {
+            const fields = extractLogFields(line);
+            return fields.threadName && fields.threadName === unifiedFilters.threadName;
+        });
+    }
+    
+    // 应用类名筛选
+    if (unifiedFilters.className) {
+        results = results.filter(line => {
+            const fields = extractLogFields(line);
+            return fields.className && fields.className.includes(unifiedFilters.className);
+        });
+    }
+    
+    // 应用方法名筛选
+    if (unifiedFilters.methodName) {
+        results = results.filter(line => {
+            const fields = extractLogFields(line);
+            return fields.methodName && fields.methodName === unifiedFilters.methodName;
+        });
+    }
+    
+    // 应用日志级别过滤
+    if (unifiedFilters.levels && unifiedFilters.levels.length > 0) {
+        const levelsSet = new Set(unifiedFilters.levels.map(l => l.toUpperCase()));
+        results = results.filter(line => {
+            const level = line.level ? line.level.toUpperCase() : 'OTHER';
+            return levelsSet.has(level);
+        });
+    }
+    
+    // 应用时间范围过滤
+    if (unifiedFilters.timeRange) {
+        results = results.filter(line => {
+            if (!line.timestamp) return false;
+            const lineTime = new Date(line.timestamp);
+            
+            if (unifiedFilters.timeRange.start) {
+                const start = new Date(unifiedFilters.timeRange.start);
+                if (lineTime < start) return false;
+            }
+            
+            if (unifiedFilters.timeRange.end) {
+                const end = new Date(unifiedFilters.timeRange.end);
+                if (lineTime > end) return false;
+            }
+            
+            return true;
+        });
+    }
+    
+    console.log(`✅ 过滤完成 - 原始数据: ${fullDataCache.length} 条，过滤后: ${results.length} 条`);
+    
+    allLines = results;
+    isFiltering = hasAnyFilter();
+}
+
+/**
+ * 检查是否有任何过滤条件
+ */
+function hasAnyFilter() {
+    return !!(
+        unifiedFilters.keyword ||
+        unifiedFilters.threadName ||
+        unifiedFilters.className ||
+        unifiedFilters.methodName ||
+        (unifiedFilters.levels && unifiedFilters.levels.length > 0) ||
+        unifiedFilters.timeRange
+    );
+}
+
+/**
+ * 设置过滤条件并应用
+ * @param {Object} filters - 要设置的过滤条件
+ */
+function setFilterAndApply(filters) {
+    // 合并过滤条件
+    Object.assign(unifiedFilters, filters);
+    
+    // 检查是否已完全加载数据
+    if (allDataLoaded || fullDataCache.length >= totalLinesInFile) {
+        // 数据已完全加载，在前端进行统一过滤
+        console.log('✅ 数据已完全加载，在前端进行统一过滤');
+        applyUnifiedFilters();
+        
+        // 更新界面
+        handleDataChange({
+            resetPage: true,
+            clearPageRanges: true,
+            triggerAsyncCalc: true
+        });
+        
+        // 显示提示信息
+        if (allLines.length === 0) {
+            showToast('❌ 未找到符合所有条件的日志');
+        } else {
+            showToast(`✅ 找到 ${allLines.length} 条符合条件的日志`);
+        }
+    } else {
+        // 数据未完全加载，请求后台加载全部数据
+        console.log('⚠️ 数据未完全加载，请求后台加载全部数据');
+        showToast('📥 正在加载完整数据，请稍候...');
+        
+        // 请求后台继续加载
+        requestAllData();
+    }
+}
+
+/**
+ * 清除特定的过滤条件
+ */
+function clearFilter(filterName) {
+    if (filterName === 'keyword') {
+        unifiedFilters.keyword = null;
+        unifiedFilters.isRegex = false;
+        unifiedFilters.isMultiple = false;
+    } else if (filterName === 'threadName') {
+        unifiedFilters.threadName = null;
+    } else if (filterName === 'className') {
+        unifiedFilters.className = null;
+    } else if (filterName === 'methodName') {
+        unifiedFilters.methodName = null;
+    } else if (filterName === 'levels') {
+        unifiedFilters.levels = null;
+    } else if (filterName === 'timeRange') {
+        unifiedFilters.timeRange = null;
+    }
+    
+    // 重新应用剩余的过滤条件
+    applyUnifiedFilters();
+    
+    // 更新界面
+    handleDataChange({
+        resetPage: true,
+        clearPageRanges: true,
+        triggerAsyncCalc: true
+    });
+}
+
+/**
+ * 清除所有过滤条件
+ */
+function clearAllFilters() {
+    unifiedFilters = {
+        keyword: null,
+        isRegex: false,
+        isMultiple: false,
+        threadName: null,
+        className: null,
+        methodName: null,
+        levels: null,
+        timeRange: null,
+    };
+    
+    applyUnifiedFilters();
+    
+    handleDataChange({
+        resetPage: true,
+        clearPageRanges: true,
+        triggerAsyncCalc: true
+    });
+    
+    showToast('✅ 已清除所有过滤条件');
+}
+
 /**
  * 统一处理数据变更后的页面计算
  * 在以下情况下调用：
@@ -132,10 +365,55 @@ window.addEventListener('message', event => {
                 console.log('⚙️ 已从扩展配置同步设置:', userSettings);
             }
             break;
+        case 'loadingProgress':
+            updateLoadingProgress(message.data);
+            break;
     }
 });
 
+/**
+ * 更新加载进度
+ */
+function updateLoadingProgress(data) {
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const progressBar = document.getElementById('loadingProgressBar');
+    const progressText = document.getElementById('loadingProgressText');
+    const loadingStage = document.getElementById('loadingStage');
+    
+    // 确保加载提示是显示的
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'flex';
+        loadingIndicator.style.pointerEvents = 'auto';
+    }
+    
+    if (progressBar && data.progress !== undefined) {
+        const progress = Math.min(100, Math.max(0, data.progress));
+        progressBar.style.width = progress + '%';
+        
+        if (progressText) {
+            progressText.textContent = `${progress.toFixed(1)}%`;
+            
+            // 显示具体信息
+            if (data.current && data.total) {
+                progressText.textContent += ` (${data.current.toLocaleString()} / ${data.total.toLocaleString()} 行)`;
+            }
+        }
+    }
+    
+    if (loadingStage && data.stage) {
+        loadingStage.textContent = data.stage;
+    }
+}
+
 function handleFileLoaded(data) {
+    // 隐藏加载提示（使用 !important 强制覆盖）
+    const loadingIndicator = document.getElementById('loadingIndicator');
+      
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'none';
+        loadingIndicator.style.pointerEvents = 'none';
+    }
+    
     document.getElementById('fileName').textContent = data.fileName || '';
     document.getElementById('fileSize').textContent = data.fileSize || '0';
     document.getElementById('totalLines').textContent = data.totalLines || '0';
@@ -155,9 +433,24 @@ function handleFileLoaded(data) {
     currentFilterType = null;
     currentFilterValue = null;
     hideFilterStatus();
+    
+    // 清除统一过滤条件
+    unifiedFilters = {
+        keyword: null,
+        isRegex: false,
+        isMultiple: false,
+        threadName: null,
+        className: null,
+        methodName: null,
+        levels: null,
+        timeRange: null,
+    };
 
     allLines = data.lines || [];
     originalLines = [...allLines];
+    
+    // 初始化完整数据缓存（用于统一过滤）
+    fullDataCache = [...allLines];
 
     // 统一处理数据变更
     handleDataChange();
@@ -182,18 +475,28 @@ function handleMoreLines(data) {
 
     console.log(`📥 handleMoreLines: 收到 ${newLines.length} 行, startLine = ${startLine}, baseLineOffset = ${baseLineOffset}`);
 
+    // 更新右下角后台加载进度
+    updateBackgroundLoadingProgress();
+
     // 确保新数据与当前缓冲区在文件中的位置是连续的：
     // 期望 startLine === baseLineOffset + allLines.length
-    const expectedStart = baseLineOffset + allLines.length;
+    const expectedStart = baseLineOffset + fullDataCache.length;
     if (startLine !== expectedStart) {
         console.warn(`⚠️ handleMoreLines: 起始行不连续, 期望 ${expectedStart}, 实际 ${startLine}，将重置缓冲区为新数据`);
         // 出现不连续时，为避免错乱，直接以新数据为准并重置偏移量
         baseLineOffset = startLine;
-        allLines = newLines.slice();
-        originalLines = newLines.slice();
+        fullDataCache = newLines.slice();
     } else {
-        allLines = allLines.concat(newLines);
-        originalLines = originalLines.concat(newLines);
+        // 追加到完整数据缓存
+        fullDataCache = fullDataCache.concat(newLines);
+    }
+    
+    // 重新应用统一过滤（如果有过滤条件）
+    if (hasAnyFilter()) {
+        applyUnifiedFilters();
+    } else {
+        allLines = [...fullDataCache];
+        originalLines = [...fullDataCache];
     }
 
     // 如果已计算过统计信息，增量更新统计数据，避免重新扫描整个文件
@@ -202,9 +505,15 @@ function handleMoreLines(data) {
     }
 
     // 检查是否已加载全部数据
-    if (allLines.length >= totalLinesInFile) {
+    if (fullDataCache.length >= totalLinesInFile) {
         allDataLoaded = true;
         isBackgroundLoading = false;
+        
+        // 确保进度条显示 100% 并隐藏
+        updateBackgroundLoadingProgress();
+        setTimeout(() => {
+            hideBackgroundLoadingIndicator();
+        }, 1000); // 显示 100% 持续 1 秒后隐藏
     }
 
     // 更新加载状态显示
@@ -1166,90 +1475,143 @@ function escapeRegex(str) {
 }
 
 function search() {
-    const keyword = document.getElementById('searchInput').value;
+    const keyword = document.getElementById('searchInput').value.trim();
     const isRegex = document.getElementById('regexMode').checked;
-    const isReverse = document.getElementById('reverseMode').checked;
+    const currentPageOnly = document.getElementById('currentPageOnlyMode').checked;
 
-    // 关键字为空：如果之前在搜索模式下，则恢复到搜索前的位置和数据
+    // 关键字为空：清除关键词过滤
     if (!keyword) {
-        currentSearchKeyword = '';
-        currentSearchIsRegex = false;
-        currentSearchIsMultiple = false;
-
-        if (isInSearchMode && searchBackup) {
-            console.log('🔙 清空搜索，恢复到搜索前状态');
-
-            // 恢复数据
-            allLines = searchBackup.allLines;
-            originalLines = searchBackup.originalLines;
-            totalLinesInFile = searchBackup.totalLinesInFile;
-            allDataLoaded = searchBackup.allDataLoaded;
-            isCollapseMode = searchBackup.isCollapseMode;
-
-            // 恢复分页与页面范围
-            currentPage = searchBackup.currentPage;
-            pageRanges = new Map(searchBackup.pageRanges);
-
-            // 清理搜索状态
-            isInSearchMode = false;
-            searchBackup = null;
-
-            // 重新渲染但不触发异步计算（沿用已有页面范围）
-            updatePagination();
-            renderLines();
-
-            // 恢复滚动位置
-            const container = document.getElementById('logContainer');
-            if (container && typeof searchBackup.scrollTop === 'number') {
-                container.scrollTop = searchBackup.scrollTop;
-            }
-        }
-
+        clearFilter('keyword');
         return;
     }
 
-    // 首次进入搜索模式时，备份当前状态用于之后恢复
-    if (!isInSearchMode) {
-        const container = document.getElementById('logContainer');
-        searchBackup = {
-            allLines: allLines,
-            originalLines: originalLines,
-            totalLinesInFile,
-            allDataLoaded,
-            isCollapseMode,
-            currentPage,
-            pageRanges: new Map(pageRanges),
-            scrollTop: container ? container.scrollTop : 0
-        };
-        isInSearchMode = true;
-        console.log('💾 已备份搜索前的分页与滚动位置:', searchBackup);
+    // 如果选中"只在当前页搜索"
+    if (currentPageOnly) {
+        searchInCurrentPage(keyword, isRegex);
+        return;
     }
 
-    // 保存搜索关键词和模式用于高亮与折叠组统计
+    // 设置关键词过滤条件（全局搜索）
+    setFilterAndApply({
+        keyword: keyword,
+        isRegex: isRegex,
+        isMultiple: !isRegex  // 正则模式下不使用多关键词
+    });
+}
+
+/**
+ * 在当前页搜索
+ */
+function searchInCurrentPage(keyword, isRegex) {
+    // 获取当前页显示的日志
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const currentPageLines = allLines.slice(startIndex, endIndex);
+    
+    if (currentPageLines.length === 0) {
+        showToast('❌ 当前页没有数据');
+        return;
+    }
+    
+    // 过滤当前页的日志
+    let results = currentPageLines.filter(line => {
+        const content = (line.content || '').toLowerCase();
+        
+        if (isRegex) {
+            try {
+                const regex = new RegExp(keyword, 'i');
+                return regex.test(line.content || '');
+            } catch (e) {
+                console.warn('正则表达式错误:', e);
+                return false;
+            }
+        } else {
+            // 多关键词 AND 匹配
+            const keywords = keyword.trim().split(/\s+/).map(k => k.toLowerCase());
+            return keywords.every(k => content.includes(k));
+        }
+    });
+    
+    if (results.length === 0) {
+        showToast(`❌ 当前页未找到包含 "${keyword}" 的日志`);
+        return;
+    }
+    
+    // 高亮显示搜索关键词
     currentSearchKeyword = keyword;
     currentSearchIsRegex = isRegex;
-    // 多关键词模式现在是默认行为（除非使用正则模式）
-    const isMultiple = !isRegex; // 正则模式下不使用多关键词
-    currentSearchIsMultiple = isMultiple;
+    currentSearchIsMultiple = !isRegex;
+    
+    // 临时只显示当前页的搜索结果
+    const originalAllLines = allLines;
+    const originalCurrentPage = currentPage;
+    
+    allLines = results;
+    currentPage = 1;
+    
+    // 重新渲染
+    renderLines();
+    updatePagination();
+    
+    // 显示提示和恢复按钮
+    showToast(`✅ 在当前页找到 ${results.length} 条匹配日志`);
+    
+    // 保存原始数据，用于恢复
+    window._currentPageSearchBackup = {
+        originalAllLines: originalAllLines,
+        originalCurrentPage: originalCurrentPage
+    };
+    
+    // 显示提示信息
+    showCurrentPageSearchStatus(keyword, results.length);
+}
 
-    if (isRegex) {
-        vscode.postMessage({
-            command: 'regexSearch',
-            pattern: keyword,
-            flags: 'gi',
-            reverse: isReverse
-        });
-    } else {
-        vscode.postMessage({
-            command: 'search',
-            keyword: keyword,
-            reverse: isReverse,
-            isMultiple: isMultiple
-        });
-    }
+/**
+ * 显示当前页搜索状态
+ */
+function showCurrentPageSearchStatus(keyword, count) {
+    const panel = document.getElementById('filterStatusPanel');
+    const statusText = document.getElementById('filterStatusText');
+    statusText.innerHTML = `当前页搜索: "${keyword}" (找到 ${count} 条)`;
+    panel.style.display = 'flex';
+    
+    // 修改清除按钮的行为
+    const clearBtn = panel.querySelector('button');
+    clearBtn.onclick = clearCurrentPageSearch;
+    clearBtn.textContent = '❌ 退出当前页搜索';
+}
 
-    if (isReverse) {
-        showToast('🔽 反向搜索中...');
+/**
+ * 清除当前页搜索
+ */
+function clearCurrentPageSearch() {
+    if (window._currentPageSearchBackup) {
+        // 恢复原始数据
+        allLines = window._currentPageSearchBackup.originalAllLines;
+        currentPage = window._currentPageSearchBackup.originalCurrentPage;
+        
+        // 清除备份
+        window._currentPageSearchBackup = null;
+        
+        // 清除搜索关键词
+        currentSearchKeyword = '';
+        currentSearchIsRegex = false;
+        currentSearchIsMultiple = false;
+        
+        // 重新渲染
+        renderLines();
+        updatePagination();
+        
+        // 隐藏状态面板
+        hideFilterStatus();
+        
+        // 恢复清除按钮的原始行为
+        const panel = document.getElementById('filterStatusPanel');
+        const clearBtn = panel.querySelector('button');
+        clearBtn.onclick = clearCustomFilter;
+        clearBtn.textContent = '❌ 取消筛选';
+        
+        showToast('✅ 已退出当前页搜索');
     }
 }
 
@@ -1265,6 +1627,7 @@ function applyFilter() {
     if (warnChecked) { levels.push('WARN'); }
     if (infoChecked) { levels.push('INFO'); }
     if (debugChecked) { levels.push('DEBUG'); }
+    if (otherChecked) { levels.push('OTHER'); }
 
     console.log('Filter applied:', levels);
     console.log('Checkboxes:', { errorChecked, warnChecked, infoChecked, debugChecked, otherChecked });
@@ -1286,29 +1649,23 @@ function applyFilter() {
         filterAllCheckbox.indeterminate = true;
     }
 
-    // 如果全部选中，刷新显示所有数据
+    // 如果全部选中，清除级别过滤
     if (allChecked) {
-        console.log('⚠️ 全部选中，刷新...');
-        if (!currentSearchKeyword) {
-            vscode.postMessage({ command: 'refresh' });
-        }
+        console.log('⚠️ 全部选中，清除级别过滤');
+        clearFilter('levels');
         return;
     }
 
     // 如果全部不选，显示空
     if (levels.length === 0) {
         console.log('⚠️ 没有选择任何级别');
-        allLines = [];
-        renderLines();
+        setFilterAndApply({ levels: [] });
         return;
     }
 
-    // 发送筛选请求
-    console.log('📤 发送过滤请求:', levels);
-    vscode.postMessage({
-        command: 'filterByLevel',
-        levels: levels
-    });
+    // 应用级别过滤
+    console.log('📤 应用级别过滤:', levels);
+    setFilterAndApply({ levels: levels });
 }
 
 function toggleAll() {
@@ -1509,6 +1866,44 @@ function removeBookmark(lineNumber) {
     bookmarks.delete(lineNumber);
     showBookmarksModal(); // 刷新书签列表
     renderLines(); // 重新渲染
+}
+
+/**
+ * 导出带书签的日志
+ */
+function exportBookmarkedLogs() {
+    if (bookmarks.size === 0) {
+        showToast('⚠️ 没有书签，无法导出');
+        return;
+    }
+    
+    // 获取所有带书签的日志行
+    const bookmarkedLines = allLines.filter(line => {
+        const lineNumber = line.lineNumber || 0;
+        return bookmarks.has(lineNumber);
+    });
+    
+    if (bookmarkedLines.length === 0) {
+        showToast('⚠️ 未找到书签对应的日志行');
+        return;
+    }
+    
+    // 按行号排序
+    bookmarkedLines.sort((a, b) => {
+        const lineNumA = a.lineNumber || 0;
+        const lineNumB = b.lineNumber || 0;
+        return lineNumA - lineNumB;
+    });
+    
+    // 发送到后端进行导出
+    vscode.postMessage({
+        command: 'exportLogs',
+        lines: bookmarkedLines,
+        exportType: 'bookmarked'  // 标记这是书签导出
+    });
+    
+    showToast(`✅ 正在导出 ${bookmarkedLines.length} 条带书签的日志...`);
+    closeBookmarksModal();
 }
 
 // ==========  注释功能 ==========
@@ -2609,12 +3004,8 @@ function filterByClassName(className) {
     currentFilterValue = className;
     showFilterStatus(`类名: ${className}`);
 
-    // 使用正则搜索
-    vscode.postMessage({
-        command: 'regexSearch',
-        pattern: className.replace(/\./g, '\\.'),  // 转义点号
-        flags: 'i'
-    });
+    // 应用类名过滤
+    setFilterAndApply({ className: className });
 }
 
 // 按方法名筛选
@@ -2629,12 +3020,8 @@ function filterByMethodName(methodName) {
     currentFilterValue = methodName;
     showFilterStatus(`方法名: ${methodName}`);
 
-    // 搜索 [methodName:xxx]
-    vscode.postMessage({
-        command: 'regexSearch',
-        pattern: `\\[${methodName}:\\d+\\]`,
-        flags: 'i'
-    });
+    // 应用方法名过滤
+    setFilterAndApply({ methodName: methodName });
 }
 
 // 按线程名筛选
@@ -2649,12 +3036,8 @@ function filterByThreadName(threadName) {
     currentFilterValue = threadName;
     showFilterStatus(`线程名: ${threadName}`);
 
-    // 搜索 [线程名]
-    vscode.postMessage({
-        command: 'regexSearch',
-        pattern: `\\[${threadName}\\]`,
-        flags: 'i'
-    });
+    // 应用线程名过滤
+    setFilterAndApply({ threadName: threadName });
 }
 
 // 保存筛选前的位置
@@ -2693,23 +3076,12 @@ function clearCustomFilter() {
     currentFilterValue = null;
     hideFilterStatus();
 
-    // 请求后端重新加载完整日志，并跳转到保存的位置
-    console.log('🔙 恢复到筛选前位置 - 行号:', savedFirstLineBeforeFilter);
-
-    if (savedFirstLineBeforeFilter) {
-        // 有保存的行号，跳转到那行
-        vscode.postMessage({
-            command: 'jumpToLineInFullLog',
-            lineNumber: savedFirstLineBeforeFilter
-        });
-
-        // 重置保存的位置
-        savedPageBeforeFilter = 1;
-        savedFirstLineBeforeFilter = null;
-    } else {
-        // 没有保存的位置，使用默认的刷新
-        refresh();
-    }
+    // 清除所有统一过滤条件
+    clearAllFilters();
+    
+    // 重置保存的位置
+    savedPageBeforeFilter = 1;
+    savedFirstLineBeforeFilter = null;
 }
 
 function showDeleteByTimeDialog() {
@@ -3354,6 +3726,38 @@ function loadAllRemainingData() {
     }
 }
 
+// 请求加载全部数据（用于统一过滤）
+function requestAllData() {
+    if (allDataLoaded) {
+        // 数据已全部加载，直接应用过滤
+        applyUnifiedFilters();
+        handleDataChange({
+            resetPage: true,
+            clearPageRanges: true,
+            triggerAsyncCalc: true
+        });
+        return;
+    }
+    
+    // 开始后台加载
+    startBackgroundLoading();
+    
+    // 监听加载完成事件
+    const checkInterval = setInterval(() => {
+        if (allDataLoaded || fullDataCache.length >= totalLinesInFile) {
+            clearInterval(checkInterval);
+            console.log('✅ 数据加载完成，应用统一过滤');
+            applyUnifiedFilters();
+            handleDataChange({
+                resetPage: true,
+                clearPageRanges: true,
+                triggerAsyncCalc: true
+            });
+            showToast(`✅ 找到 ${allLines.length} 条符合条件的日志`);
+        }
+    }, 1000);
+}
+
 // 后台逐步加载数据
 function startBackgroundLoading() {
     if (isBackgroundLoading || allDataLoaded) {
@@ -3362,6 +3766,9 @@ function startBackgroundLoading() {
 
     isBackgroundLoading = true;
     console.log('🔄 开始后台加载数据...');
+
+    // 显示右下角后台加载进度
+    showBackgroundLoadingIndicator();
 
     // 更新状态栏显示
     updateLoadingStatus();
@@ -3375,17 +3782,23 @@ function loadNextChunk() {
         return;
     }
 
-    const remaining = totalLinesInFile - (baseLineOffset + allLines.length);
+    const remaining = totalLinesInFile - (baseLineOffset + fullDataCache.length);
     if (remaining <= 0) {
         allDataLoaded = true;
         isBackgroundLoading = false;
         console.log('✅ 后台加载完成！');
         updateLoadingStatus();
+        
+        // 确保进度条显示 100% 并隐藏
+        updateBackgroundLoadingProgress();
+        setTimeout(() => {
+            hideBackgroundLoadingIndicator();
+        }, 1000);
         return;
     }
 
     const chunkSize = Math.min(backgroundLoadChunkSize, remaining);
-    const startLine = baseLineOffset + allLines.length;
+    const startLine = baseLineOffset + fullDataCache.length;
     console.log(`📥 后台加载: 第 ${startLine} - ${startLine + chunkSize} 行（baseOffset=${baseLineOffset}）`);
 
     vscode.postMessage({
@@ -3411,6 +3824,59 @@ function updateLoadingStatus() {
         } else {
             loadedLines.textContent = allLines.length;
         }
+    }
+}
+
+// 显示右下角后台加载进度提示
+function showBackgroundLoadingIndicator() {
+    const indicator = document.getElementById('backgroundLoadingIndicator');
+    if (indicator) {
+        indicator.style.display = 'block';
+        updateBackgroundLoadingProgress();
+    }
+}
+
+// 隐藏右下角后台加载进度提示
+function hideBackgroundLoadingIndicator() {
+    const indicator = document.getElementById('backgroundLoadingIndicator');
+    if (indicator) {
+        // 添加淡出动画
+        indicator.style.opacity = '0';
+        indicator.style.transition = 'opacity 0.3s ease-out';
+        setTimeout(() => {
+            indicator.style.display = 'none';
+            indicator.style.opacity = '1';
+        }, 300);
+    }
+}
+
+// 更新右下角后台加载进度
+function updateBackgroundLoadingProgress() {
+    const progressBar = document.getElementById('backgroundProgressBar');
+    const progressText = document.getElementById('backgroundProgressText');
+    
+    if (progressBar && progressText) {
+        const loaded = fullDataCache.length;
+        const total = totalLinesInFile;
+        const percent = Math.min(100, Math.floor((loaded / total) * 100));
+        
+        progressBar.style.width = percent + '%';
+        
+        if (percent >= 100) {
+            progressText.textContent = `✅ 加载完成！(${total.toLocaleString()} 行)`;
+        } else {
+            progressText.textContent = `${percent}% (${loaded.toLocaleString()} / ${total.toLocaleString()} 行)`;
+        }
+    }
+}
+
+// 取消后台加载
+function cancelBackgroundLoading() {
+    if (isBackgroundLoading) {
+        isBackgroundLoading = false;
+        hideBackgroundLoadingIndicator();
+        updateLoadingStatus();
+        showToast('⏸️ 已暂停后台加载');
     }
 }
 
@@ -4542,6 +5008,8 @@ function saveHighlightRule() {
 
 // ========== 设置面板 ==========
 function showSettingsModal() {
+    console.log('🔧 showSettingsModal 被调用');
+    
     // 如果扩展侧尚未发送配置，可主动请求一次
     try {
         vscode.postMessage({ command: 'getSettings' });
@@ -4566,10 +5034,13 @@ function showSettingsModal() {
     }
 
     const modal = document.getElementById('settingsModal');
+    console.log('📦 settingsModal 元素:', modal);
     if (modal) {
+        console.log('✅ 正在显示设置面板...');
         modal.style.display = 'block';
+        console.log('✅ 设置面板 display 已设置为 block');
     } else {
-        console.warn('未找到 id 为 settingsModal 的元素');
+        console.error('❌ 未找到 id 为 settingsModal 的元素');
     }
 }
 

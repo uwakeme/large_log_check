@@ -59,8 +59,9 @@ export class LogProcessor {
 
     /**
      * 获取文件总行数
+     * @param progressCallback 可选的进度回调函数，参数为当前行数
      */
-    async getTotalLines(): Promise<number> {
+    async getTotalLines(progressCallback?: (currentLines: number) => void): Promise<number> {
         return new Promise((resolve, reject) => {
             let lineCount = 0;
             const stream = fs.createReadStream(this.filePath);
@@ -69,11 +70,25 @@ export class LogProcessor {
                 crlfDelay: Infinity
             });
 
+            // 每隔10000行报告一次进度
+            const reportInterval = 10000;
+            let lastReportedCount = 0;
+
             rl.on('line', () => {
                 lineCount++;
+                
+                // 定期报告进度
+                if (progressCallback && lineCount - lastReportedCount >= reportInterval) {
+                    progressCallback(lineCount);
+                    lastReportedCount = lineCount;
+                }
             });
 
             rl.on('close', () => {
+                // 最后报告一次完整的行数
+                if (progressCallback && lineCount > lastReportedCount) {
+                    progressCallback(lineCount);
+                }
                 this.totalLines = lineCount;
                 resolve(lineCount);
             });
@@ -544,16 +559,32 @@ export class LogProcessor {
     /**
      * 从日志行中提取线程名
      * 格式：[scheduling-1] 或 [http-nio-16710-exec-8]
-     * 注意：需要排除 [方法名:行号] 格式
+     * 注意：需要排除 [方法名:行号] 格式和日志级别
      */
     private extractThreadName(line: string): string | undefined {
-        // 匹配方括号内的线程名，但不包含冒号（排除方法名格式）
-        const match = line.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
-        if (match) {
-            // 检查是否为方法名格式 [方法名:行号]
-            const methodPattern = /\[[a-zA-Z_][a-zA-Z0-9_]*:\d+\]/;
-            if (!methodPattern.test(match[0])) {
-                return match[1];
+        // 日志级别列表（需要排除）
+        const logLevels = ['ERROR', 'FATAL', 'SEVERE', 'WARN', 'WARNING', 'INFO', 'INFORMATION', 'DEBUG', 'TRACE', 'VERBOSE'];
+        
+        // 匹配所有方括号内的内容
+        const matches = line.match(/\[([^\]]+)\]/g);
+        if (matches) {
+            for (const match of matches) {
+                const content = match.slice(1, -1); // 移除方括号
+                
+                // 排除方法名格式 [方法名:行号]
+                if (content.includes(':') && /^[a-zA-Z_][a-zA-Z0-9_]*:\d+$/.test(content)) {
+                    continue;
+                }
+                
+                // 排除日志级别
+                if (logLevels.includes(content.toUpperCase())) {
+                    continue;
+                }
+                
+                // 检查是否像线程名（包含字母、数字、连字符、下划线）
+                if (/^[a-zA-Z][a-zA-Z0-9-_]*$/.test(content)) {
+                    return content;
+                }
             }
         }
         return undefined;

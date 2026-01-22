@@ -83,7 +83,7 @@ export class LogViewerPanel {
                         await this.regexSearch(message.pattern, message.flags, message.reverse);
                         break;
                     case 'exportLogs':
-                        await this.exportCurrentView(message.lines);
+                        await this.exportCurrentView(message.lines, message.exportType);
                         break;
                     case 'deleteByTime':
                         await this.deleteByTimeOptions(message.timeStr, message.mode);
@@ -133,24 +133,91 @@ export class LogViewerPanel {
             const fileStats = await fs.promises.stat(fileUri.fsPath);
             const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(2);
 
-            // 获取总行数
-            const totalLines = await this._logProcessor.getTotalLines();
+            // 发送初始加载进度
+            this._panel.webview.postMessage({
+                command: 'loadingProgress',
+                data: {
+                    stage: '正在计算文件行数...',
+                    progress: 0
+                }
+            });
+
+            // 获取总行数，带进度报告
+            let estimatedTotalLines = 0;
+            const totalLines = await this._logProcessor.getTotalLines((currentLines) => {
+                // 定期报告进度
+                estimatedTotalLines = currentLines;
+                
+                // 根据文件大小估算进度（粗略估算）
+                const estimatedProgress = Math.min(50, (currentLines / 100000) * 50);
+                
+                this._panel.webview.postMessage({
+                    command: 'loadingProgress',
+                    data: {
+                        stage: `正在计算文件行数... (${currentLines.toLocaleString()} 行)`,
+                        progress: estimatedProgress,
+                        current: currentLines
+                    }
+                });
+            });
 
             // 根据文件大小决定加载策略
             let initialLines;
             let initialLoadCount = 2000; // 初始加载行数
 
+            // 发送读取数据阶段的进度
+            this._panel.webview.postMessage({
+                command: 'loadingProgress',
+                data: {
+                    stage: `正在读取日志数据... (共 ${totalLines.toLocaleString()} 行)`,
+                    progress: 60,
+                    total: totalLines
+                }
+            });
+
             if (totalLines <= 10000) {
                 // 小于1万行，一次性加载所有数据
                 initialLines = await this._logProcessor.readLines(0, totalLines);
-                vscode.window.showInformationMessage(`成功加载日志文件: ${path.basename(fileUri.fsPath)} (${fileSizeMB}MB, ${totalLines}行)`);
+                
+                this._panel.webview.postMessage({
+                    command: 'loadingProgress',
+                    data: {
+                        stage: '数据加载完成，正在渲染...',
+                        progress: 90,
+                        current: totalLines,
+                        total: totalLines
+                    }
+                });
             } else {
                 // 大于1万行，先快速加载前2000行
                 initialLines = await this._logProcessor.readLines(0, initialLoadCount);
-                vscode.window.showInformationMessage(`文件较大 (${totalLines}行)，已快速加载前 ${initialLoadCount} 行，后续数据将在后台加载...`);
+                
+                this._panel.webview.postMessage({
+                    command: 'loadingProgress',
+                    data: {
+                        stage: `快速预览：已加载前 ${initialLoadCount.toLocaleString()} 行，正在准备界面...`,
+                        progress: 80,
+                        current: initialLoadCount,
+                        total: initialLoadCount
+                    }
+                });
             }
 
             this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
+
+            // 发送最终进度：小文件100%，大文件也是100%（因为"快速预览"阶段已完成）
+            this._panel.webview.postMessage({
+                command: 'loadingProgress',
+                data: {
+                    stage: initialLines.length >= totalLines ? '加载完成！' : '快速预览完成！',
+                    progress: 100,
+                    current: initialLines.length,
+                    total: initialLines.length
+                }
+            });
+
+            // 短暂延迟后再发送 fileLoaded，让用户看到进度
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             this._panel.webview.postMessage({
                 command: 'fileLoaded',
@@ -550,19 +617,28 @@ export class LogViewerPanel {
         }
     }
 
-    private async exportCurrentView(lines: any[]) {
+    private async exportCurrentView(lines: any[], exportType?: string) {
         try {
+            // 根据导出类型生成默认文件名
+            let defaultFileName = 'exported.log';
+            let successMessage = `成功导出 ${lines.length} 行日志`;
+            
+            if (exportType === 'bookmarked') {
+                defaultFileName = 'bookmarked.log';
+                successMessage = `成功导出 ${lines.length} 条带书签的日志`;
+            }
+            
             const uri = await vscode.window.showSaveDialog({
                 filters: {
                     '日志文件': ['log', 'txt'],
                     '所有文件': ['*']
                 },
-                defaultUri: vscode.Uri.file(path.join(path.dirname(this._fileUri.fsPath), 'exported.log'))
+                defaultUri: vscode.Uri.file(path.join(path.dirname(this._fileUri.fsPath), defaultFileName))
             });
 
             if (uri) {
                 await this._logProcessor.exportLogs(lines, uri.fsPath);
-                vscode.window.showInformationMessage(`成功导出 ${lines.length} 行日志到: ${uri.fsPath}`);
+                vscode.window.showInformationMessage(`${successMessage}到: ${uri.fsPath}`);
             }
         } catch (error) {
             vscode.window.showErrorMessage(`导出失败: ${error}`);
