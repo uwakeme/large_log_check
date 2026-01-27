@@ -666,6 +666,21 @@ function handleJumpToLineInFullLogResult(data) {
 
     allLines = data.lines;
     originalLines = [...data.lines];
+    
+    // 🔧 关键修复：更新完整数据缓存，确保跳转后显示正确的内容
+    fullDataCache = [...data.lines];
+    
+    // 🔧 清空统一过滤条件，确保显示完整日志
+    unifiedFilters = {
+        keyword: null,
+        isRegex: false,
+        isMultiple: false,
+        threadName: null,
+        className: null,
+        methodName: null,
+        levels: null,
+        timeRange: null,
+    };
 
     console.log(`📦 跳转数据已加载 - baseLineOffset: ${baseLineOffset}, 数据行数: ${allLines.length}, 目标行号: ${data.targetLineNumber}`);
 
@@ -3340,19 +3355,28 @@ function jumpToLineInFullLog(lineNumber) {
     isFiltering = false;
 
     // 🔧 关键修复：如果数据已经完全加载，直接在当前数据中跳转，不需要重新加载
-    if (allDataLoaded && allLines.length > 0) {
+    if (allDataLoaded && fullDataCache.length > 0) {
         console.log('✅ 数据已完全加载，直接跳转到目标行');
         
         // 恢复到完整日志模式
         isInSearchMode = false;
-        if (searchBackup) {
-            // 恢复原始数据（如果有备份的话）
-            if (searchBackup.allLines && searchBackup.allLines.length > allLines.length) {
-                allLines = searchBackup.allLines;
-                originalLines = searchBackup.originalLines || [...allLines];
-            }
-            searchBackup = null;
-        }
+        searchBackup = null;
+        
+        // 🔧 关键修复：从完整数据缓存恢复数据
+        allLines = [...fullDataCache];
+        originalLines = [...fullDataCache];
+        
+        // 🔧 清空统一过滤条件，确保显示完整日志
+        unifiedFilters = {
+            keyword: null,
+            isRegex: false,
+            isMultiple: false,
+            threadName: null,
+            className: null,
+            methodName: null,
+            levels: null,
+            timeRange: null,
+        };
         
         // 重新渲染并跳转
         handleDataChange({ resetPage: false });

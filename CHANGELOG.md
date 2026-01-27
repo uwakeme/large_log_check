@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- 修复搜索结果跳转后日志内容不更新的问题
+  - 修复从搜索结果跳转到完整日志时，虽然显示"已跳转"但日志内容没有变化的问题
+  - 在 `handleJumpToLineInFullLogResult` 函数中添加了 `fullDataCache` 的更新逻辑
+  - 在 `jumpToLineInFullLog` 函数中修复了数据已完全加载时的恢复逻辑
+  - 确保跳转时清空所有统一过滤条件，正确显示完整日志内容
+
+### Changed
+- 优化工具栏布局，将"⚙ 设置"按钮移至"⋯ 更多"菜单中
+  - 由于设置功能使用频率较低，移至更多菜单可以简化主工具栏
+  - 保持常用功能（定位、书签、注释、高亮规则）在主工具栏便于快速访问
+
 ## [1.2.2] - 2026-01-22
 ### Added
 - **多文件同时打开** - 支持同时打开多个日志文件

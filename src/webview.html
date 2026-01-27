@@ -33,13 +33,13 @@
             <button onclick="showBookmarksModal()">📌 书签</button>
             <button onclick="showCommentsModal()">📝 注释</button>
             <button onclick="showCustomHighlightModal()">🎨 高亮规则</button>
-            <button onclick="console.log('🖱️ 设置按钮被点击'); showSettingsModal();">⚙ 设置</button>
             <div class="dropdown">
                 <button onclick="toggleMoreMenu()">⋯ 更多</button>
                 <div class="dropdown-content" id="moreMenu">
                     <button onclick="showStats(); closeMoreMenu();">📈 统计</button>
                     <button onclick="exportLogs(); closeMoreMenu();">💾 导出</button>
                     <button onclick="showDeleteModal(); closeMoreMenu();">🗑️ 删除</button>
+                    <button onclick="console.log('🖱️ 设置按钮被点击'); showSettingsModal(); closeMoreMenu();">⚙ 设置</button>
                 </div>
             </div>
             <button onclick="refresh()">🔄 刷新</button>
