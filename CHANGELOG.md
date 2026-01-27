@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.2.3] - 2026-01-27
 ### Enhanced
 - **UI/UX 视觉升级** - 现代化界面设计，提升专业感
   - **图标升级**：将原本的 Emoji 按钮替换为标准的 VS Code Codicons 图标，与原生界面风格保持一致
