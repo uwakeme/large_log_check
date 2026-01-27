@@ -45,28 +45,108 @@ body {
 input[type="text"] {
     flex: 1;
     min-width: 200px;
-    padding: 5px 10px;
+    min-height: 32px;
+    padding: 6px 12px;
     background-color: var(--vscode-input-background);
     color: var(--vscode-input-foreground);
     border: 1px solid var(--vscode-input-border);
-    border-radius: 3px;
-    font-size: 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="text"]:hover {
+    border-color: var(--vscode-focusBorder, #007fd4);
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder, #007fd4);
+    box-shadow: 0 0 0 2px rgba(0, 127, 212, 0.2);
 }
 
 button {
     padding: 5px 12px;
+    min-height: 32px; /* 触摸友好的最小高度 */
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
+    font-weight: 500;
     white-space: nowrap;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    position: relative;
+    user-select: none;
 }
 
-button:hover {
+button:hover:not(:disabled) {
     background-color: var(--vscode-button-hoverBackground);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+/* 焦点状态 - 键盘导航可访问性 */
+button:focus {
+    outline: none;
+}
+
+button:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 2px;
+}
+
+/* 按钮禁用状态 */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* 按钮加载状态 */
+button.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+button.loading::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    top: 50%;
+    right: 8px;
+    margin-top: -7px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: button-spin 0.8s linear infinite;
+}
+
+@keyframes button-spin {
+    to { transform: rotate(360deg); }
+}
+
+button .codicon {
+    vertical-align: text-bottom;
+    margin-right: 4px;
+}
+
+.codicon-modifier-spin {
+    animation: codicon-spin 1.5s linear infinite;
+}
+
+@keyframes codicon-spin {
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .log-container {
@@ -82,10 +162,11 @@ button:hover {
 }
 
 .log-line {
-    padding: 2px 0;
+    padding: 4px 0;
     border-bottom: 1px solid var(--vscode-panel-border);
     white-space: pre-wrap;
     word-break: break-all;
+    transition: background-color 0.15s ease;
 }
 
 .log-line:hover {
@@ -149,11 +230,14 @@ button:hover {
 
 .loading-content {
     text-align: center;
-    color: var(--vscode-descriptionForeground);
+    color: var(--vscode-foreground);
     padding: 40px;
     background-color: var(--vscode-editorWidget-background);
-    border-radius: 10px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--vscode-panel-border);
+    max-width: 500px;
+    width: 90%;
 }
 
 /* 右下角后台加载进度提示 */
@@ -165,11 +249,12 @@ button:hover {
     border: 1px solid var(--vscode-panel-border);
     border-radius: 8px;
     padding: 12px 16px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     z-index: 1000;
-    min-width: 300px;
-    max-width: 400px;
+    min-width: 280px;
+    max-width: 360px;
     animation: slideInFromRight 0.3s ease-out;
+    backdrop-filter: blur(8px);
 }
 
 @keyframes slideInFromRight {
@@ -271,13 +356,29 @@ button:hover {
 .checkbox-group label {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     cursor: pointer;
     font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.15s ease;
+    min-height: 28px; /* 触摸友好 */
+}
+
+.checkbox-group label:hover {
+    background-color: var(--vscode-list-hoverBackground);
 }
 
 .checkbox-group input[type="checkbox"] {
     cursor: pointer;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--vscode-button-background);
+}
+
+.checkbox-group input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 2px;
 }
 
 .log-line.error {
@@ -935,4 +1036,137 @@ select option {
     color: var(--vscode-descriptionForeground);
 }
 
+/* ========== 全局可访问性优化 ========== */
+
+/* 减少动画偏好支持 */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .loading-overlay,
+    .background-loading-indicator {
+        animation: none;
+    }
+}
+
+/* 全局焦点样式 */
+:focus {
+    outline: none;
+}
+
+:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 2px;
+}
+
+/* 平滑滚动 */
+html {
+    scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/* 选择器样式优化 */
+select:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 2px;
+}
+
+/* 链接焦点样式 */
+a:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 2px;
+}
+
+/* 骨架屏加载动画 */
+@keyframes skeleton-loading {
+    0% {
+        background-position: -200px 0;
+    }
+    100% {
+        background-position: calc(200px + 100%) 0;
+    }
+}
+
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--vscode-editorWidget-background) 0px,
+        rgba(255, 255, 255, 0.1) 100px,
+        var(--vscode-editorWidget-background) 200px
+    );
+    background-size: 200px 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+/* 加载中的文本占位符 */
+.skeleton-text {
+    height: 14px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.skeleton-text:last-child {
+    width: 60%;
+}
+
+/* 脉冲动画 - 用于加载指示 */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+    button {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    .checkbox-group label {
+        min-height: 44px;
+        padding: 8px 12px;
+    }
+    
+    input[type="text"],
+    input[type="number"],
+    select {
+        min-height: 44px;
+        font-size: 16px; /* 防止 iOS 缩放 */
+    }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+    button {
+        border: 2px solid var(--vscode-button-foreground);
+    }
+    
+    input[type="text"],
+    input[type="number"],
+    select {
+        border-width: 2px;
+    }
+    
+    .log-line {
+        border-bottom-width: 2px;
+    }
+}
 

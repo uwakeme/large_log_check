@@ -6,95 +6,97 @@
     <title>日志查看器</title>
     <!-- 样式从扩展侧注入真实路径，这里使用占位符 -->
     <link rel="stylesheet" href="%%WEBVIEW_CSS%%">
+    <link rel="stylesheet" href="%%CODICONS_CSS%%">
 </head>
 <body>
-    <div class="toolbar">
-        <div class="file-info">
-            <div><strong>文件:</strong> <span id="fileName">未加载</span></div>
+    <header class="toolbar" role="toolbar" aria-label="日志查看器工具栏">
+        <div class="file-info" role="region" aria-label="文件信息">
+            <div><strong>文件:</strong> <span id="fileName" aria-live="polite">未加载</span></div>
             <div class="stats">
-                <span><strong>大小:</strong> <span id="fileSize">0</span>MB</span>
-                <span style="margin-left: 15px;"><strong>总行数:</strong> <span id="totalLines">0</span></span>
-                <span style="margin-left: 15px;"><strong>已加载:</strong> <span id="loadedLines">0</span></span>
+                <span><strong>大小:</strong> <span id="fileSize" aria-live="polite">0</span>MB</span>
+                <span style="margin-left: 15px;"><strong>总行数:</strong> <span id="totalLines" aria-live="polite">0</span></span>
+                <span style="margin-left: 15px;"><strong>已加载:</strong> <span id="loadedLines" aria-live="polite">0</span></span>
             </div>
         </div>
-        <div class="search-box">
-            <input type="text" id="searchInput" placeholder="搜索日志内容（多关键词用空格分隔）...">
+        <div class="search-box" role="search" aria-label="搜索日志">
+            <input type="text" id="searchInput" placeholder="搜索日志内容（多关键词用空格分隔）..." aria-label="搜索关键词">
             <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" id="regexMode">
-                <span>正则</span>
+                <input type="checkbox" id="regexMode" aria-describedby="regexModeDesc">
+                <span id="regexModeDesc">正则</span>
             </label>
             <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" id="currentPageOnlyMode">
-                <span>当前页</span>
+                <input type="checkbox" id="currentPageOnlyMode" aria-describedby="currentPageDesc">
+                <span id="currentPageDesc">当前页</span>
             </label>
-            <button onclick="search()">🔍 搜索</button>
-            <button onclick="showAdvancedSearchModal()">🔍 高级搜索</button>
-            <button onclick="showJumpDialog()">🎯 定位</button>
-            <button onclick="showBookmarksModal()">📌 书签</button>
-            <button onclick="showCommentsModal()">📝 注释</button>
-            <button onclick="showCustomHighlightModal()">🎨 高亮规则</button>
+            <button id="searchBtn" onclick="search()" aria-label="开始搜索"><i class="codicon codicon-search"></i> 搜索</button>
+            <button onclick="showAdvancedSearchModal()" aria-label="打开高级搜索"><i class="codicon codicon-filter"></i> 高级搜索</button>
+            <button onclick="showJumpDialog()" aria-label="跳转到指定行"><i class="codicon codicon-target"></i> 定位</button>
+            <button onclick="showBookmarksModal()" aria-label="管理书签"><i class="codicon codicon-bookmark"></i> 书签</button>
+            <button onclick="showCommentsModal()" aria-label="管理注释"><i class="codicon codicon-comment"></i> 注释</button>
+            <button onclick="showCustomHighlightModal()" aria-label="自定义高亮规则"><i class="codicon codicon-paint-can"></i> 高亮规则</button>
             <div class="dropdown">
-                <button onclick="toggleMoreMenu()">⋯ 更多</button>
-                <div class="dropdown-content" id="moreMenu">
-                    <button onclick="showStats(); closeMoreMenu();">📈 统计</button>
-                    <button onclick="exportLogs(); closeMoreMenu();">💾 导出</button>
-                    <button onclick="showDeleteModal(); closeMoreMenu();">🗑️ 删除</button>
-                    <button onclick="console.log('🖱️ 设置按钮被点击'); showSettingsModal(); closeMoreMenu();">⚙ 设置</button>
+                <button onclick="toggleMoreMenu()" aria-haspopup="true" aria-expanded="false" aria-label="更多选项"><i class="codicon codicon-kebab-horizontal"></i> 更多</button>
+                <div class="dropdown-content" id="moreMenu" role="menu">
+                    <button onclick="showStats(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-graph"></i> 统计</button>
+                    <button id="exportBtn" onclick="exportLogs(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-save"></i> 导出</button>
+                    <button onclick="showDeleteModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-trash"></i> 删除</button>
+                    <button onclick="console.log('设置按钮被点击'); showSettingsModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-settings"></i> 设置</button>
                 </div>
             </div>
-            <button onclick="refresh()">🔄 刷新</button>
+            <button id="refreshBtn" onclick="refresh()" aria-label="刷新日志文件"><i class="codicon codicon-refresh"></i> 刷新</button>
         </div>
-    </div>
+    </header>
     
-    <div class="filter-panel">
+    <nav class="filter-panel" role="navigation" aria-label="日志过滤选项">
         <span style="font-size: 12px; font-weight: bold;">日志级别:</span>
-        <div class="checkbox-group">
+        <fieldset class="checkbox-group" style="border: none; padding: 0; margin: 0;">
+            <legend class="visually-hidden" style="position: absolute; width: 1px; height: 1px; overflow: hidden;">选择要显示的日志级别</legend>
             <label style="font-weight: bold; color: var(--vscode-button-background);">
-                <input type="checkbox" id="filterAll" checked onchange="toggleAll()">
-                <span>✔️ 全选</span>
+                <input type="checkbox" id="filterAll" checked onchange="toggleAll()" aria-label="全选所有级别">
+                <span>全选</span>
             </label>
-            <span style="width: 1px; height: 20px; background-color: var(--vscode-panel-border); margin: 0 5px;"></span>
+            <span style="width: 1px; height: 20px; background-color: var(--vscode-panel-border); margin: 0 5px;" aria-hidden="true"></span>
             <label>
-                <input type="checkbox" id="filterError" checked onchange="applyFilter()">
-                <span style="color: #f14c4c; font-weight: bold;">■</span> ERROR
-            </label>
-            <label>
-                <input type="checkbox" id="filterWarn" checked onchange="applyFilter()">
-                <span style="color: #cca700; font-weight: bold;">■</span> WARN
+                <input type="checkbox" id="filterError" checked onchange="applyFilter()" aria-label="显示 ERROR 级别日志">
+                <span style="color: #f14c4c; font-weight: bold;" aria-hidden="true">■</span> ERROR
             </label>
             <label>
-                <input type="checkbox" id="filterInfo" checked onchange="applyFilter()">
-                <span style="color: #4fc1ff; font-weight: bold;">■</span> INFO
+                <input type="checkbox" id="filterWarn" checked onchange="applyFilter()" aria-label="显示 WARN 级别日志">
+                <span style="color: #cca700; font-weight: bold;" aria-hidden="true">■</span> WARN
             </label>
             <label>
-                <input type="checkbox" id="filterDebug" checked onchange="applyFilter()">
-                <span style="color: #b267e6; font-weight: bold;">■</span> DEBUG
+                <input type="checkbox" id="filterInfo" checked onchange="applyFilter()" aria-label="显示 INFO 级别日志">
+                <span style="color: #4fc1ff; font-weight: bold;" aria-hidden="true">■</span> INFO
             </label>
-            <label><input type="checkbox" id="filterOther" checked onchange="applyFilter()"> 其他</label>
-        </div>
-        <span style="width: 1px; height: 20px; background-color: var(--vscode-panel-border); margin: 0 10px;"></span>
+            <label>
+                <input type="checkbox" id="filterDebug" checked onchange="applyFilter()" aria-label="显示 DEBUG 级别日志">
+                <span style="color: #b267e6; font-weight: bold;" aria-hidden="true">■</span> DEBUG
+            </label>
+            <label><input type="checkbox" id="filterOther" checked onchange="applyFilter()" aria-label="显示其他级别日志"> 其他</label>
+        </fieldset>
+        <span style="width: 1px; height: 20px; background-color: var(--vscode-panel-border); margin: 0 10px;" aria-hidden="true"></span>
         <label style="font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer;">
-            <input type="checkbox" id="collapseRepeated" onchange="toggleCollapseMode()">
-            <span>📎 折叠重复日志</span>
+            <input type="checkbox" id="collapseRepeated" onchange="toggleCollapseMode()" aria-label="折叠重复的日志行">
+            <span>折叠重复日志</span>
         </label>
         <label style="font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer;">
-            <input type="checkbox" id="enableJsonParse" checked onchange="toggleJsonParse()">
-            <span>🌲 解析JSON/XML</span>
+            <input type="checkbox" id="enableJsonParse" checked onchange="toggleJsonParse()" aria-label="自动解析 JSON 和 XML 内容">
+            <span>解析JSON/XML</span>
         </label>
-    </div>
+    </nav>
     
     <!-- 筛选状态提示 -->
     <div class="filter-status-panel" id="filterStatusPanel" style="display: none;">
-        <span style="font-size: 12px; font-weight: bold;">🔍 正在筛选：</span>
+        <span style="font-size: 12px; font-weight: bold;"><i class="codicon codicon-filter"></i> 正在筛选：</span>
         <span id="filterStatusText" style="font-size: 12px; color: var(--vscode-textLink-foreground); font-weight: 500;"></span>
-        <button onclick="clearCustomFilter()" style="padding: 3px 10px; font-size: 11px; margin-left: 10px;">❌ 取消筛选</button>
+        <button onclick="clearCustomFilter()" style="padding: 3px 10px; font-size: 11px; margin-left: 10px;"><i class="codicon codicon-close"></i> 取消筛选</button>
     </div>
     
     <!-- 时间线导航 -->
     <div class="timeline-panel" id="timelinePanel" style="display: none;">
         <div class="timeline-header" onclick="toggleTimeline()">
-            <span style="font-weight: bold; font-size: 12px;">📈 时间线导航</span>
-            <span id="timelineToggleIcon" style="font-size: 12px;">▼</span>
+            <span style="font-weight: bold; font-size: 12px;"><i class="codicon codicon-graph"></i> 时间线导航</span>
+            <span id="timelineToggleIcon" style="font-size: 12px;"><i class="codicon codicon-chevron-down"></i></span>
         </div>
         <div class="timeline-content" id="timelineContent">
             <canvas id="timelineCanvas" width="100%" height="80"></canvas>
@@ -105,25 +107,25 @@
     </div>
     
     <!-- 加载进度覆盖层 -->
-    <div class="loading-overlay" id="loadingIndicator">
+    <div class="loading-overlay" id="loadingIndicator" role="dialog" aria-modal="true" aria-labelledby="loadingTitle" aria-describedby="loadingStage">
         <div class="loading-content">
-            <div style="font-size: 18px; margin-bottom: 20px;">⏳ 正在加载日志文件...</div>
-            <div id="loadingStage" style="font-size: 14px; color: var(--vscode-descriptionForeground); margin-bottom: 15px;">
+            <div id="loadingTitle" style="font-size: 18px; margin-bottom: 20px;"><i class="codicon codicon-loading codicon-modifier-spin"></i> 正在加载日志文件...</div>
+            <div id="loadingStage" style="font-size: 14px; color: var(--vscode-descriptionForeground); margin-bottom: 15px;" aria-live="polite">
                 准备读取文件...
             </div>
             <div style="width: 400px; margin: 0 auto;">
-                <div style="background-color: var(--vscode-editorWidget-background); height: 20px; border-radius: 10px; overflow: hidden; border: 1px solid var(--vscode-panel-border);">
+                <div style="background-color: var(--vscode-editorWidget-background); height: 20px; border-radius: 10px; overflow: hidden; border: 1px solid var(--vscode-panel-border);" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="加载进度">
                     <div id="loadingProgressBar" style="height: 100%; background: linear-gradient(90deg, #0e7490 0%, #06b6d4 100%); width: 0%; transition: width 0.3s ease;"></div>
                 </div>
-                <div id="loadingProgressText" style="margin-top: 8px; font-size: 12px; color: var(--vscode-descriptionForeground);">
+                <div id="loadingProgressText" style="margin-top: 8px; font-size: 12px; color: var(--vscode-descriptionForeground);" aria-live="polite">
                     0%
                 </div>
             </div>
         </div>
     </div>
     
-    <div class="log-container" id="logContainer">
-    </div>
+    <main class="log-container" id="logContainer" role="log" aria-label="日志内容" aria-live="polite">
+    </main>
     
     <!-- 右下角后台加载进度提示 -->
     <div class="background-loading-indicator" id="backgroundLoadingIndicator" style="display: none;">
@@ -137,24 +139,24 @@
                 </div>
             </div>
             <button onclick="cancelBackgroundLoading()" style="padding: 4px 8px; font-size: 11px; background: transparent; border: 1px solid var(--vscode-button-border); color: var(--vscode-button-foreground); cursor: pointer; border-radius: 3px;" title="停止后台加载">
-                ⏸️
+                <i class="codicon codicon-debug-pause"></i>
             </button>
         </div>
     </div>
     
     <!-- 分页控件 -->
-    <div class="pagination" id="pagination" style="display: none;">
-        <button onclick="goToFirstPage()" id="firstPageBtn">⏮️ 首页</button>
-        <button onclick="goToPrevPage()" id="prevPageBtn">◀️ 上一页</button>
+    <nav class="pagination" id="pagination" style="display: none;" role="navigation" aria-label="日志分页导航">
+        <button onclick="goToFirstPage()" id="firstPageBtn" aria-label="跳转到第一页"><i class="codicon codicon-chevron-left"></i><i class="codicon codicon-chevron-left"></i> 首页</button>
+        <button onclick="goToPrevPage()" id="prevPageBtn" aria-label="上一页"><i class="codicon codicon-chevron-left"></i> 上一页</button>
         <span class="page-info">
-            第 <input type="number" id="currentPageInput" min="1" value="1" onchange="goToPage(this.value)"> 
-            / <span id="totalPages">1</span> 页
+            第 <input type="number" id="currentPageInput" min="1" value="1" onchange="goToPage(this.value)" aria-label="当前页码"> 
+            / <span id="totalPages" aria-label="总页数">1</span> 页
         </span>
-        <button onclick="goToNextPage()" id="nextPageBtn">下一页 ▶️</button>
-        <button onclick="goToLastPage()" id="lastPageBtn">末页 ⏭️</button>
+        <button onclick="goToNextPage()" id="nextPageBtn" aria-label="下一页">下一页 <i class="codicon codicon-chevron-right"></i></button>
+        <button onclick="goToLastPage()" id="lastPageBtn" aria-label="跳转到最后一页">末页 <i class="codicon codicon-chevron-right"></i><i class="codicon codicon-chevron-right"></i></button>
         <span class="page-info" style="margin-left: 20px;">
-            <span style="font-size: 14px; font-weight: 600;">每页显示：</span>
-            <select id="pageSizeSelect" onchange="changePageSize(this.value)">
+            <label for="pageSizeSelect" style="font-size: 14px; font-weight: 600;">每页显示：</label>
+            <select id="pageSizeSelect" onchange="changePageSize(this.value)" aria-label="选择每页显示行数">
                 <option value="50">50</option>
                 <option value="100" selected>100</option>
                 <option value="200">200</option>
@@ -163,10 +165,10 @@
             </select>
             <span style="font-size: 14px; font-weight: 600;">行</span>
         </span>
-        <span class="page-info">
+        <span class="page-info" aria-live="polite">
             <span id="lineRangeInfo" style="display: none;">第 <span id="lineRangeStart">0</span> - <span id="lineRangeEnd">0</span> 行 / </span>共 <span id="totalLinesInPage">0</span> 行
         </span>
-    </div>
+    </nav>
     
     <!-- 统计弹窗 -->
     <div id="statsModal" class="modal">
@@ -187,7 +189,7 @@
     <div id="deleteByTimeModal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeDeleteByTimeModal()">&times;</span>
-            <h2>⏰ 按时间删除日志</h2>
+            <h2><i class="codicon codicon-clock"></i> 按时间删除日志</h2>
             <div style="margin-top: 20px;">
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">删除模式：</label>
@@ -201,7 +203,7 @@
                     <input type="text" id="deleteTimeInput" placeholder="例如：2024-01-01 12:00:00" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
                 </div>
                 <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #d97706;">
-                    <strong>⚠️ 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
+                    <strong><i class="codicon codicon-warning"></i> 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeDeleteByTimeModal()">取消</button>
@@ -215,20 +217,20 @@
     <div id="deleteModal" class="modal">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
-                <h2>🗑️ 删除日志</h2>
+                <h2><i class="codicon codicon-trash"></i> 删除日志</h2>
                 <span class="modal-close" onclick="closeDeleteModal()">&times;</span>
             </div>
             <div class="modal-body">
                 <div style="display: grid; gap: 15px;">
                     <button onclick="selectDeleteByTime()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
-                        <span style="font-size: 20px;">⏰</span>
+                        <span style="font-size: 20px;"><i class="codicon codicon-clock"></i></span>
                         <div style="text-align: left;">
                             <div style="font-weight: bold;">按时间删除</div>
                             <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">删除指定时间之前/之后的日志</div>
                         </div>
                     </button>
                     <button onclick="selectDeleteByLine()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
-                        <span style="font-size: 20px;">📊</span>
+                        <span style="font-size: 20px;"><i class="codicon codicon-graph"></i></span>
                         <div style="text-align: left;">
                             <div style="font-weight: bold;">按行数删除</div>
                             <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">删除指定行之前/之后的日志</div>
@@ -243,7 +245,7 @@
     <div id="deleteByLineModal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeDeleteByLineModal()">&times;</span>
-            <h2>📊 按行数删除日志</h2>
+            <h2><i class="codicon codicon-graph"></i> 按行数删除日志</h2>
             <div style="margin-top: 20px;">
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">删除模式：</label>
@@ -257,7 +259,7 @@
                     <input type="number" id="deleteLineInput" placeholder="例如：1000" min="1" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
                 </div>
                 <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #dc2626;">
-                    <strong>⚠️ 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
+                    <strong><i class="codicon codicon-warning"></i> 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeDeleteByLineModal()">取消</button>
@@ -271,15 +273,15 @@
     <div id="jumpModal" class="modal">
         <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
-                <h2>🎯 快速定位</h2>
+                <h2><i class="codicon codicon-target"></i> 快速定位</h2>
                 <span class="modal-close" onclick="closeJumpModal()">&times;</span>
             </div>
             <div class="modal-body">
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">定位方式：</label>
                     <select id="jumpMode" onchange="switchJumpMode()" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 13px;">
-                        <option value="line">📍 按行号定位</option>
-                        <option value="time">⏰ 按时间定位</option>
+                        <option value="line"><i class="codicon codicon-list-ordered"></i> 按行号定位</option>
+                        <option value="time"><i class="codicon codicon-clock"></i> 按时间定位</option>
                     </select>
                 </div>
                 <div id="jumpByLineSection">
@@ -292,11 +294,11 @@
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px; font-weight: bold;">时间：</label>
                         <input type="datetime-local" id="jumpTimeInput" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
-                        <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px;">💡 提示：支持直接输入或点击日历图标选择</div>
+                        <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px;"><i class="codicon codicon-lightbulb"></i> 提示：支持直接输入或点击日历图标选择</div>
                     </div>
                 </div>
                 <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #0e7490;">
-                    <strong>💡 提示：</strong>定位后将自动跳转到对应的页面并高亮显示
+                    <strong><i class="codicon codicon-lightbulb"></i> 提示：</strong>定位后将自动跳转到对应的页面并高亮显示
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeJumpModal()">取消</button>
@@ -310,7 +312,7 @@
     <div id="bookmarksModal" class="modal">
         <div class="modal-content" style="max-width: 700px;">
             <div class="modal-header">
-                <h2>📌 书签列表</h2>
+                <h2><i class="codicon codicon-bookmark"></i> 书签列表</h2>
                 <span class="modal-close" onclick="closeBookmarksModal()">&times;</span>
             </div>
             <div class="modal-body">
@@ -319,10 +321,10 @@
                 </div>
                 <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="color: var(--vscode-descriptionForeground); font-size: 12px;">
-                        💡 提示：双击日志行可添加/移除书签
+                        <i class="codicon codicon-lightbulb"></i> 提示：双击日志行可添加/移除书签
                     </div>
-                    <button onclick="exportBookmarkedLogs()" style="padding: 8px 16px; font-size: 13px; font-weight: bold;">
-                        💾 导出书签日志
+                    <button id="exportBookmarksBtn" onclick="exportBookmarkedLogs()" style="padding: 8px 16px; font-size: 13px; font-weight: bold;">
+                        <i class="codicon codicon-save"></i> 导出书签日志
                     </button>
                 </div>
             </div>
@@ -333,7 +335,7 @@
     <div id="commentsModal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
-                <h2>📝 注释列表</h2>
+                <h2><i class="codicon codicon-comment"></i> 注释列表</h2>
                 <span class="modal-close" onclick="closeCommentsModal()">&times;</span>
             </div>
             <div class="modal-body">
@@ -341,7 +343,7 @@
                     <!-- 注释将动态生成 -->
                 </div>
                 <div style="margin-top: 15px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px;">
-                    💡 提示：右键点击日志行可添加注释
+                    <i class="codicon codicon-lightbulb"></i> 提示：右键点击日志行可添加注释
                 </div>
             </div>
         </div>
@@ -351,7 +353,7 @@
     <div id="commentInputModal" class="modal">
         <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
-                <h2 id="commentInputTitle">📝 添加注释</h2>
+                <h2 id="commentInputTitle"><i class="codicon codicon-comment-add"></i> 添加注释</h2>
                 <span class="modal-close" onclick="closeCommentInputModal()">&times;</span>
             </div>
             <div class="modal-body">
@@ -362,7 +364,7 @@
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">注释内容：</label>
                     <textarea id="commentInputText" rows="4" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-family: inherit; resize: vertical;" placeholder="请输入注释内容..." onkeydown="if(event.ctrlKey && event.key === 'Enter') confirmCommentInput();"></textarea>
-                    <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px;">💡 提示：按 Ctrl+Enter 快速保存</div>
+                    <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px;"><i class="codicon codicon-lightbulb"></i> 提示：按 Ctrl+Enter 快速保存</div>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeCommentInputModal()">取消</button>
@@ -376,7 +378,7 @@
     <div id="advancedSearchModal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
-                <h2>🔍 高级搜索</h2>
+                <h2><i class="codicon codicon-search"></i> 高级搜索</h2>
                 <span class="modal-close" onclick="closeAdvancedSearchModal()">&times;</span>
             </div>
             <div class="modal-body">
@@ -391,7 +393,7 @@
                                     <option value="OR">OR（或）</option>
                                 </select>
                             </label>
-                            <button onclick="addAdvSearchCondition()" style="padding: 5px 12px; font-size: 12px;">➕ 添加条件</button>
+                            <button onclick="addAdvSearchCondition()" style="padding: 5px 12px; font-size: 12px;"><i class="codicon codicon-add"></i> 添加条件</button>
                         </div>
                     </div>
                     <div id="advSearchConditions" style="display: flex; flex-direction: column; gap: 10px;">
@@ -399,7 +401,7 @@
                     </div>
                 </div>
                 <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #0e7490;">
-                    <strong>💡 提示：</strong>
+                    <strong><i class="codicon codicon-lightbulb"></i> 提示：</strong>
                     <ul style="margin: 5px 0 0 20px; font-size: 12px; line-height: 1.6;">
                         <li>支持多个搜索条件组合，可选择 AND（同时满足）或 OR（满足任一）</li>
                         <li>线程名、类名、方法名支持精确匹配和模糊匹配</li>
@@ -408,7 +410,7 @@
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeAdvancedSearchModal()">取消</button>
-                    <button onclick="confirmAdvancedSearch()">🔍 搜索</button>
+                    <button onclick="confirmAdvancedSearch()"><i class="codicon codicon-search"></i> 搜索</button>
                 </div>
             </div>
         </div>
@@ -418,12 +420,12 @@
     <div id="customHighlightModal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
-                <h2>🎨 自定义高亮规则</h2>
+                <h2><i class="codicon codicon-paint-can"></i> 自定义高亮规则</h2>
                 <span class="modal-close" onclick="closeCustomHighlightModal()">&times;</span>
             </div>
             <div class="modal-body">
                 <div style="margin-bottom: 20px;">
-                    <button onclick="showAddRuleDialog()" style="width: 100%; padding: 12px; font-weight: bold;">➕ 添加新规则</button>
+                    <button onclick="showAddRuleDialog()" style="width: 100%; padding: 12px; font-weight: bold;"><i class="codicon codicon-add"></i> 添加新规则</button>
                 </div>
                 <div id="highlightRulesList" style="max-height: 500px; overflow-y: auto;">
                     <!-- 规则列表将动态生成 -->
@@ -436,7 +438,7 @@
     <div id="settingsModal" class="modal">
         <div class="modal-content small">
             <div class="modal-header">
-                <h3>⚙ 日志查看设置</h3>
+                <h3><i class="codicon codicon-settings"></i> 日志查看设置</h3>
                 <button class="close-button" onclick="closeSettingsModal()">✕</button>
             </div>
             <div class="modal-body">
@@ -467,7 +469,7 @@
     <div id="addRuleModal" class="modal">
         <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
-                <h2 id="ruleModalTitle">➕ 添加高亮规则</h2>
+                <h2 id="ruleModalTitle"><i class="codicon codicon-add"></i> 添加高亮规则</h2>
                 <span class="modal-close" onclick="closeAddRuleModal()">&times;</span>
             </div>
             <div class="modal-body">
@@ -504,7 +506,7 @@
                     </label>
                 </div>
                 <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #8b5cf6;">
-                    <strong>💡 提示：</strong>正则表达式示例：<code>\\b\w+:\\d+\\b</code> 匹配方法名:line号
+                    <strong><i class="codicon codicon-lightbulb"></i> 提示：</strong>正则表达式示例：<code>\\b\w+:\\d+\\b</code> 匹配方法名:line号
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeAddRuleModal()">取消</button>

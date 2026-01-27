@@ -685,10 +685,16 @@ export class LogViewerPanel {
             vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.js')
         );
 
+        // Get codicons URI
+        const codiconsUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css')
+        );
+
         // 用占位符替换为真实路径
         html = html
             .replace(/%%WEBVIEW_CSS%%/g, styleUri.toString())
-            .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString());
+            .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString())
+            .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
 
         return html;
     }

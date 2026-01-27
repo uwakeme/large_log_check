@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Enhanced
+- **UI/UX 视觉升级** - 现代化界面设计，提升专业感
+  - **图标升级**：将原本的 Emoji 按钮替换为标准的 VS Code Codicons 图标，与原生界面风格保持一致
+  - **界面纯净板**：移除界面提示语、日志和菜单中的 Emoji 表情，统一使用 Codicons 图标，使界面更加简洁专业
+  - **标签样式优化**：优化日志行中的线程名、类名、方法名标签样式，由实心背景改为清爽的轮廓样式（Outline），减少视觉干扰（"Fruit Salad" 效应），仅保留日志级别（ERROR/WARN等）的实心高亮以强调重要性
+- **UI/UX 无障碍优化** - 全面提升界面可访问性和用户体验
+  - 添加键盘导航支持，所有交互元素支持 `:focus-visible` 焦点指示
+  - 优化触摸设备支持，触摸目标尺寸至少 44px，符合 WCAG 标准
+  - 支持 `prefers-reduced-motion` 媒体查询，尊重用户减少动画偏好
+  - 支持高对比度模式 (`prefers-contrast: high`)，提升边框和文字可见性
+  - 添加按钮加载状态（刷新、导出按钮显示加载旋转动画）
+  - 优化按钮悬停效果，添加微妙的上浮动画
+  - 改进语义化 HTML 结构，添加适当的 ARIA 属性
+  - 工具栏使用 `role="toolbar"`，分页使用 `role="navigation"`
+  - 日志容器使用 `role="log"` 和 `aria-live="polite"` 支持屏幕阅读器
+
 ### Fixed
 - 修复搜索结果跳转后日志内容不更新的问题
   - 修复从搜索结果跳转到完整日志时，虽然显示"已跳转"但日志内容没有变化的问题
@@ -15,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 确保跳转时清空所有统一过滤条件，正确显示完整日志内容
 
 ### Changed
-- 优化工具栏布局，将"⚙ 设置"按钮移至"⋯ 更多"菜单中
+- 优化工具栏布局，将"设置"按钮移至"⋯ 更多"菜单中
   - 由于设置功能使用频率较低，移至更多菜单可以简化主工具栏
   - 保持常用功能（定位、书签、注释、高亮规则）在主工具栏便于快速访问
 
@@ -37,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复设置按钮点击无反应的问题
   - 修复设置模态框（settingsModal）被错误嵌套在自定义高亮规则弹窗内部的问题
   - 将设置模态框移出为独立的顶级元素，确保正常显示
-  - 现在点击"⚙ 设置"按钮可以正常打开设置面板
+  - 现在点击"设置"按钮可以正常打开设置面板
 
 - 修复线程名高亮规则误识别日志级别的问题
   - 修复 `[ERROR]`、`[WARN]`、`[INFO]`、`[DEBUG]` 等日志级别被错误识别为线程名的问题
@@ -156,7 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 跳转到行号
   - 高级搜索
 - 搜索结果导航优化
-  - 搜索结果添加跳转按钮（🔗图标），点击可跳转到完整日志中的对应位置
+  - 搜索结果添加跳转按钮（图标），点击可跳转到完整日志中的对应位置
   - 右键菜单新增"跳转到完整日志"选项，方便在搜索模式下快速定位
   - 取消搜索结果点击自动跳转功能，便于对比和复制内容
 - 时间线导航增强

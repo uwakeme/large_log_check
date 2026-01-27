@@ -51,6 +51,34 @@ let unifiedFilters = {
 // 原始完整数据（用于统一过滤）
 let fullDataCache = [];
 
+// ========== 按钮加载状态管理 ==========
+
+/**
+ * 设置按钮的加载状态
+ * @param {HTMLButtonElement} button - 按钮元素
+ * @param {boolean} loading - 是否处于加载状态
+ */
+function setButtonLoading(button, loading) {
+    if (!button) return;
+    if (loading) {
+        button.classList.add('loading');
+        button.disabled = true;
+    } else {
+        button.classList.remove('loading');
+        button.disabled = false;
+    }
+}
+
+/**
+ * 根据按钮ID设置加载状态
+ * @param {string} buttonId - 按钮的ID
+ * @param {boolean} loading - 是否处于加载状态
+ */
+function setButtonLoadingById(buttonId, loading) {
+    const button = document.getElementById(buttonId);
+    setButtonLoading(button, loading);
+}
+
 // ========== 统一过滤系统核心函数 ==========
 
 /**
@@ -58,11 +86,11 @@ let fullDataCache = [];
  * 这个函数会将所有已设置的过滤条件叠加应用
  */
 function applyUnifiedFilters() {
-    console.log('🔍 应用统一过滤 - 当前条件:', unifiedFilters);
+    console.log('应用统一过滤 - 当前条件:', unifiedFilters);
     
     // 如果没有任何过滤条件，显示全部数据
     if (!hasAnyFilter()) {
-        console.log('✅ 没有过滤条件，显示全部数据');
+        console.log('没有过滤条件，显示全部数据');
         allLines = [...fullDataCache];
         isFiltering = false;
         currentSearchKeyword = '';
@@ -154,7 +182,7 @@ function applyUnifiedFilters() {
         });
     }
     
-    console.log(`✅ 过滤完成 - 原始数据: ${fullDataCache.length} 条，过滤后: ${results.length} 条`);
+    console.log(`过滤完成 - 原始数据: ${fullDataCache.length} 条，过滤后: ${results.length} 条`);
     
     allLines = results;
     isFiltering = hasAnyFilter();
@@ -185,7 +213,7 @@ function setFilterAndApply(filters) {
     // 检查是否已完全加载数据
     if (allDataLoaded || fullDataCache.length >= totalLinesInFile) {
         // 数据已完全加载，在前端进行统一过滤
-        console.log('✅ 数据已完全加载，在前端进行统一过滤');
+        console.log('数据已完全加载，在前端进行统一过滤');
         applyUnifiedFilters();
         
         // 更新界面
@@ -197,14 +225,14 @@ function setFilterAndApply(filters) {
         
         // 显示提示信息
         if (allLines.length === 0) {
-            showToast('❌ 未找到符合所有条件的日志');
+            showToast('未找到符合所有条件的日志');
         } else {
-            showToast(`✅ 找到 ${allLines.length} 条符合条件的日志`);
+            showToast(`找到 ${allLines.length} 条符合条件的日志`);
         }
     } else {
         // 数据未完全加载，请求后台加载全部数据
-        console.log('⚠️ 数据未完全加载，请求后台加载全部数据');
-        showToast('📥 正在加载完整数据，请稍候...');
+        console.log('数据未完全加载，请求后台加载全部数据');
+        showToast(' 正在加载完整数据，请稍候...');
         
         // 请求后台继续加载
         requestAllData();
@@ -265,7 +293,7 @@ function clearAllFilters() {
         triggerAsyncCalc: true
     });
     
-    showToast('✅ 已清除所有过滤条件');
+    showToast('已清除所有过滤条件');
 }
 
 /**
@@ -362,7 +390,7 @@ window.addEventListener('message', event => {
                     collapseMinRepeatCount: typeof message.data.collapseMinRepeatCount === 'number' ? message.data.collapseMinRepeatCount : userSettings.collapseMinRepeatCount,
                     timelineSamplePoints: typeof message.data.timelineSamplePoints === 'number' ? message.data.timelineSamplePoints : userSettings.timelineSamplePoints
                 };
-                console.log('⚙️ 已从扩展配置同步设置:', userSettings);
+                console.log('已从扩展配置同步设置:', userSettings);
             }
             break;
         case 'loadingProgress':
@@ -413,6 +441,9 @@ function handleFileLoaded(data) {
         loadingIndicator.style.display = 'none';
         loadingIndicator.style.pointerEvents = 'none';
     }
+    
+    // 恢复刷新按钮状态
+    setButtonLoadingById('refreshBtn', false);
     
     document.getElementById('fileName').textContent = data.fileName || '';
     document.getElementById('fileSize').textContent = data.fileSize || '0';
@@ -473,7 +504,7 @@ function handleMoreLines(data) {
     const newLines = data.lines || [];
     const startLine = typeof data.startLine === 'number' ? data.startLine : (baseLineOffset + allLines.length);
 
-    console.log(`📥 handleMoreLines: 收到 ${newLines.length} 行, startLine = ${startLine}, baseLineOffset = ${baseLineOffset}`);
+    console.log(` handleMoreLines: 收到 ${newLines.length} 行, startLine = ${startLine}, baseLineOffset = ${baseLineOffset}`);
 
     // 更新右下角后台加载进度
     updateBackgroundLoadingProgress();
@@ -482,7 +513,7 @@ function handleMoreLines(data) {
     // 期望 startLine === baseLineOffset + allLines.length
     const expectedStart = baseLineOffset + fullDataCache.length;
     if (startLine !== expectedStart) {
-        console.warn(`⚠️ handleMoreLines: 起始行不连续, 期望 ${expectedStart}, 实际 ${startLine}，将重置缓冲区为新数据`);
+        console.warn(`handleMoreLines: 起始行不连续, 期望 ${expectedStart}, 实际 ${startLine}，将重置缓冲区为新数据`);
         // 出现不连续时，为避免错乱，直接以新数据为准并重置偏移量
         baseLineOffset = startLine;
         fullDataCache = newLines.slice();
@@ -528,18 +559,18 @@ function handleMoreLines(data) {
 }
 
 function handleSearchResults(data) {
-    console.log('🔍 收到搜索结果 - 原始数据:', data);
-    console.log('🔍 搜索结果数量:', data.results ? data.results.length : 'undefined');
-    console.log('🔍 搜索关键词:', data.keyword);
-    console.log('🔍 修改前 allLines 数量:', allLines.length);
+    console.log('收到搜索结果 - 原始数据:', data);
+    console.log('搜索结果数量:', data.results ? data.results.length : 'undefined');
+    console.log('搜索关键词:', data.keyword);
+    console.log('修改前 allLines 数量:', allLines.length);
 
     currentSearchKeyword = data.keyword;
     currentSearchIsRegex = !!data.isRegex;
     currentSearchIsMultiple = !!data.isMultiple;
     allLines = data.results || [];
 
-    console.log('🔍 修改后 allLines 数量:', allLines.length);
-    console.log('🔍 修改后 currentSearchKeyword:', currentSearchKeyword);
+    console.log('修改后 allLines 数量:', allLines.length);
+    console.log('修改后 currentSearchKeyword:', currentSearchKeyword);
 
     // 如果搜索结果为空，给出提示
     if (allLines.length === 0) {
@@ -549,18 +580,18 @@ function handleSearchResults(data) {
             message: `未找到包含 "${data.keyword}" 的日志`
         });
     } else {
-        console.log('✅ 搜索成功，准备渲染', allLines.length, '条结果');
+        console.log('搜索成功，准备渲染', allLines.length, '条结果');
     }
 
     // 统一处理数据变更
-    console.log('🔍 即将调用 handleDataChange');
+    console.log('即将调用 handleDataChange');
     handleDataChange();
-    console.log('🔍 handleDataChange 调用完成');
+    console.log('handleDataChange 调用完成');
 }
 
 function handleFilterResults(data) {
     allLines = data.results || [];
-    console.log('📥 收到过滤结果:', allLines.length, '条');
+    console.log(' 收到过滤结果:', allLines.length, '条');
     isFiltering = true; // 设置为过滤模式
 
     // 进入过滤模式时，清理搜索状态（避免与搜索备份冲突）
@@ -636,10 +667,10 @@ function updateStatsWithNewLines(newLines) {
 }
 
 function handleTimelineData(data) {
-    console.log('📈 收到时间线采样数据:', data);
+    console.log('收到时间线采样数据:', data);
 
     if (!data || !data.startTime || !data.endTime || !data.samples || data.samples.length === 0) {
-        console.log('⚠️ 时间线数据不完整，隐藏时间线');
+        console.log('时间线数据不完整，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
@@ -690,13 +721,13 @@ function handleJumpToLineInFullLogResult(data) {
         const lastLine = allLines[allLines.length - 1].lineNumber || 0;
         
         if (allDataLoaded) {
-            showToast(`✅ 已加载完整日志，跳转到第 ${data.targetLineNumber} 行`);
+            showToast(`已加载完整日志，跳转到第 ${data.targetLineNumber} 行`);
         } else if (baseLineOffset === 0) {
             // 从文件开头加载
-            showToast(`✅ 已加载前 ${allLines.length} 行数据，跳转到第 ${data.targetLineNumber} 行`);
+            showToast(`已加载前 ${allLines.length} 行数据，跳转到第 ${data.targetLineNumber} 行`);
         } else {
             // 从中间加载（旧逻辑，现在应该不会走到这里了）
-            showToast(`✅ 已加载第 ${firstLine}~${lastLine} 行数据，定位到第 ${data.targetLineNumber} 行`);
+            showToast(`已加载第 ${firstLine}~${lastLine} 行数据，定位到第 ${data.targetLineNumber} 行`);
         }
     }
 
@@ -718,13 +749,13 @@ function renderLines() {
     container.innerHTML = '';
 
     console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length, '，折叠模式:', isCollapseMode, '，搜索关键词:', currentSearchKeyword, '，过滤模式:', isFiltering);
-    console.log('🗑️ 已清空容器，旧内容长度:', oldContent.length);
+    console.log('已清空容器，旧内容长度:', oldContent.length);
 
     if (allLines.length === 0) {
         container.innerHTML = '<div class="loading">没有日志数据</div>';
         document.getElementById('pagination').style.display = 'none';
         document.getElementById('loadedLines').textContent = '0';
-        console.log('⚠️ 渲染结果: 显示"没有日志数据"');
+        console.log('渲染结果: 显示"没有日志数据"');
         return;
     }
 
@@ -763,7 +794,7 @@ function renderLines() {
         while (displayCount < targetDisplayLines && tempEndIndex < allLines.length && attempts < maxAttempts) {
             // 限制最大加载范围
             if (tempEndIndex - startIndex > maxLoadLines) {
-                console.log(`⚠️ 已达到最大加载限制 ${maxLoadLines} 行，停止加载`);
+                console.log(`已达到最大加载限制 ${maxLoadLines} 行，停止加载`);
                 break;
             }
 
@@ -802,7 +833,7 @@ function renderLines() {
         }
 
         endIndex = tempEndIndex;
-        console.log(`📎 折叠模式：最终加载范围 ${startIndex}-${endIndex}（${endIndex - startIndex} 行），折叠后显示 ${displayCount} 条`);
+        console.log(`折叠模式：最终加载范围 ${startIndex}-${endIndex}（${endIndex - startIndex} 行），折叠后显示 ${displayCount} 条`);
 
         // 记录该页的实际范围
         pageRanges.set(currentPage, { start: startIndex, end: endIndex });
@@ -833,7 +864,7 @@ function renderLines() {
     document.getElementById('loadedLines').textContent = allLines.length;
     document.getElementById('pagination').style.display = 'flex';
 
-    console.log(`✅ 渲染完成！实际显示 ${pageLines.length} 条（原始 ${endIndex - startIndex} 行）`);
+    console.log(`渲染完成！实际显示 ${pageLines.length} 条（原始 ${endIndex - startIndex} 行）`);
 }
 
 // 计算指定页面的范围（不渲染，只计算）
@@ -856,7 +887,7 @@ function calculatePageRange(pageNum) {
         startIndex = prevRange.end;
         endIndex = Math.min(startIndex + pageSize, allLines.length);
     } else {
-        console.log(`⚠️ 无法计算第 ${pageNum} 页，缺少上一页数据`);
+        console.log(`无法计算第 ${pageNum} 页，缺少上一页数据`);
         return;
     }
 
@@ -911,7 +942,7 @@ function calculatePageRange(pageNum) {
     }
 
     pageRanges.set(pageNum, { start: startIndex, end: endIndex });
-    console.log(`✅ 第 ${pageNum} 页范围: ${startIndex}-${endIndex}`);
+    console.log(`第 ${pageNum} 页范围: ${startIndex}-${endIndex}`);
 }
 
 // 异步计算所有页面范围
@@ -954,7 +985,7 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
     while (lastEndIndex < allLines.length && isCollapseMode) {
         // 检查是否被新任务取代
         if (myCalculationId !== currentCalculationId) {
-            console.log(`⚠️ 计算任务 #${myCalculationId} 被新任务取代，停止计算`);
+            console.log(`计算任务 #${myCalculationId} 被新任务取代，停止计算`);
             return;
         }
 
@@ -975,14 +1006,14 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
 
         // 如果已经取消折叠模式或被新任务取代，退出计算
         if (!isCollapseMode) {
-            console.log(`⚠️ 计算任务 #${myCalculationId} - 折叠模式已取消，停止计算`);
+            console.log(`计算任务 #${myCalculationId} - 折叠模式已取消，停止计算`);
             isCalculatingPages = false;
             calculationProgress = 0;
             return;
         }
 
         if (myCalculationId !== currentCalculationId) {
-            console.log(`⚠️ 计算任务 #${myCalculationId} 被取代，停止计算`);
+            console.log(`计算任务 #${myCalculationId} 被取代，停止计算`);
             return;
         }
 
@@ -999,10 +1030,10 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
     if (myCalculationId === currentCalculationId) {
         calculationProgress = 100;
         isCalculatingPages = false;
-        console.log(`✅ 计算任务 #${myCalculationId} 完成！共 ${pageNum - 1} 页`);
+        console.log(`计算任务 #${myCalculationId} 完成！共 ${pageNum - 1} 页`);
         updatePagination(); // 最终更新显示精确值
     } else {
-        console.log(`⚠️ 计算任务 #${myCalculationId} 完成时已被取代`);
+        console.log(`计算任务 #${myCalculationId} 完成时已被取代`);
     }
 }
 
@@ -1031,7 +1062,7 @@ function extractLogContent(line) {
 
 // 折叠重复的日志行（支持多行模式重复）
 function collapseRepeatedLines(lines, startIndex) {
-    console.log('📎 开始折叠分析，总行数:', lines.length);
+    console.log('开始折叠分析，总行数:', lines.length);
     const result = [];
     let i = 0;
     let totalCollapsed = 0;
@@ -1088,7 +1119,7 @@ function collapseRepeatedLines(lines, startIndex) {
             const groupId = `group_${firstLineNumber}`;
             const totalLines = bestPatternLength * bestRepeatCount;
 
-            console.log(`✅ 找到重复模式：从行 ${firstLineNumber} 开始，${bestPatternLength} 行为一组，重复 ${bestRepeatCount} 次，共 ${totalLines} 行`);
+            console.log(`找到重复模式：从行 ${firstLineNumber} 开始，${bestPatternLength} 行为一组，重复 ${bestRepeatCount} 次，共 ${totalLines} 行`);
             if (bestPatternLength > 1) {
                 console.log('  模式第一行:', extractLogContent(lines[i]).substring(0, 80));
             }
@@ -1256,7 +1287,7 @@ function renderSingleLine(container, line, startIndex, index) {
 
     // 如果是书签，显示书签图标
     if (bookmarks.has(actualLineNumber)) {
-        lineNumber.textContent = '📌 ' + lineNumber.textContent;
+        lineNumber.innerHTML = '<i class="codicon codicon-bookmark" style="font-size: 10px; color: #ffc107;"></i> ' + actualLineNumber.toString();
     }
 
     const lineContent = document.createElement('span');
@@ -1272,7 +1303,7 @@ function renderSingleLine(container, line, startIndex, index) {
 
     // 如果有注释，添加注释徽章
     if (comments.has(actualLineNumber)) {
-        highlightedContent += `<span class="comment-badge" onclick="event.stopPropagation(); editComment(${actualLineNumber})" title="点击编辑注释">📝 有注释</span>`;
+        highlightedContent += `<span class="comment-badge" onclick="event.stopPropagation(); editComment(${actualLineNumber})" title="点击编辑注释"><i class="codicon codicon-comment"></i> 有注释</span>`;
     }
 
     lineContent.innerHTML = highlightedContent;
@@ -1308,7 +1339,7 @@ function renderSingleLine(container, line, startIndex, index) {
         // 添加一个小的跳转按钮
         const jumpBtn = document.createElement('span');
         jumpBtn.className = 'jump-btn';
-        jumpBtn.innerHTML = '🔗';
+        jumpBtn.innerHTML = '<i class="codicon codicon-link"></i>';
         jumpBtn.title = '跳转到完整日志中的此行';
         jumpBtn.onclick = (e) => {
             e.stopPropagation();
@@ -1329,7 +1360,7 @@ function renderSingleLine(container, line, startIndex, index) {
     if (comments.has(actualLineNumber)) {
         const commentDiv = document.createElement('div');
         commentDiv.className = 'log-comment';
-        commentDiv.textContent = '📝 ' + comments.get(actualLineNumber);
+        commentDiv.innerHTML = '<i class="codicon codicon-note"></i> ' + escapeHtml(comments.get(actualLineNumber));
         lineDiv.appendChild(commentDiv);
     }
 
@@ -1349,7 +1380,7 @@ function toggleGroup(groupId) {
 // 切换折叠模式
 function toggleCollapseMode() {
     isCollapseMode = document.getElementById('collapseRepeated').checked;
-    console.log('🔍 切换折叠模式:', isCollapseMode);
+    console.log('切换折叠模式:', isCollapseMode);
 
     expandedGroups.clear(); // 清空展开状态
 
@@ -1388,22 +1419,34 @@ function highlightKeywords(content, keyword) {
                 
                 // 根据规则名称生成不同的HTML
                 let html;
+                let style;
+                
+                // 区分样式：日志级别保留实心背景，其他（线程、类、方法）使用轮廓样式以减少"水果沙拉"视觉杂乱
+                if (rule.name && rule.name.includes('日志级别')) {
+                    style = `background-color: ${rule.bgColor}; color: ${rule.textColor}; border-radius: 2px; padding: 0 3px;`;
+                } else {
+                    // 使用轮廓样式：主色作为文字和边框色，背景微透
+                    // 注意：这里假设 rule.bgColor 是 HEX 格式
+                    const color = rule.bgColor;
+                    style = `color: ${color}; border: 1px solid ${color}60; background-color: ${color}10; border-radius: 3px; padding: 0 4px;`;
+                }
+
                 if (rule.name === '线程名') {
                     const threadNameMatch = matchText.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
                     const threadName = threadNameMatch ? threadNameMatch[1] : '';
                     const safeThreadName = threadName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${safeThreadName}')" title="点击筛选线程: ${threadName}">🔍</span></span>`;
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${safeThreadName}')" title="点击筛选线程: ${threadName}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '类名') {
                     const className = matchText.trim();
                     const safeClassName = className.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${safeClassName}')" title="点击筛选类: ${className}">🔍</span></span>`;
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${safeClassName}')" title="点击筛选类: ${className}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '方法名') {
                     const methodMatch = matchText.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
                     const methodName = methodMatch ? methodMatch[1] : '';
                     const safeMethodName = methodName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${safeMethodName}')" title="点击筛选方法: ${methodName}">🔍</span></span>`;
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${safeMethodName}')" title="点击筛选方法: ${methodName}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else {
-                    html = `<span class="custom-highlight" style="background-color: ${rule.bgColor}; color: ${rule.textColor};">${escapeHtml(matchText)}</span>`;
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}</span>`;
                 }
                 
                 highlights.push({ start: startPos, end: endPos, html: html, priority: 1 });
@@ -1524,7 +1567,7 @@ function searchInCurrentPage(keyword, isRegex) {
     const currentPageLines = allLines.slice(startIndex, endIndex);
     
     if (currentPageLines.length === 0) {
-        showToast('❌ 当前页没有数据');
+        showToast('当前页没有数据');
         return;
     }
     
@@ -1548,7 +1591,7 @@ function searchInCurrentPage(keyword, isRegex) {
     });
     
     if (results.length === 0) {
-        showToast(`❌ 当前页未找到包含 "${keyword}" 的日志`);
+        showToast(`当前页未找到包含 "${keyword}" 的日志`);
         return;
     }
     
@@ -1569,7 +1612,7 @@ function searchInCurrentPage(keyword, isRegex) {
     updatePagination();
     
     // 显示提示和恢复按钮
-    showToast(`✅ 在当前页找到 ${results.length} 条匹配日志`);
+    showToast(`在当前页找到 ${results.length} 条匹配日志`);
     
     // 保存原始数据，用于恢复
     window._currentPageSearchBackup = {
@@ -1593,7 +1636,7 @@ function showCurrentPageSearchStatus(keyword, count) {
     // 修改清除按钮的行为
     const clearBtn = panel.querySelector('button');
     clearBtn.onclick = clearCurrentPageSearch;
-    clearBtn.textContent = '❌ 退出当前页搜索';
+    clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 退出当前页搜索';
 }
 
 /**
@@ -1624,9 +1667,9 @@ function clearCurrentPageSearch() {
         const panel = document.getElementById('filterStatusPanel');
         const clearBtn = panel.querySelector('button');
         clearBtn.onclick = clearCustomFilter;
-        clearBtn.textContent = '❌ 取消筛选';
+        clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 取消筛选';
         
-        showToast('✅ 已退出当前页搜索');
+        showToast('已退出当前页搜索');
     }
 }
 
@@ -1666,20 +1709,20 @@ function applyFilter() {
 
     // 如果全部选中，清除级别过滤
     if (allChecked) {
-        console.log('⚠️ 全部选中，清除级别过滤');
+        console.log('全部选中，清除级别过滤');
         clearFilter('levels');
         return;
     }
 
     // 如果全部不选，显示空
     if (levels.length === 0) {
-        console.log('⚠️ 没有选择任何级别');
+        console.log('没有选择任何级别');
         setFilterAndApply({ levels: [] });
         return;
     }
 
     // 应用级别过滤
-    console.log('📤 应用级别过滤:', levels);
+    console.log(' 应用级别过滤:', levels);
     setFilterAndApply({ levels: levels });
 }
 
@@ -1757,7 +1800,7 @@ function showStatsModal(stats) {
     if (classStats.length > 0) {
         grid.innerHTML += `
             <div class="stats-card" style="grid-column: 1 / -1;">
-                <h3>📊 最活跃的类 (Top 10)</h3>
+                <h3><i class="codicon codicon-symbol-class"></i> 最活跃的类 (Top 10)</h3>
                 <div style="font-size: 13px; margin-top: 10px;">
                     ${classStats.map(([name, count]) =>
             `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
@@ -1778,7 +1821,7 @@ function showStatsModal(stats) {
     if (methodStats.length > 0) {
         grid.innerHTML += `
             <div class="stats-card" style="grid-column: 1 / -1;">
-                <h3>🔧 最常调用的方法 (Top 10)</h3>
+                <h3><i class="codicon codicon-symbol-method"></i> 最常调用的方法 (Top 10)</h3>
                 <div style="font-size: 13px; margin-top: 10px;">
                     ${methodStats.map(([name, count]) =>
             `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
@@ -1799,7 +1842,7 @@ function showStatsModal(stats) {
     if (threadStats.length > 0) {
         grid.innerHTML += `
             <div class="stats-card" style="grid-column: 1 / -1;">
-                <h3>🧵 最活跃的线程 (Top 10)</h3>
+                <h3><i class="codicon codicon-list-tree"></i> 最活跃的线程 (Top 10)</h3>
                 <div style="font-size: 13px; margin-top: 10px;">
                     ${threadStats.map(([name, count]) =>
             `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
@@ -1856,7 +1899,7 @@ function showBookmarksModal() {
                      onmouseout="this.style.backgroundColor='var(--vscode-editorWidget-background)'"
                      onclick="jumpToBookmark(${lineNum})">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">📌 行 ${lineNum}</span>
+                        <span style="font-weight: bold; color: var(--vscode-textLink-foreground);"><i class="codicon codicon-bookmark"></i> 行 ${lineNum}</span>
                         <button onclick="event.stopPropagation(); removeBookmark(${lineNum})" style="padding: 2px 8px; font-size: 11px;">删除</button>
                     </div>
                     <div style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -1890,9 +1933,11 @@ function removeBookmark(lineNumber) {
  */
 function exportBookmarkedLogs() {
     if (bookmarks.size === 0) {
-        showToast('⚠️ 没有书签，无法导出');
+        showToast('没有书签，无法导出');
         return;
     }
+    
+    setButtonLoadingById('exportBookmarksBtn', true);
     
     // 从完整数据缓存中获取所有带书签的日志行
     const dataSource = fullDataCache.length > 0 ? fullDataCache : allLines;
@@ -1902,7 +1947,8 @@ function exportBookmarkedLogs() {
     });
     
     if (bookmarkedLines.length === 0) {
-        showToast('⚠️ 未找到书签对应的日志行');
+        setButtonLoadingById('exportBookmarksBtn', false);
+        showToast('未找到书签对应的日志行');
         return;
     }
     
@@ -1920,7 +1966,10 @@ function exportBookmarkedLogs() {
         exportType: 'bookmarked'  // 标记这是书签导出
     });
     
-    showToast(`✅ 正在导出 ${bookmarkedLines.length} 条带书签的日志...`);
+    // 导出完成后会收到 toast 通知，这里延迟恢复按钮状态
+    setTimeout(() => setButtonLoadingById('exportBookmarksBtn', false), 1000);
+    
+    showToast(`正在导出 ${bookmarkedLines.length} 条带书签的日志...`);
     closeBookmarksModal();
 }
 
@@ -2059,7 +2108,7 @@ document.addEventListener('click', function (event) {
 });
 
 function addOrEditComment(lineNumber) {
-    console.log('📝 addOrEditComment 被调用，行号:', lineNumber);
+    console.log('addOrEditComment 被调用，行号:', lineNumber);
 
     currentCommentLineNumber = lineNumber;
     const existingComment = comments.get(lineNumber) || '';
@@ -2068,7 +2117,7 @@ function addOrEditComment(lineNumber) {
     const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
 
     // 设置弹窗内容
-    document.getElementById('commentInputTitle').textContent = existingComment ? '✏️ 编辑注释' : '📝 添加注释';
+    document.getElementById('commentInputTitle').innerHTML = existingComment ? '<i class="codicon codicon-edit"></i> 编辑注释' : '<i class="codicon codicon-comment-add"></i> 添加注释';
     document.getElementById('commentInputLineNumber').textContent = lineNumber;
     document.getElementById('commentInputPreview').textContent = content;
     document.getElementById('commentInputText').value = existingComment;
@@ -2101,11 +2150,11 @@ function confirmCommentInput() {
 
     if (commentText.trim()) {
         comments.set(lineNumber, commentText.trim());
-        showToast(`✅ 注释已${existingComment ? '更新' : '添加'}`);
+        showToast(`注释已${existingComment ? '更新' : '添加'}`);
     } else if (existingComment) {
         // 如果输入空白且原来有注释，则删除
         comments.delete(lineNumber);
-        showToast('❌ 注释已删除');
+        showToast('注释已删除');
     }
 
     renderLines();
@@ -2119,7 +2168,7 @@ function editComment(lineNumber) {
 function deleteComment(lineNumber) {
     if (confirm('确定要删除这条注释吗？')) {
         comments.delete(lineNumber);
-        showToast('❌ 注释已删除');
+        showToast('注释已删除');
         renderLines();
     }
 }
@@ -2141,7 +2190,7 @@ function showCommentsModal() {
             return `
                 <div style="padding: 12px; margin-bottom: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #10b981;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-weight: bold; color: var(--vscode-textLink-foreground); cursor: pointer;" onclick="jumpToComment(${lineNum})">📝 行 ${lineNum}</span>
+                        <span style="font-weight: bold; color: var(--vscode-textLink-foreground); cursor: pointer;" onclick="jumpToComment(${lineNum})"><i class="codicon codicon-comment"></i> 行 ${lineNum}</span>
                         <div style="display: flex; gap: 5px;">
                             <button onclick="editComment(${lineNum})" style="padding: 2px 8px; font-size: 11px;">编辑</button>
                             <button onclick="deleteCommentFromList(${lineNum})" style="padding: 2px 8px; font-size: 11px;">删除</button>
@@ -2175,7 +2224,7 @@ function deleteCommentFromList(lineNumber) {
         comments.delete(lineNumber);
         showCommentsModal(); // 刷新注释列表
         renderLines(); // 重新渲染
-        showToast('❌ 注释已删除');
+        showToast('注释已删除');
     }
 }
 
@@ -2258,8 +2307,8 @@ function showContextMenu(event, content, lineNumber) {
     bookmarkItem.className = 'context-menu-item';
     const isBookmarked = bookmarks.has(lineNumber);
     bookmarkItem.innerHTML = isBookmarked
-        ? '<span>❌</span><span>移除书签</span>'
-        : '<span>📌</span><span>添加书签</span>';
+        ? '<span><i class="codicon codicon-trash"></i></span><span>移除书签</span>'
+        : '<span><i class="codicon codicon-bookmark"></i></span><span>添加书签</span>';
     bookmarkItem.onclick = (e) => {
         e.stopPropagation();
         toggleBookmark(lineNumber);
@@ -2272,8 +2321,8 @@ function showContextMenu(event, content, lineNumber) {
     commentItem.className = 'context-menu-item';
     const hasComment = comments.has(lineNumber);
     commentItem.innerHTML = hasComment
-        ? '<span>✏️</span><span>编辑注释</span>'
-        : '<span>📝</span><span>添加注释</span>';
+        ? '<span><i class="codicon codicon-edit"></i></span><span>编辑注释</span>'
+        : '<span><i class="codicon codicon-comment-add"></i></span><span>添加注释</span>';
     commentItem.onclick = (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -2289,7 +2338,7 @@ function showContextMenu(event, content, lineNumber) {
     if (hasComment) {
         const deleteCommentItem = document.createElement('div');
         deleteCommentItem.className = 'context-menu-item';
-        deleteCommentItem.innerHTML = '<span>🗑️</span><span>删除注释</span>';
+        deleteCommentItem.innerHTML = '<span><i class="codicon codicon-trash"></i></span><span>删除注释</span>';
         deleteCommentItem.onclick = (e) => {
             e.stopPropagation();
             deleteComment(lineNumber);
@@ -2306,7 +2355,7 @@ function showContextMenu(event, content, lineNumber) {
     // 定位到此行（当前视图）
     const jumpItem = document.createElement('div');
     jumpItem.className = 'context-menu-item';
-    jumpItem.innerHTML = '<span>🎯</span><span>定位到第 ' + lineNumber + ' 行</span>';
+    jumpItem.innerHTML = '<span><i class="codicon codicon-target"></i></span><span>定位到第 ' + lineNumber + ' 行</span>';
     jumpItem.onclick = (e) => {
         e.stopPropagation();
         jumpToLine(lineNumber);
@@ -2318,7 +2367,7 @@ function showContextMenu(event, content, lineNumber) {
     if (currentSearchKeyword || isFiltering) {
         const jumpToFullLogItem = document.createElement('div');
         jumpToFullLogItem.className = 'context-menu-item';
-        jumpToFullLogItem.innerHTML = '<span>🔗</span><span>跳转到完整日志</span>';
+        jumpToFullLogItem.innerHTML = '<span><i class="codicon codicon-link"></i></span><span>跳转到完整日志</span>';
         jumpToFullLogItem.onclick = (e) => {
             e.stopPropagation();
             jumpToLineInFullLog(lineNumber);
@@ -2360,7 +2409,7 @@ function copyToClipboard(text) {
 
 function showCopyToast() {
     const toast = document.createElement('div');
-    toast.textContent = '✅ 已复制到剪贴板';
+    toast.textContent = '已复制到剪贴板';
     toast.style.cssText = `
         position: fixed;
         top: 20px;
@@ -2429,7 +2478,7 @@ function addAdvSearchCondition() {
                 <input type="text" id="advSearchInput_${conditionId}" placeholder="输入搜索内容（多关键词用空格分隔）" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
             </div>
         </div>
-        <button onclick="removeAdvSearchCondition(${conditionId})" title="删除此条件" style="padding: 6px 10px; font-size: 12px; background-color: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);">❌</button>
+        <button onclick="removeAdvSearchCondition(${conditionId})" title="删除此条件" style="padding: 6px 10px; font-size: 12px; background-color: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);"><i class="codicon codicon-close"></i></button>
     `;
     
     conditionsContainer.appendChild(conditionDiv);
@@ -2526,7 +2575,7 @@ function confirmAdvancedSearch() {
     const conditionsContainer = document.getElementById('advSearchConditions');
     
     if (conditionsContainer.children.length === 0) {
-        showToast('⚠️ 请至少添加一个搜索条件');
+        showToast('请至少添加一个搜索条件');
         return;
     }
     
@@ -2574,11 +2623,11 @@ function confirmAdvancedSearch() {
     }
     
     if (conditions.length === 0) {
-        showToast('⚠️ 请至少填写一个有效的搜索条件');
+        showToast('请至少填写一个有效的搜索条件');
         return;
     }
     
-    console.log('🔍 高级搜索条件:', { logic, conditions });
+    console.log('高级搜索条件:', { logic, conditions });
     
     // 进入搜索模式前备份
     if (!isInSearchMode) {
@@ -2624,9 +2673,9 @@ function confirmAdvancedSearch() {
     closeAdvancedSearchModal();
 
     if (results.length === 0) {
-        showToast('❌ 未找到符合条件的日志');
+        showToast('未找到符合条件的日志');
     } else {
-        showToast(`✅ 找到 ${results.length} 条匹配的日志`);
+        showToast(`找到 ${results.length} 条匹配的日志`);
     }
 }
 
@@ -2881,16 +2930,16 @@ function formatTime(date) {
 // 绘制当前浏览位置指示器
 function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
     if (!timelineData || buckets.length === 0) {
-        console.log('⚠️ 指示器：没有时间线数据');
+        console.log('指示器：没有时间线数据');
         return;
     }
 
     // 获取当前可见区域中间的行号
     const visibleLines = getVisibleLines();
-    console.log('👀 可见行数量:', visibleLines.length);
+    console.log(' 可见行数量:', visibleLines.length);
 
     if (visibleLines.length === 0) {
-        console.log('⚠️ 指示器：没有可见行');
+        console.log('指示器：没有可见行');
         return;
     }
 
@@ -2900,7 +2949,7 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
     console.log('📍 当前中间行:', currentLine);
 
     if (!currentLine || !currentLine.lineNumber) {
-        console.log('⚠️ 指示器：当前行无效');
+        console.log('指示器：当前行无效');
         return;
     }
 
@@ -2913,7 +2962,7 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
             const foundLine = bucket.lines.find(l => l.lineNumber === currentLine.lineNumber);
             if (foundLine && foundLine.timestamp) {
                 currentTime = new Date(foundLine.timestamp).getTime();
-                console.log('✅ 找到精确时间戳:', new Date(currentTime).toLocaleString());
+                console.log('找到精确时间戳:', new Date(currentTime).toLocaleString());
                 break;
             }
         }
@@ -2924,7 +2973,7 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
         // 计算当前行在整个文件中的相对位置
         const totalLines = totalLinesInFile || allLines.length;
         if (totalLines === 0) {
-            console.log('⚠️ 指示器：总行数为0');
+            console.log('指示器：总行数为0');
             return;
         }
 
@@ -2937,13 +2986,13 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
     // 计算指示器在时间线上的位置
     const timeRange = timelineData.maxTime - timelineData.minTime;
     if (timeRange <= 0) {
-        console.log('⚠️ 指示器：时间范围无效');
+        console.log('指示器：时间范围无效');
         return;
     }
 
     const relativePosition = (currentTime - timelineData.minTime) / timeRange;
     const indicatorX = Math.max(0, Math.min(canvas.width, relativePosition * canvas.width));
-    console.log('🎯 指示器X位置:', indicatorX, '画布宽度:', canvas.width, '相对位置:', relativePosition);
+    console.log('指示器X位置:', indicatorX, '画布宽度:', canvas.width, '相对位置:', relativePosition);
 
     // 绘制指示器（一条垂直的红线）
     ctx.save();
@@ -2975,14 +3024,14 @@ function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
     ctx.fill();
 
     ctx.restore();
-    console.log('✅ 指示器绘制完成');
+    console.log('指示器绘制完成');
 }
 
 // 获取当前可见的日志行
 function getVisibleLines() {
     const container = document.getElementById('logContainer');
     if (!container) {
-        console.log('⚠️ getVisibleLines: 找不到 logContainer');
+        console.log('getVisibleLines: 找不到 logContainer');
         return [];
     }
 
@@ -3006,7 +3055,7 @@ function getVisibleLines() {
         }
     });
 
-    console.log('👀 可见行:', visibleLines.length, '条');
+    console.log(' 可见行:', visibleLines.length, '条');
     return visibleLines;
 }
 
@@ -3088,7 +3137,7 @@ function hideFilterStatus() {
 
 // 清除自定义筛选
 function clearCustomFilter() {
-    console.log('❌ 清除筛选');
+    console.log('清除筛选');
     currentFilterType = null;
     currentTimelineBucketIndex = null;
     currentFilterValue = null;
@@ -3242,7 +3291,7 @@ function confirmJump() {
 }
 
 function jumpToLine(lineNumber) {
-    console.log('🎯 定位到行号:', lineNumber);
+    console.log('定位到行号:', lineNumber);
     console.log(`📊 当前数据状态 - allLines: ${allLines.length} 行, baseLineOffset: ${baseLineOffset}, totalLinesInFile: ${totalLinesInFile}`);
     
     // 检查数据范围
@@ -3253,8 +3302,8 @@ function jumpToLine(lineNumber) {
         
         // 检查目标行是否在已加载范围内
         if (lineNumber < firstLine || lineNumber > lastLine) {
-            console.warn(`⚠️ 目标行 ${lineNumber} 不在已加载数据范围内 (${firstLine} ~ ${lastLine})`);
-            showToast(`⚠️ 目标行不在当前加载的数据范围内，可能需要重新加载`);
+            console.warn(`目标行 ${lineNumber} 不在已加载数据范围内 (${firstLine} ~ ${lastLine})`);
+            showToast(`目标行不在当前加载的数据范围内，可能需要重新加载`);
         }
     }
 
@@ -3272,7 +3321,7 @@ function jumpToLine(lineNumber) {
             });
 
             if (hasTargetLine) {
-                console.log(`✅ 在第 ${pageNum} 页找到目标行`);
+                console.log(`在第 ${pageNum} 页找到目标行`);
                 currentPage = pageNum;
                 updatePagination();
                 renderLines();
@@ -3287,7 +3336,7 @@ function jumpToLine(lineNumber) {
         }
 
         // 如果在已计算的页面中没找到，尝试在数组中查找索引位置
-        console.log('⚠️ 已计算页面中未找到，在数组中查找');
+        console.log('已计算页面中未找到，在数组中查找');
         const targetIndex = allLines.findIndex(line => line.lineNumber === lineNumber);
 
         if (targetIndex !== -1) {
@@ -3299,7 +3348,7 @@ function jumpToLine(lineNumber) {
             // 完全找不到，使用行号估算（最后的备用方案）
             const estimatedPage = Math.ceil(lineNumber / pageSize);
             currentPage = Math.max(1, Math.min(estimatedPage, totalPages));
-            console.log(`⚠️ 完全找不到目标行，使用行号估算: ${estimatedPage}`);
+            console.log(`完全找不到目标行，使用行号估算: ${estimatedPage}`);
         }
     } else {
         // 非折叠模式或未计算页面，使用标准计算
@@ -3311,11 +3360,11 @@ function jumpToLine(lineNumber) {
             // 注意：这里计算的是在当前 allLines 数组中的页码，不是文件中的绝对页码
             const targetPage = Math.ceil((targetIndex + 1) / pageSize);
             currentPage = targetPage;
-            console.log(`✅ 找到目标行 ${lineNumber}，数组索引: ${targetIndex}，在当前数据中的页码: ${targetPage}`);
+            console.log(`找到目标行 ${lineNumber}，数组索引: ${targetIndex}，在当前数据中的页码: ${targetPage}`);
             
             // 如果数据是从中间加载的，显示提示信息
             if (baseLineOffset > 0) {
-                console.log(`ℹ️ 当前数据从第 ${baseLineOffset + 1} 行开始加载，共 ${allLines.length} 行`);
+                console.log(`当前数据从第 ${baseLineOffset + 1} 行开始加载，共 ${allLines.length} 行`);
             }
         } else {
             // 🔧 修复：未找到目标行时，判断是否因为数据范围问题
@@ -3323,14 +3372,14 @@ function jumpToLine(lineNumber) {
                 // 数据是从中间加载的，但目标行不在范围内
                 const firstLine = allLines[0].lineNumber || 0;
                 const lastLine = allLines[allLines.length - 1].lineNumber || 0;
-                console.error(`❌ 目标行 ${lineNumber} 不在已加载范围 (${firstLine}~${lastLine}) 内！`);
-                showToast(`❌ 目标行 ${lineNumber} 不在已加载数据范围内，请重新加载`);
+                console.error(`目标行 ${lineNumber} 不在已加载范围 (${firstLine}~${lastLine}) 内！`);
+                showToast(`目标行 ${lineNumber} 不在已加载数据范围内，请重新加载`);
                 currentPage = 1; // 跳转到第一页
             } else {
                 // 数据从头开始，使用行号估算（适用于完整日志）
                 const targetPage = Math.ceil(lineNumber / pageSize);
                 currentPage = targetPage;
-                console.log(`⚠️ 未找到目标行 ${lineNumber}，使用行号估算跳转到第 ${targetPage} 页`);
+                console.log(`未找到目标行 ${lineNumber}，使用行号估算跳转到第 ${targetPage} 页`);
             }
         }
     }
@@ -3356,7 +3405,7 @@ function jumpToLineInFullLog(lineNumber) {
 
     // 🔧 关键修复：如果数据已经完全加载，直接在当前数据中跳转，不需要重新加载
     if (allDataLoaded && fullDataCache.length > 0) {
-        console.log('✅ 数据已完全加载，直接跳转到目标行');
+        console.log('数据已完全加载，直接跳转到目标行');
         
         // 恢复到完整日志模式
         isInSearchMode = false;
@@ -3382,12 +3431,12 @@ function jumpToLineInFullLog(lineNumber) {
         handleDataChange({ resetPage: false });
         jumpToLine(lineNumber);
         drawTimeline();
-        showToast(`✅ 已跳转到第 ${lineNumber} 行`);
+        showToast(`已跳转到第 ${lineNumber} 行`);
         return;
     }
 
     // 数据未完全加载，需要请求后端重新加载
-    console.log('⚠️ 数据未完全加载，请求后端加载完整日志');
+    console.log('数据未完全加载，请求后端加载完整日志');
     showToast('📦 正在加载完整日志...');
 
     // 请求后端重新加载完整日志，并跳转到指定行
@@ -3398,7 +3447,7 @@ function jumpToLineInFullLog(lineNumber) {
 }
 
 function jumpToTime(timeStr) {
-    console.log('🎯 定位到时间:', timeStr);
+    console.log('定位到时间:', timeStr);
 
     // 直接请求后端查找
     vscode.postMessage({
@@ -3409,7 +3458,7 @@ function jumpToTime(timeStr) {
 
 function handleJumpToTimeResult(data) {
     if (data.success) {
-        console.log('✅ 找到目标时间的日志，行号:', data.targetLineNumber);
+        console.log('找到目标时间的日志，行号:', data.targetLineNumber);
 
         // 如果正在筛选或搜索模式，需要先退出到完整日志
         if (isFiltering || currentSearchKeyword) {
@@ -3434,20 +3483,20 @@ function handleJumpToTimeResult(data) {
 
         if (targetIndex !== -1) {
             // 目标行已在内存中，直接跳转，不重新加载数据
-            console.log(`✅ 目标行已在内存中（索引: ${targetIndex}），直接跳转`);
+            console.log(`目标行已在内存中（索引: ${targetIndex}），直接跳转`);
             jumpToLine(data.targetLineNumber);
-            showToast(`✅ 已跳转到第 ${data.targetLineNumber} 行`);
+            showToast(`已跳转到第 ${data.targetLineNumber} 行`);
             return;
         }
 
         // 目标行不在已加载数据中，需要加载
-        console.log('⚠️ 目标行不在已加载范围，需要加载新数据');
+        console.log('目标行不在已加载范围，需要加载新数据');
 
         // 合并新加载的数据
         const newLines = data.lines;
         const startLine = typeof data.startLine === 'number' ? data.startLine : 0;
 
-        console.log(`📥 接收到 ${newLines.length} 行数据，起始行号: ${startLine}`);
+        console.log(` 接收到 ${newLines.length} 行数据，起始行号: ${startLine}`);
 
         // 检查数据重叠情况
         if (allLines.length > 0) {
@@ -3462,12 +3511,12 @@ function handleJumpToTimeResult(data) {
             // 如果新数据和已有数据有连续性，尝试合并
             if (newFirstLineNum > lastLoadedLineNum && newFirstLineNum - lastLoadedLineNum < 1000) {
                 // 新数据在后面且相近，追加
-                console.log('📝 追加新数据到末尾');
+                console.log('追加新数据到末尾');
                 allLines = allLines.concat(newLines);
                 originalLines = [...allLines];
             } else if (newLastLineNum < firstLoadedLineNum && firstLoadedLineNum - newLastLineNum < 1000) {
                 // 新数据在前面且相近，前置
-                console.log('📝 前置新数据到开头');
+                console.log('前置新数据到开头');
                 allLines = newLines.concat(allLines);
                 originalLines = [...allLines];
             } else {
@@ -3513,7 +3562,7 @@ function handleJumpToTimeResult(data) {
         // 延迟跳转，确保页面已渲染
         setTimeout(() => {
             jumpToLine(data.targetLineNumber);
-            showToast(`✅ 已跳转到第 ${data.targetLineNumber} 行`);
+            showToast(`已跳转到第 ${data.targetLineNumber} 行`);
         }, 300);
 
         // 如有需要，重新启用统一的后台加载逻辑
@@ -3522,8 +3571,8 @@ function handleJumpToTimeResult(data) {
             startBackgroundLoading();
         }
     } else {
-        console.error('❌ 未找到目标时间的日志');
-        showToast(data.message || '⚠️ 未找到大于或等于该时间的日志！');
+        console.error('未找到目标时间的日志');
+        showToast(data.message || '未找到大于或等于该时间的日志！');
     }
 }
 
@@ -3544,10 +3593,10 @@ function highlightTargetLine(lineNumber) {
 
         if (lineNumberSpan) {
             // 提取行号（去除书签图标）
-            const displayedLineNumber = parseInt(lineNumberSpan.textContent.replace(/📌\s*/, ''));
+            const displayedLineNumber = parseInt(lineNumberSpan.textContent.trim());
 
             if (displayedLineNumber === lineNumber) {
-                console.log(`✅ 找到目标行，索引: ${i}`);
+                console.log(`找到目标行，索引: ${i}`);
                 logLine.classList.add('highlight-target');
 
                 // 滚动到可见区域
@@ -3563,7 +3612,7 @@ function highlightTargetLine(lineNumber) {
         }
     }
 
-    console.log('⚠️ 未找到目标行，可能不在当前页面');
+    console.log('未找到目标行，可能不在当前页面');
 }
 
 function confirmDeleteByLine() {
@@ -3585,13 +3634,17 @@ function confirmDeleteByLine() {
 }
 
 function exportLogs() {
+    setButtonLoadingById('exportBtn', true);
     vscode.postMessage({
         command: 'exportLogs',
         lines: allLines
     });
+    // 导出完成后会收到 toast 通知，这里延迟恢复按钮状态
+    setTimeout(() => setButtonLoadingById('exportBtn', false), 1000);
 }
 
 function refresh() {
+    setButtonLoadingById('refreshBtn', true);
     currentSearchKeyword = '';
     document.getElementById('searchInput').value = '';
     currentPage = 1;
@@ -3773,14 +3826,14 @@ function requestAllData() {
     const checkInterval = setInterval(() => {
         if (allDataLoaded || fullDataCache.length >= totalLinesInFile) {
             clearInterval(checkInterval);
-            console.log('✅ 数据加载完成，应用统一过滤');
+            console.log('数据加载完成，应用统一过滤');
             applyUnifiedFilters();
             handleDataChange({
                 resetPage: true,
                 clearPageRanges: true,
                 triggerAsyncCalc: true
             });
-            showToast(`✅ 找到 ${allLines.length} 条符合条件的日志`);
+            showToast(`找到 ${allLines.length} 条符合条件的日志`);
         }
     }, 1000);
 }
@@ -3813,7 +3866,7 @@ function loadNextChunk() {
     if (remaining <= 0) {
         allDataLoaded = true;
         isBackgroundLoading = false;
-        console.log('✅ 后台加载完成！');
+        console.log('后台加载完成！');
         updateLoadingStatus();
         
         // 确保进度条显示 100% 并隐藏
@@ -3826,7 +3879,7 @@ function loadNextChunk() {
 
     const chunkSize = Math.min(backgroundLoadChunkSize, remaining);
     const startLine = baseLineOffset + fullDataCache.length;
-    console.log(`📥 后台加载: 第 ${startLine} - ${startLine + chunkSize} 行（baseOffset=${baseLineOffset}）`);
+    console.log(` 后台加载: 第 ${startLine} - ${startLine + chunkSize} 行（baseOffset=${baseLineOffset}）`);
 
     vscode.postMessage({
         command: 'loadMore',
@@ -3890,7 +3943,7 @@ function updateBackgroundLoadingProgress() {
         progressBar.style.width = percent + '%';
         
         if (percent >= 100) {
-            progressText.textContent = `✅ 加载完成！(${total.toLocaleString()} 行)`;
+            progressText.textContent = `加载完成！(${total.toLocaleString()} 行)`;
         } else {
             progressText.textContent = `${percent}% (${loaded.toLocaleString()} / ${total.toLocaleString()} 行)`;
         }
@@ -3903,7 +3956,7 @@ function cancelBackgroundLoading() {
         isBackgroundLoading = false;
         hideBackgroundLoadingIndicator();
         updateLoadingStatus();
-        showToast('⏸️ 已暂停后台加载');
+        showToast('已暂停后台加载');
     }
 }
 
@@ -3986,7 +4039,7 @@ function goToPage(page) {
             if (logContainer) {
                 logContainer.scrollTop = 0;
             } else {
-                console.log('⚠️ 找不到 logContainer 元素');
+                console.log('找不到 logContainer 元素');
             }
         });
     } else {
@@ -4027,7 +4080,7 @@ function toggleTimeline() {
 
 // 使用采样数据生成时间线（快速异步加载）
 function generateTimelineFromSamples(sampledData) {
-    console.log('📈 使用采样数据生成时间线');
+    console.log('使用采样数据生成时间线');
 
     const startTime = new Date(sampledData.startTime);
     const endTime = new Date(sampledData.endTime);
@@ -4037,7 +4090,7 @@ function generateTimelineFromSamples(sampledData) {
 
     // 如果时间范围太小，不显示时间线
     if (timeRange < 1000) {
-        console.log('⚠️ 时间范围太小，隐藏时间线');
+        console.log('时间范围太小，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
@@ -4077,7 +4130,7 @@ function generateTimelineFromSamples(sampledData) {
         bucketCount
     };
 
-    console.log('✅ 基于采样的时间线数据生成完成，采样点数:', sampledData.samples.length);
+    console.log('基于采样的时间线数据生成完成，采样点数:', sampledData.samples.length);
 
     // 显示时间线面板
     document.getElementById('timelinePanel').style.display = 'block';
@@ -4115,7 +4168,7 @@ function generateTimeline() {
 
     // 如果没有时间戳，隐藏时间线
     if (timestamps.length === 0) {
-        console.log('⚠️ 没有找到时间戳，隐藏时间线');
+        console.log('没有找到时间戳，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
@@ -4130,7 +4183,7 @@ function generateTimeline() {
 
     // 如果时间范围太小（比如都是同一秒），不显示时间线
     if (timeRange < 1000) { // 小于1秒
-        console.log('⚠️ 时间范围太小，隐藏时间线');
+        console.log('时间范围太小，隐藏时间线');
         document.getElementById('timelinePanel').style.display = 'none';
         return;
     }
@@ -4168,7 +4221,7 @@ function generateTimeline() {
         bucketCount
     };
 
-    console.log('✅ 时间线数据生成完成，准备绘制');
+    console.log('时间线数据生成完成，准备绘制');
 
     // 显示时间线面板
     document.getElementById('timelinePanel').style.display = 'block';
@@ -4191,19 +4244,19 @@ function generateTimeline() {
 
 function drawTimeline() {
     if (!timelineData) {
-        console.log('⚠️ drawTimeline: timelineData 为空');
+        console.log('drawTimeline: timelineData 为空');
         return;
     }
 
     const canvas = document.getElementById('timelineCanvas');
     if (!canvas) {
-        console.log('⚠️ drawTimeline: 找不到 canvas 元素');
+        console.log('drawTimeline: 找不到 canvas 元素');
         return;
     }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-        console.log('⚠️ drawTimeline: 无法获取 2d context');
+        console.log('drawTimeline: 无法获取 2d context');
         return;
     }
 
@@ -4212,7 +4265,7 @@ function drawTimeline() {
 
     // 确保canvas有有效尺寸
     if (rect.width === 0 || rect.height === 0) {
-        console.log('⚠️ drawTimeline: canvas 尺寸为0，等待渲染...');
+        console.log('drawTimeline: canvas 尺寸为0，等待渲染...');
         // 再次延迟尝试
         setTimeout(() => drawTimeline(), 200);
         return;
@@ -4267,13 +4320,13 @@ function drawTimeline() {
     // 绘制当前浏览位置指示器
     drawTimelineIndicator(ctx, width, height);
 
-    console.log('✅ 时间线绘制完成');
+    console.log('时间线绘制完成');
 }
 
 // 获取当前浏览位置对应的时间块索引
 function getCurrentBucketIndex() {
     if (!timelineData || !timelineData.startTime || !timelineData.timeRange) {
-        console.log('⚠️ getCurrentBucketIndex: timelineData 不完整');
+        console.log('getCurrentBucketIndex: timelineData 不完整');
         return -1;
     }
 
@@ -4298,7 +4351,7 @@ function getCurrentBucketIndex() {
     }
 
     if (!currentTime) {
-        console.log('⚠️ getCurrentBucketIndex: 当前页没有时间戳');
+        console.log('getCurrentBucketIndex: 当前页没有时间戳');
         return -1;
     }
 
@@ -4309,7 +4362,7 @@ function getCurrentBucketIndex() {
     // 计算对应的bucket索引
     const bucketIndex = Math.floor(timeProgress * timelineData.bucketCount);
 
-    console.log('🎯 当前位置 - 页码:', currentPage, '索引范围:', startIndex, '-', endIndex, '时间:', currentTime.toLocaleString(), '时间进度:', (timeProgress * 100).toFixed(1) + '%', '对应bucket:', bucketIndex);
+    console.log('当前位置 - 页码:', currentPage, '索引范围:', startIndex, '-', endIndex, '时间:', currentTime.toLocaleString(), '时间进度:', (timeProgress * 100).toFixed(1) + '%', '对应bucket:', bucketIndex);
 
     // 限制在有效范围内
     return Math.max(0, Math.min(timelineData.bucketCount - 1, bucketIndex));
@@ -4322,7 +4375,7 @@ function drawTimelineIndicator(ctx, width, height) {
         return;
     }
 
-    console.log('🎯 高亮当前时间块:', currentBucket);
+    console.log('高亮当前时间块:', currentBucket);
 
     // 计算当前bucket的位置和宽度
     const barWidth = width / timelineData.bucketCount;
@@ -4372,8 +4425,8 @@ document.getElementById('timelineCanvas').addEventListener('click', function (e)
     const seconds = String(targetTime.getSeconds()).padStart(2, '0');
     const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 
-    console.log('🔍 请求后端查找时间:', timeStr);
-    showToast('🔍 正在查找目标时间点...');
+    console.log('请求后端查找时间:', timeStr);
+    showToast('正在查找目标时间点...');
 
     // 请求后端查找该时间点的日志行
     vscode.postMessage({
@@ -4609,11 +4662,11 @@ function detectAndParseStructuredData(content) {
         try {
             const parsed = JSON.parse(item.json);
             if (shouldRenderJSON(parsed)) {
-                console.log('✅ 解析单个JSON，属性数:', Object.keys(parsed).length || parsed.length);
+                console.log('解析单个JSON，属性数:', Object.keys(parsed).length || parsed.length);
                 return renderJSONTree(parsed);
             }
         } catch (e) {
-            console.warn('❌ JSON解析失败:', e.message);
+            console.warn('JSON解析失败:', e.message);
         }
         return null;
     }
@@ -4943,7 +4996,7 @@ function toggleXMLNode(id) {
 // 切换JSON/XML解析功能
 function toggleJsonParse() {
     enableJsonParse = document.getElementById('enableJsonParse').checked;
-    console.log('🌲 JSON/XML解析功能:', enableJsonParse ? '已启用' : '已禁用');
+    console.log('JSON/XML解析功能:', enableJsonParse ? '已启用' : '已禁用');
     // 重新渲染当前页面
     renderLines();
 }
@@ -4985,13 +5038,13 @@ function saveHighlightRule() {
     const enabled = document.getElementById('ruleEnabled').checked;
 
     if (!name) {
-        showToast('⚠️ 请输入规则名称');
+        showToast('请输入规则名称');
         document.getElementById('ruleName').focus();
         return;
     }
 
     if (!pattern) {
-        showToast('⚠️ 请输入匹配内容');
+        showToast('请输入匹配内容');
         document.getElementById('rulePattern').focus();
         return;
     }
@@ -5001,7 +5054,7 @@ function saveHighlightRule() {
         try {
             new RegExp(pattern);
         } catch (e) {
-            showToast('❌ 正则表达式格式错误：' + e.message);
+            showToast('正则表达式格式错误：' + e.message);
             document.getElementById('rulePattern').focus();
             return;
         }
@@ -5030,7 +5083,7 @@ function saveHighlightRule() {
     closeAddRuleModal();
     renderHighlightRulesList();
     renderLines(); // 重新渲染日志以应用新规则
-    showToast('✅ 规则已保存');
+    showToast('规则已保存');
 }
 
 // ========== 设置面板 ==========
@@ -5063,11 +5116,11 @@ function showSettingsModal() {
     const modal = document.getElementById('settingsModal');
     console.log('📦 settingsModal 元素:', modal);
     if (modal) {
-        console.log('✅ 正在显示设置面板...');
+        console.log('正在显示设置面板...');
         modal.style.display = 'block';
-        console.log('✅ 设置面板 display 已设置为 block');
+        console.log('设置面板 display 已设置为 block');
     } else {
-        console.error('❌ 未找到 id 为 settingsModal 的元素');
+        console.error('未找到 id 为 settingsModal 的元素');
     }
 }
 
@@ -5081,15 +5134,15 @@ function saveSettings() {
     const timelineSample = parseInt(document.getElementById('settingTimelineSample').value, 10);
 
     if (isNaN(searchDebounce) || searchDebounce < 0) {
-        showToast('⚠️ 搜索防抖时间必须是大于等于 0 的数字');
+        showToast('搜索防抖时间必须是大于等于 0 的数字');
         return;
     }
     if (isNaN(collapseMinRepeat) || collapseMinRepeat < 1) {
-        showToast('⚠️ 折叠最小重复次数必须是大于等于 1 的整数');
+        showToast('折叠最小重复次数必须是大于等于 1 的整数');
         return;
     }
     if (isNaN(timelineSample) || timelineSample < 20 || timelineSample > 1000) {
-        showToast('⚠️ 时间线采样点数需在 20 ~ 1000 之间');
+        showToast('时间线采样点数需在 20 ~ 1000 之间');
         return;
     }
 
@@ -5114,7 +5167,7 @@ function editHighlightRule(index) {
     editingRuleIndex = index;
     const rule = customHighlightRules[index];
 
-    document.getElementById('ruleModalTitle').textContent = '✏️ 编辑高亮规则';
+    document.getElementById('ruleModalTitle').textContent = '编辑高亮规则';
     document.getElementById('ruleName').value = rule.name;
     document.getElementById('ruleType').value = rule.type;
     document.getElementById('rulePattern').value = rule.pattern;
@@ -5133,12 +5186,12 @@ function toggleHighlightRule(index) {
 }
 
 function deleteHighlightRule(index) {
-    console.log('🗑️ 删除规则被调用, index:', index);
+    console.log('删除规则被调用, index:', index);
     console.log('当前规则数量:', customHighlightRules.length);
 
     if (index < 0 || index >= customHighlightRules.length) {
         console.error('无效的索引:', index);
-        showToast('❌ 规则索引错误');
+        showToast('规则索引错误');
         return;
     }
 
@@ -5146,7 +5199,7 @@ function deleteHighlightRule(index) {
     console.log('要删除的规则:', rule);
 
     if (rule.builtin) {
-        showToast('⚠️ 内置规则不能删除，但可以禁用');
+        showToast('内置规则不能删除，但可以禁用');
         return;
     }
 
@@ -5159,7 +5212,7 @@ function deleteHighlightRule(index) {
             saveCustomRulesToStorage();
             renderHighlightRulesList();
             renderLines(); // 重新渲染日志
-            showToast('✅ 规则已删除');
+            showToast('规则已删除');
         } else {
             console.log('用户取消删除');
         }
@@ -5177,7 +5230,7 @@ function resetToDefault() {
             localStorage.removeItem('customHighlightRules');
             renderHighlightRulesList();
             renderLines();
-            showToast('✅ 已重置到默认规则');
+            showToast('已重置到默认规则');
         }
     });
 }
@@ -5263,7 +5316,7 @@ function renderHighlightRulesList() {
             editBtn.textContent = '编辑';
             editBtn.style.cssText = 'padding: 5px 10px; font-size: 11px;';
             editBtn.addEventListener('click', function () {
-                console.log('📝 编辑按钮被点击, index:', currentIndex);
+                console.log('编辑按钮被点击, index:', currentIndex);
                 editHighlightRule(currentIndex);
             });
 
