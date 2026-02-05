@@ -2167,7 +2167,9 @@ function editComment(lineNumber) {
 
 function deleteComment(lineNumber) {
     if (confirm('确定要删除这条注释吗？')) {
-        comments.delete(lineNumber);
+        // 确保行号是数字类型，因为 Map 的 key 可能是数字或字符串
+        const lineNum = Number(lineNumber);
+        comments.delete(lineNum);
         showToast('注释已删除');
         renderLines();
     }
