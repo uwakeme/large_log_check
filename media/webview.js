@@ -1434,16 +1434,19 @@ function highlightKeywords(content, keyword) {
                 if (rule.name === '线程名') {
                     const threadNameMatch = matchText.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
                     const threadName = threadNameMatch ? threadNameMatch[1] : '';
-                    const safeThreadName = threadName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    if (!threadName) continue; // 跳过无效的线程名
+                    const safeThreadName = threadName.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${safeThreadName}')" title="点击筛选线程: ${threadName}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '类名') {
                     const className = matchText.trim();
-                    const safeClassName = className.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    if (!className) continue; // 跳过无效的类名
+                    const safeClassName = className.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${safeClassName}')" title="点击筛选类: ${className}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '方法名') {
                     const methodMatch = matchText.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
                     const methodName = methodMatch ? methodMatch[1] : '';
-                    const safeMethodName = methodName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    if (!methodName) continue; // 跳过无效的方法名
+                    const safeMethodName = methodName.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${safeMethodName}')" title="点击筛选方法: ${methodName}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else {
                     html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}</span>`;
@@ -2557,9 +2560,11 @@ function extractLogFields(line) {
         content = tempDiv.textContent || tempDiv.innerText || content;
     }
     
-    // 提取线程名 [threadName]
-    const threadMatch = content.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
+    // 提取线程名 [threadName] - 排除日志级别
+    const threadMatch = content.match(/\[((?!ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE\])[a-zA-Z][a-zA-Z0-9-_]*)\]/);
     const threadName = threadMatch ? threadMatch[1] : '';
+    
+
     
     // 提取类名 package.ClassName
     const classMatch = content.match(/\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.[A-Z][a-zA-Z0-9_]*)\b/);
