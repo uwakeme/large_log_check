@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **修复线程名和方法名筛选功能**
+  - 修复点击线程名/方法名高亮标签后的筛选按钮无响应的问题
+  - 修复 `extractLogFields` 函数中正则表达式未排除日志级别的问题
+  - 确保筛选条件与实际的线程名/方法名正确匹配
 
 ## [1.2.3] - 2026-01-27
 ### Enhanced
