@@ -4054,6 +4054,34 @@ function goToPage(page) {
     }
 }
 
+// 回到顶部功能
+function scrollToTop() {
+    // 滚动到当前页容器顶部（不改变页码）
+    const logContainer = document.getElementById('logContainer');
+    if (logContainer) {
+        logContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+// 监听日志容器滚动事件，显示/隐藏回到顶部按钮
+function initScrollToTopButton() {
+    const logContainer = document.getElementById('logContainer');
+    const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+    
+    if (!logContainer || !scrollToTopBtn) {
+        return;
+    }
+    
+    logContainer.addEventListener('scroll', () => {
+        // 当滚动超过100像素时显示按钮
+        if (logContainer.scrollTop > 100) {
+            scrollToTopBtn.classList.add('show');
+        } else {
+            scrollToTopBtn.classList.remove('show');
+        }
+    });
+}
+
 function changePageSize(size) {
     pageSize = parseInt(size);
     currentPage = 1;
@@ -5410,3 +5438,7 @@ if (logContainer) {
     });
 }
 
+
+
+// 初始化回到顶部按钮
+initScrollToTopButton();

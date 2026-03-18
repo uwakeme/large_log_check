@@ -1170,3 +1170,46 @@ a:focus-visible {
     }
 }
 
+
+
+
+/* 回到顶部按钮样式 */
+#scrollToTopBtn {
+    position: fixed;
+    bottom: 80px;
+    right: 30px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    transition: opacity 0.3s ease, transform 0.2s ease, background-color 0.2s ease;
+    padding: 0;
+}
+
+#scrollToTopBtn:hover {
+    background-color: var(--vscode-button-hoverBackground);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+#scrollToTopBtn:active {
+    transform: translateY(0);
+}
+
+#scrollToTopBtn.show {
+    display: flex;
+    opacity: 1;
+}
+
+#scrollToTopBtn .codicon {
+    font-size: 20px;
+    margin: 0;
+}
