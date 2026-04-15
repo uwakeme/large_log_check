@@ -2,7 +2,7 @@
   "name": "big-log-viewer",
   "displayName": "大日志文件查看器",
   "description": "专业的大日志文件查看和处理工具，支持虚拟滚动、智能搜索、时间过滤、级别过滤、折叠重复日志等功能",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "license": "MIT",
   "publisher": "wake",
   "icon": "icon.png",
@@ -26,19 +26,6 @@
     "Other",
     "Programming Languages",
     "Formatters"
-  ],
-  "activationEvents": [
-    "onCommand:big-log-viewer.openLogFile",
-    "onCommand:big-log-viewer.deleteByTime",
-    "onCommand:big-log-viewer.deleteByLine",
-    "onCommand:big-log-viewer.refresh",
-    "onCommand:big-log-viewer.exportLogs",
-    "onCommand:big-log-viewer.showStatistics",
-    "onCommand:big-log-viewer.toggleBookmarks",
-    "onCommand:big-log-viewer.toggleComments",
-    "onCommand:big-log-viewer.jumpToLine",
-    "onCommand:big-log-viewer.showAdvancedSearch",
-    "onLanguage:log"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -149,7 +136,7 @@
     "publish": "vsce publish"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
+    "@types/node": "^18.19.130",
     "@types/vscode": "^1.75.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",

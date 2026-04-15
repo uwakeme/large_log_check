@@ -129,28 +129,73 @@ function applyUnifiedFilters() {
         currentSearchKeyword = '';
     }
     
-    // 应用线程名筛选
+    // 应用线程名筛选 - 需要后端完整数据过滤
     if (unifiedFilters.threadName) {
-        results = results.filter(line => {
-            const fields = extractLogFields(line);
-            return fields.threadName && fields.threadName === unifiedFilters.threadName;
-        });
+        // 检查数据是否完全加载
+        const isPartialLoad = fullDataCache.length < totalLinesInFile;
+        
+        if (isPartialLoad) {
+            // 数据未完全加载，使用后端过滤
+            console.log('🧵 线程过滤 - 数据未完全加载，发送后端请求');
+            vscode.postMessage({
+                command: 'filterByThread',
+                threadName: unifiedFilters.threadName
+            });
+            showToast('正在请求后端过滤...');
+            return; // 等待后端结果，不继续处理
+        } else {
+            // 数据已完全加载，在前端过滤
+            const targetThread = unifiedFilters.threadName.toLowerCase();
+            results = results.filter(line => {
+                const fields = extractLogFields(line);
+                const extracted = fields.threadName ? fields.threadName.toLowerCase() : '';
+                return extracted === targetThread;
+            });
+            console.log('🧵 线程过滤结果 - 前端过滤:', results.length, '条');
+        }
     }
     
-    // 应用类名筛选
+    // 应用类名筛选 - 需要后端完整数据过滤
     if (unifiedFilters.className) {
-        results = results.filter(line => {
-            const fields = extractLogFields(line);
-            return fields.className && fields.className.includes(unifiedFilters.className);
-        });
+        const isPartialLoad = fullDataCache.length < totalLinesInFile;
+        
+        if (isPartialLoad) {
+            // 数据未完全加载，使用后端过滤
+            console.log('📦 类名过滤 - 数据未完全加载，发送后端请求');
+            vscode.postMessage({
+                command: 'filterByClass',
+                className: unifiedFilters.className
+            });
+            showToast('正在请求后端过滤...');
+            return;
+        } else {
+            const targetClass = unifiedFilters.className.toLowerCase();
+            results = results.filter(line => {
+                const fields = extractLogFields(line);
+                return fields.className && fields.className.toLowerCase().includes(targetClass);
+            });
+        }
     }
     
-    // 应用方法名筛选
+    // 应用方法名筛选 - 需要后端完整数据过滤
     if (unifiedFilters.methodName) {
-        results = results.filter(line => {
-            const fields = extractLogFields(line);
-            return fields.methodName && fields.methodName === unifiedFilters.methodName;
-        });
+        const isPartialLoad = fullDataCache.length < totalLinesInFile;
+        
+        if (isPartialLoad) {
+            console.log('🔧 方法名过滤 - 数据未完全加载，发送后端请求');
+            vscode.postMessage({
+                command: 'filterByMethod',
+                methodName: unifiedFilters.methodName
+            });
+            showToast('正在请求后端过滤...');
+            return;
+        } else {
+            const targetMethod = unifiedFilters.methodName.toLowerCase();
+            results = results.filter(line => {
+                const fields = extractLogFields(line);
+                return fields.methodName && fields.methodName.toLowerCase() === targetMethod;
+            });
+        }
     }
     
     // 应用日志级别过滤
@@ -206,7 +251,7 @@ function hasAnyFilter() {
  * 设置过滤条件并应用
  * @param {Object} filters - 要设置的过滤条件
  */
-function setFilterAndApply(filters) {
+function setFilterAndApply(filters, options = {}) {
     // 合并过滤条件
     Object.assign(unifiedFilters, filters);
     
@@ -214,12 +259,24 @@ function setFilterAndApply(filters) {
     if (allDataLoaded || fullDataCache.length >= totalLinesInFile) {
         // 数据已完全加载，在前端进行统一过滤
         console.log('数据已完全加载，在前端进行统一过滤');
+        
+        // 检查是否是用户触发的筛选（不是后端返回结果）
+        const isUserAction = !options.skipFrontendFilter;
+        if (isUserAction) {
+            // 用户触发的筛选：保存当前位置
+            savePositionBeforeFilter();
+        }
+        
         applyUnifiedFilters();
         
         // 更新界面
+        // 如果是用户操作，保留当前页；如果是后端返回结果，重置页码
+        const shouldResetPage = options.resetPage !== undefined ? options.resetPage : !isUserAction;
+        const shouldClearRanges = options.clearPageRanges !== undefined ? options.clearPageRanges : !isUserAction;
+        
         handleDataChange({
-            resetPage: true,
-            clearPageRanges: true,
+            resetPage: shouldResetPage,
+            clearPageRanges: shouldClearRanges,
             triggerAsyncCalc: true
         });
         
@@ -271,29 +328,11 @@ function clearFilter(filterName) {
 }
 
 /**
- * 清除所有过滤条件
+ * 清除所有过滤条件 - 从clearCustomFilter调用
  */
 function clearAllFilters() {
-    unifiedFilters = {
-        keyword: null,
-        isRegex: false,
-        isMultiple: false,
-        threadName: null,
-        className: null,
-        methodName: null,
-        levels: null,
-        timeRange: null,
-    };
-    
-    applyUnifiedFilters();
-    
-    handleDataChange({
-        resetPage: true,
-        clearPageRanges: true,
-        triggerAsyncCalc: true
-    });
-    
-    showToast('已清除所有过滤条件');
+    // 这个只用于其他情况，直接恢复页码
+    clearAllFiltersWithLine(null);
 }
 
 /**
@@ -601,16 +640,37 @@ function handleFilterResults(data) {
     currentSearchIsRegex = false;
     currentSearchIsMultiple = false;
 
-    // 统一处理数据变更
-    handleDataChange();
+    // 记录筛选状态（用于取消时恢复）
+    if (data.threadName) {
+        currentFilterType = 'thread';
+        currentFilterValue = data.threadName;
+    } else if (data.className) {
+        currentFilterType = 'class';
+        currentFilterValue = data.className;
+    } else if (data.methodName) {
+        currentFilterType = 'method';
+        currentFilterValue = data.methodName;
+    }
+
+    // 统一处理数据变更 - 不重置页码，保留当前页面
+    handleDataChange({
+        resetPage: false,
+        clearPageRanges: false,
+        triggerAsyncCalc: true
+    });
 
     // 如果过滤结果为空，给出友好提示
     if (allLines.length === 0) {
         const levelText = (data.levels || []).join('、');
+        const threadText = data.threadName || '';
+        const classText = data.className || '';
+        const methodText = data.methodName || '';
+        const filterText = levelText || threadText || classText || methodText;
+        
         vscode.postMessage({
             command: 'showMessage',
             type: 'warning',
-            message: `未找到 ${levelText} 级别的日志，请尝试其他级别或查看统计信息`
+            message: `未找到 "${filterText}" 相关的日志`
         });
     }
 }
@@ -1163,6 +1223,7 @@ function renderCollapsedGroup(container, group) {
     const lineNumber = document.createElement('span');
     lineNumber.className = 'log-line-number';
     lineNumber.textContent = firstLineNumber.toString();
+    lineNumber.dataset.line = firstLineNumber.toString();
 
     const lineContent = document.createElement('span');
     lineContent.className = 'log-line-content';
@@ -1250,6 +1311,7 @@ function renderCollapsedGroup(container, group) {
             const expandedLineNumber = document.createElement('span');
             expandedLineNumber.className = 'log-line-number';
             expandedLineNumber.textContent = actualLineNumber.toString();
+            expandedLineNumber.dataset.line = actualLineNumber.toString();
 
             const expandedLineContent = document.createElement('span');
             expandedLineContent.className = 'log-line-content';
@@ -1281,10 +1343,11 @@ function renderSingleLine(container, line, startIndex, index) {
         lineDiv.style.borderRight = '3px solid #ffc107';
     }
 
-    const lineNumber = document.createElement('span');
+const lineNumber = document.createElement('span');
     lineNumber.className = 'log-line-number';
     lineNumber.textContent = actualLineNumber.toString();
-
+    lineNumber.dataset.line = actualLineNumber.toString();
+    
     // 如果是书签，显示书签图标
     if (bookmarks.has(actualLineNumber)) {
         lineNumber.innerHTML = '<i class="codicon codicon-bookmark" style="font-size: 10px; color: #ffc107;"></i> ' + actualLineNumber.toString();
@@ -2548,9 +2611,23 @@ function getPlaceholder(type) {
     }
 }
 
-// 提取日志行中的字段
+// 提取日志行中的字段 - 带调试和类型安全
 function extractLogFields(line) {
-    let content = line.content || line;
+    // 确保 content 是字符串
+    let content = '';
+    if (typeof line === 'string') {
+        content = line;
+    } else if (line && typeof line.content === 'string') {
+        content = line.content;
+    } else if (line && typeof line.content === 'object') {
+        // 如果 content 是对象，转为字符串
+        content = JSON.stringify(line.content);
+    }
+    
+    if (!content) {
+        console.log('⚠️ extractLogFields: content 为空', typeof line);
+        return { threadName: '', className: '', methodName: '', content: '' };
+    }
     
     // 如果 content 是字符串且包含 HTML 标签，需要先移除 HTML 标签
     if (typeof content === 'string' && content.includes('<')) {
@@ -2560,9 +2637,40 @@ function extractLogFields(line) {
         content = tempDiv.textContent || tempDiv.innerText || content;
     }
     
-    // 提取线程名 [threadName] - 排除日志级别
-    const threadMatch = content.match(/\[((?!ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE\])[a-zA-Z][a-zA-Z0-9-_]*)\]/);
-    const threadName = threadMatch ? threadMatch[1] : '';
+    // 提取线程名 [threadName] - 与后端保持一致的逻辑
+    // 1. 先匹配所有方括号内容
+    // 2. 排除方法名格式 [methodName:lineNumber]
+    // 3. 排除日志级别
+    // 4. 剩余的就是线程名
+    const bracketMatches = content.match(/\[([^\]]+)\]/g);
+    let threadName = '';
+    const logLevels = ['ERROR', 'FATAL', 'SEVERE', 'WARN', 'WARNING', 'INFO', 'INFORMATION', 'DEBUG', 'TRACE', 'VERBOSE'];
+    
+    // 🐛 调试：显示原始匹配的方括号（只在第一行时输出避免刷屏）
+    // const rawBrackets = bracketMatches ? bracketMatches.join(' ') : '(无)';
+    // console.log('🔍 extractLogFields DEBUG - 原始:', rawBrackets);
+    
+    if (bracketMatches) {
+        for (const match of bracketMatches) {
+            const bracketContent = match.slice(1, -1); // 移除方括号
+            
+            // 排除方法名格式 [methodName:lineNumber]
+            if (bracketContent.includes(':') && /^[a-zA-Z_][a-zA-Z0-9_]*:\d+$/.test(bracketContent)) {
+                continue;
+            }
+            
+            // 排除日志级别
+            if (logLevels.includes(bracketContent.toUpperCase())) {
+                continue;
+            }
+            
+            // 检查是否像线程名
+            if (/^[a-zA-Z][a-zA-Z0-9-_]*$/.test(bracketContent)) {
+                threadName = bracketContent;
+                break;
+            }
+        }
+    }
     
 
     
@@ -3142,20 +3250,127 @@ function hideFilterStatus() {
     panel.style.display = 'none';
 }
 
-// 清除自定义筛选
+// 清除自定义筛选 - 定位到行号
 function clearCustomFilter() {
-    console.log('清除筛选');
+    // 恢复到原来的行号
+    const restoreLine = savedFirstLineBeforeFilter;
+    console.log('清除筛选 - 恢复到行:', restoreLine);
+    
     currentFilterType = null;
     currentTimelineBucketIndex = null;
     currentFilterValue = null;
     hideFilterStatus();
 
     // 清除所有统一过滤条件
-    clearAllFilters();
+    clearAllFiltersWithLine(restoreLine);
+}
+
+/**
+ * 清除所有过滤条件 - 定位到行号
+ */
+function clearAllFiltersWithLine(restoreLine) {
+    unifiedFilters = {
+        keyword: null,
+        isRegex: false,
+        isMultiple: false,
+        threadName: null,
+        className: null,
+        methodName: null,
+        levels: null,
+        timeRange: null,
+    };
     
-    // 重置保存的位置
-    savedPageBeforeFilter = 1;
-    savedFirstLineBeforeFilter = null;
+    applyUnifiedFilters();
+    
+    // 根据行号找到正确的页面
+    if (restoreLine && allLines.length > 0) {
+        currentPage = Math.ceil(restoreLine / pageSize);
+        const maxPage = Math.ceil(allLines.length / pageSize);
+        currentPage = Math.min(currentPage, maxPage);
+        
+        handleDataChange({
+            resetPage: false,
+            clearPageRanges: false,
+            triggerAsyncCalc: true
+        }, () => {
+            // 渲染后定位到具体行
+            setTimeout(() => {
+                scrollToSpecificLine(restoreLine);
+            }, 100);
+        });
+    } else {
+        handleDataChange({
+            resetPage: false,
+            clearPageRanges: false,
+            triggerAsyncCalc: true
+        });
+    }
+    
+    showToast('已清除所有筛选条件');
+}
+
+// 滚动到指定行
+function scrollToSpecificLine(targetLineNumber) {
+    console.log('滚动到行:', targetLineNumber);
+    
+    // 找到当前页面中所有行号对应的元素
+    const elements = document.querySelectorAll(`[data-line="${targetLineNumber}"], [id*="line-${targetLineNumber}"]`);
+    
+    if (elements.length > 0) {
+        elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+        // 直接用容器滚动
+        const container = document.getElementById('logContainer');
+        // 计算大概的滚动位置
+        const avgLineHeight = 22; // 约等于每行高度
+        const lineIndex = allLines.findIndex(l => l.lineNumber == targetLineNumber);
+        if (lineIndex >= 0) {
+            const scrollTop = lineIndex * avgLineHeight;
+            container.scrollTop = scrollTop;
+        }
+    }
+}
+
+// 清除所有过滤条件 - 带行号恢复
+function clearAllFiltersWithLine(restoreLine) {
+    unifiedFilters = {
+        keyword: null,
+        isRegex: false,
+        isMultiple: false,
+        threadName: null,
+        className: null,
+        methodName: null,
+        levels: null,
+        timeRange: null,
+    };
+    
+    applyUnifiedFilters();
+    
+    // 根据行号找到正确的页面
+    if (restoreLine && allLines.length > 0) {
+        // 找到包含目标行的页面
+        currentPage = Math.ceil(restoreLine / pageSize);
+        // 确保不超过最大页码
+        const maxPage = Math.ceil(allLines.length / pageSize);
+        currentPage = Math.min(currentPage, maxPage);
+        
+        handleDataChange({
+            resetPage: false,
+            clearPageRanges: false,
+            triggerAsyncCalc: true
+        });
+        
+        // 定位到具体行
+        goToLine(restoreLine);
+    } else {
+        handleDataChange({
+            resetPage: false,
+            clearPageRanges: false,
+            triggerAsyncCalc: true
+        });
+    }
+    
+    showToast('已清除所有筛选条件');
 }
 
 function showDeleteByTimeDialog() {

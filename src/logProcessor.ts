@@ -776,6 +776,130 @@ export class LogProcessor {
     }
 
     /**
+     * 按线程名过滤
+     */
+    async filterByThreadName(threadName: string): Promise<LogLine[]> {
+        return new Promise((resolve, reject) => {
+            const results: LogLine[] = [];
+            let currentLine = 0;
+            const targetThread = threadName.toLowerCase();
+            
+            const stream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            rl.on('line', (line) => {
+                const thread = this.extractThreadName(line);
+                if (thread && thread.toLowerCase() === targetThread) {
+                    const timestamp = this.extractTimestamp(line);
+                    const level = this.extractLogLevel(line);
+                    results.push({
+                        lineNumber: currentLine + 1,
+                        content: line,
+                        timestamp: timestamp,
+                        level: level
+                    });
+                }
+                currentLine++;
+            });
+
+            rl.on('close', () => {
+                console.log(`线程过滤完成 - ${threadName}: ${results.length} 条`);
+                resolve(results);
+            });
+
+            rl.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+
+    /**
+     * 按类名过滤
+     */
+    async filterByClassName(className: string): Promise<LogLine[]> {
+        return new Promise((resolve, reject) => {
+            const results: LogLine[] = [];
+            let currentLine = 0;
+            const targetClass = className.toLowerCase();
+            
+            const stream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            rl.on('line', (line) => {
+                const classMatch = line.match(/\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.[A-Z][a-zA-Z0-9_]*)\b/);
+                if (classMatch && classMatch[1].toLowerCase().includes(targetClass)) {
+                    const timestamp = this.extractTimestamp(line);
+                    const level = this.extractLogLevel(line);
+                    results.push({
+                        lineNumber: currentLine + 1,
+                        content: line,
+                        timestamp: timestamp,
+                        level: level
+                    });
+                }
+                currentLine++;
+            });
+
+            rl.on('close', () => {
+                console.log(`类名过滤完成 - ${className}: ${results.length} 条`);
+                resolve(results);
+            });
+
+            rl.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+
+    /**
+     * 按方法名过滤
+     */
+    async filterByMethodName(methodName: string): Promise<LogLine[]> {
+        return new Promise((resolve, reject) => {
+            const results: LogLine[] = [];
+            let currentLine = 0;
+            const targetMethod = methodName.toLowerCase();
+            // 匹配 [methodName:lineNumber] 格式
+            const methodPattern = new RegExp(`\\[(${methodName}):\\d+\\]`, 'i');
+            
+            const stream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            rl.on('line', (line) => {
+                if (methodPattern.test(line)) {
+                    const timestamp = this.extractTimestamp(line);
+                    const level = this.extractLogLevel(line);
+                    results.push({
+                        lineNumber: currentLine + 1,
+                        content: line,
+                        timestamp: timestamp,
+                        level: level
+                    });
+                }
+                currentLine++;
+            });
+
+            rl.on('close', () => {
+                console.log(`方法名过滤完成 - ${methodName}: ${results.length} 条`);
+                resolve(results);
+            });
+
+            rl.on('error', (error) => {
+                reject(error);
+            });
+        });
+    }
+
+    /**
      * 按日志级别过滤
      */
     async filterByLevel(levels: string[]): Promise<LogLine[]> {

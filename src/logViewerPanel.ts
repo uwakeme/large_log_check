@@ -95,6 +95,15 @@ export class LogViewerPanel {
                     case 'filterByLevel':
                         await this.filterByLevel(message.levels);
                         break;
+                    case 'filterByThread':
+                        await this.filterByThreadName(message.threadName);
+                        break;
+                    case 'filterByClass':
+                        await this.filterByClassName(message.className);
+                        break;
+                    case 'filterByMethod':
+                        await this.filterByMethodName(message.methodName);
+                        break;
                     case 'getStatistics':
                         await this.getStatistics();
                         break;
@@ -529,7 +538,7 @@ export class LogViewerPanel {
         }
     }
 
-    private async filterByLevel(levels: string[]) {
+private async filterByLevel(levels: string[]) {
         try {
             console.log('📤 前端发送过滤请求 - 级别:', levels);
             const results = await this._logProcessor.filterByLevel(levels);
@@ -549,6 +558,57 @@ export class LogViewerPanel {
         }
     }
 
+    private async filterByThreadName(threadName: string) {
+        try {
+            console.log('📤 前端发送线程过滤请求 - 线程名:', threadName);
+            const results = await this._logProcessor.filterByThreadName(threadName);
+            console.log('📥 后端返回线程过滤结果数量:', results.length);
+            this._panel.webview.postMessage({
+                command: 'filterResults',
+                data: {
+                    threadName: threadName,
+                    results: results
+                }
+            });
+        } catch (error) {
+            vscode.window.showErrorMessage(`线程过滤失败: ${error}`);
+        }
+    }
+
+    private async filterByClassName(className: string) {
+        try {
+            console.log('📤 前端发送类名过滤请求 - 类名:', className);
+            const results = await this._logProcessor.filterByClassName(className);
+            console.log('📥 后端返回类名过滤结果数量:', results.length);
+            this._panel.webview.postMessage({
+                command: 'filterResults',
+                data: {
+                    className: className,
+                    results: results
+                }
+            });
+        } catch (error) {
+            vscode.window.showErrorMessage(`类名过滤失败: ${error}`);
+        }
+    }
+
+    private async filterByMethodName(methodName: string) {
+        try {
+            console.log('📤 前端发送方法名过滤请求 - 方法名:', methodName);
+            const results = await this._logProcessor.filterByMethodName(methodName);
+            console.log('📥 后端返回方法名过滤结果数量:', results.length);
+            this._panel.webview.postMessage({
+                command: 'filterResults',
+                data: {
+                    methodName: methodName,
+                    results: results
+                }
+            });
+        } catch (error) {
+            vscode.window.showErrorMessage(`方法名过���失败: ${error}`);
+        }
+    }
+    
     private async getStatistics() {
         try {
             const stats = await this._logProcessor.getStatistics();
