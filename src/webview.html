@@ -39,7 +39,7 @@
                 <div class="dropdown-content" id="moreMenu" role="menu">
                     <button onclick="showStats(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-graph"></i> 统计</button>
                     <button id="exportBtn" onclick="exportLogs(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-save"></i> 导出</button>
-                    <button onclick="showDeleteModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-trash"></i> 删除</button>
+                    <button onclick="showDeleteModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-trash"></i> 日志裁剪</button>
                     <button onclick="console.log('设置按钮被点击'); showSettingsModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-settings"></i> 设置</button>
                 </div>
             </div>
@@ -194,7 +194,7 @@
     <div id="deleteByTimeModal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeDeleteByTimeModal()">&times;</span>
-            <h2><i class="codicon codicon-clock"></i> 按时间删除日志</h2>
+            <h2><i class="codicon codicon-clock"></i> 按时间裁剪日志</h2>
             <div style="margin-top: 20px;">
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">删除模式：</label>
@@ -222,7 +222,7 @@
     <div id="deleteModal" class="modal">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
-                <h2><i class="codicon codicon-trash"></i> 删除日志</h2>
+                <h2><i class="codicon codicon-trash"></i> 日志裁剪</h2>
                 <span class="modal-close" onclick="closeDeleteModal()">&times;</span>
             </div>
             <div class="modal-body">
@@ -230,15 +230,29 @@
                     <button onclick="selectDeleteByTime()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
                         <span style="font-size: 20px;"><i class="codicon codicon-clock"></i></span>
                         <div style="text-align: left;">
-                            <div style="font-weight: bold;">按时间删除</div>
+                            <div style="font-weight: bold;">按时间裁剪</div>
                             <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">删除指定时间之前/之后的日志</div>
                         </div>
                     </button>
                     <button onclick="selectDeleteByLine()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
                         <span style="font-size: 20px;"><i class="codicon codicon-graph"></i></span>
                         <div style="text-align: left;">
-                            <div style="font-weight: bold;">按行数删除</div>
+                            <div style="font-weight: bold;">按行数裁剪</div>
                             <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">删除指定行之前/之后的日志</div>
+                        </div>
+                    </button>
+                    <button onclick="selectKeepByTimeRange()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                        <span style="font-size: 20px;"><i class="codicon codicon-calendar"></i></span>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold;">保留时间范围</div>
+                            <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">只保留指定时间范围内的日志</div>
+                        </div>
+                    </button>
+                    <button onclick="selectKeepByLineRange()" style="padding: 15px; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                        <span style="font-size: 20px;"><i class="codicon codicon-list-ordered"></i></span>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold;">保留行数范围</div>
+                            <div style="font-size: 11px; opacity: 0.9; margin-top: 3px;">只保留指定行号范围内的日志</div>
                         </div>
                     </button>
                 </div>
@@ -250,7 +264,7 @@
     <div id="deleteByLineModal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeDeleteByLineModal()">&times;</span>
-            <h2><i class="codicon codicon-graph"></i> 按行数删除日志</h2>
+            <h2><i class="codicon codicon-graph"></i> 按行数裁剪日志</h2>
             <div style="margin-top: 20px;">
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">删除模式：</label>
@@ -269,6 +283,56 @@
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="closeDeleteByLineModal()">取消</button>
                     <button onclick="confirmDeleteByLine()">确认删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 保留时间范围弹窗 -->
+    <div id="keepByTimeRangeModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeKeepByTimeRangeModal()">&times;</span>
+            <h2><i class="codicon codicon-calendar"></i> 保留时间范围</h2>
+            <div style="margin-top: 20px;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">开始时间：</label>
+                    <input type="text" id="keepStartTime" placeholder="例如：2024-01-01 12:00:00" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">结束时间：</label>
+                    <input type="text" id="keepEndTime" placeholder="例如：2024-01-01 18:00:00" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #d97706;">
+                    <strong><i class="codicon codicon-warning"></i> 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeKeepByTimeRangeModal()">取消</button>
+                    <button onclick="confirmKeepByTimeRange()">确认保留</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 保留行数范围弹窗 -->
+    <div id="keepByLineRangeModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeKeepByLineRangeModal()">&times;</span>
+            <h2><i class="codicon codicon-list-ordered"></i> 保留行数范围</h2>
+            <div style="margin-top: 20px;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">开始行号：</label>
+                    <input type="number" id="keepStartLine" placeholder="例如：1000" min="1" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">结束行号：</label>
+                    <input type="number" id="keepEndLine" placeholder="例如：5000" min="1" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                </div>
+                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #d97706;">
+                    <strong><i class="codicon codicon-warning"></i> 警告：</strong>此操作会直接修改原文件，不可恢复！请务必备份重要日志！
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeKeepByLineRangeModal()">取消</button>
+                    <button onclick="confirmKeepByLineRange()">确认保留</button>
                 </div>
             </div>
         </div>

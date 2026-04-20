@@ -512,6 +512,132 @@ export class LogProcessor {
     }
 
     /**
+     * 保留指定时间范围之间的日志（删除范围外的）
+     */
+    async keepByTimeRange(startTime: string, endTime: string): Promise<number> {
+        const start = this.parseTimeString(startTime);
+        const end = this.parseTimeString(endTime);
+        if (!start || !end) {
+            throw new Error('无法解析时间格式');
+        }
+
+        return new Promise((resolve, reject) => {
+            const tempFilePath = `${this.filePath}.tmp`;
+            const writeStream = fs.createWriteStream(tempFilePath);
+            const readStream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: readStream,
+                crlfDelay: Infinity
+            });
+
+            let deletedCount = 0;
+            let keptCount = 0;
+
+            rl.on('line', (line) => {
+                const timestamp = this.extractTimestamp(line);
+                let shouldKeep = true;
+
+                if (timestamp) {
+                    // 删除范围外的日志
+                    if (timestamp < start || timestamp > end) {
+                        shouldKeep = false;
+                    }
+                }
+
+                if (shouldKeep) {
+                    writeStream.write(line + '\n');
+                    keptCount++;
+                } else {
+                    deletedCount++;
+                }
+            });
+
+            rl.on('close', () => {
+                writeStream.end();
+                writeStream.on('finish', () => {
+                    fs.unlink(this.filePath, (err) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+                        fs.rename(tempFilePath, this.filePath, (err) => {
+                            if (err) {
+                                reject(err);
+                                return;
+                            }
+                            this.totalLines = keptCount;
+                            resolve(deletedCount);
+                        });
+                    });
+                });
+            });
+
+            rl.on('error', (error) => {
+                writeStream.end();
+                fs.unlink(tempFilePath, () => { });
+                reject(error);
+            });
+        });
+    }
+
+    /**
+     * 保留指定行号范围的日志
+     */
+    async keepByLineRange(startLine: number, endLine: number): Promise<number> {
+        return new Promise((resolve, reject) => {
+            const tempFilePath = `${this.filePath}.tmp`;
+            const writeStream = fs.createWriteStream(tempFilePath);
+            const readStream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({
+                input: readStream,
+                crlfDelay: Infinity
+            });
+
+            let currentLine = 0;
+            let deletedCount = 0;
+            let keptCount = 0;
+
+            rl.on('line', (line) => {
+                currentLine++;
+                const shouldKeep = currentLine >= startLine && currentLine <= endLine;
+
+                if (shouldKeep) {
+                    writeStream.write(line + '\n');
+                    keptCount++;
+                } else {
+                    deletedCount++;
+                }
+            });
+
+            rl.on('close', () => {
+                writeStream.end();
+                writeStream.on('finish', () => {
+                    fs.unlink(this.filePath, (err) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+                        fs.rename(tempFilePath, this.filePath, (err) => {
+                            if (err) {
+                                reject(err);
+                                return;
+                            }
+                            this.totalLines = keptCount;
+                            resolve(deletedCount);
+                        });
+                    });
+                });
+            });
+
+            rl.on('error', (error) => {
+                writeStream.end();
+                fs.unlink(tempFilePath, () => { });
+                reject(error);
+            });
+        });
+    }
+
+    /**
      * 从日志行中提取时间戳
      */
     private extractTimestamp(line: string): Date | undefined {

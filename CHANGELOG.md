@@ -6,8 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+
+## [1.2.5] - 2026-04-20
+### Added
+- **日志裁剪功能增强** - 新增两种日志保留方式
+  - 保留时间范围：只保留指定时间范围内的日志，删除其余部分
+  - 保留行数范围：只保留指定行号范围内的日志，删除其余部分
+  - 提供更灵活的日志管理能力
+
 ### Fixed
 - 修复筛选线程功能不生效的问题
+  - 修复搜索导航后筛选功能失效的问题
+  - 修复线程名/类名/方法名提取的正则表达式
+  - 取消筛选后正确恢复到原始位置
 
 ## [1.2.4] - 2026-03-18
 ### Added

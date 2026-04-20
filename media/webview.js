@@ -3434,6 +3434,76 @@ function closeDeleteByLineModal() {
     document.getElementById('deleteLineInput').value = '';
 }
 
+// ========== 保留时间范围 ==========
+function selectKeepByTimeRange() {
+    closeDeleteModal();
+    document.getElementById('keepByTimeRangeModal').style.display = 'block';
+}
+
+function closeKeepByTimeRangeModal() {
+    document.getElementById('keepByTimeRangeModal').style.display = 'none';
+    document.getElementById('keepStartTime').value = '';
+    document.getElementById('keepEndTime').value = '';
+}
+
+function confirmKeepByTimeRange() {
+    const startTime = document.getElementById('keepStartTime').value.trim();
+    const endTime = document.getElementById('keepEndTime').value.trim();
+
+    if (!startTime || !endTime) {
+        alert('请输入开始时间和结束时间！');
+        return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}/.test(startTime) || !/^\d{4}-\d{2}-\d{2}/.test(endTime)) {
+        alert('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
+        return;
+    }
+
+    vscode.postMessage({
+        command: 'keepByTimeRange',
+        startTime: startTime,
+        endTime: endTime
+    });
+
+    closeKeepByTimeRangeModal();
+}
+
+// ========== 保留行数范围 ==========
+function selectKeepByLineRange() {
+    closeDeleteModal();
+    document.getElementById('keepByLineRangeModal').style.display = 'block';
+}
+
+function closeKeepByLineRangeModal() {
+    document.getElementById('keepByLineRangeModal').style.display = 'none';
+    document.getElementById('keepStartLine').value = '';
+    document.getElementById('keepEndLine').value = '';
+}
+
+function confirmKeepByLineRange() {
+    const startLine = parseInt(document.getElementById('keepStartLine').value);
+    const endLine = parseInt(document.getElementById('keepEndLine').value);
+
+    if (!startLine || !endLine || startLine < 1 || endLine < 1) {
+        alert('请输入有效的行号！');
+        return;
+    }
+
+    if (startLine > endLine) {
+        alert('开始行号不能大于结束行号！');
+        return;
+    }
+
+    vscode.postMessage({
+        command: 'keepByLineRange',
+        startLine: startLine,
+        endLine: endLine
+    });
+
+    closeKeepByLineRangeModal();
+}
+
 function showJumpDialog() {
     document.getElementById('jumpModal').style.display = 'block';
     document.getElementById('jumpLineInput').focus();

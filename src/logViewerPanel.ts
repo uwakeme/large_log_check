@@ -122,6 +122,12 @@ export class LogViewerPanel {
                     case 'deleteByLine':
                         await this.deleteByLineOptions(message.lineNumber, message.mode);
                         break;
+                    case 'keepByTimeRange':
+                        await this.keepByTimeRange(message.startTime, message.endTime);
+                        break;
+                    case 'keepByLineRange':
+                        await this.keepByLineRange(message.startLine, message.endLine);
+                        break;
                     case 'jumpToTime':
                         await this.jumpToTime(message.timeStr);
                         break;
@@ -770,6 +776,46 @@ private async filterByLevel(levels: string[]) {
             if (x) {
                 x.dispose();
             }
+        }
+    }
+
+    private async keepByTimeRange(startTime: string, endTime: string) {
+        const result = await vscode.window.showWarningMessage(
+            `确定只保留 ${startTime} 到 ${endTime} 时间范围内的日志吗？此操作会删除该范围外的所有日志！`,
+            { modal: true },
+            '确定'
+        );
+
+        if (result !== '确定') {
+            return;
+        }
+
+        try {
+            const deletedLines = await this._logProcessor.keepByTimeRange(startTime, endTime);
+            vscode.window.showInformationMessage(`成功删除 ${deletedLines} 行日志，只保留时间范围内的日志`);
+            await this.loadFile(this._fileUri);
+        } catch (error) {
+            vscode.window.showErrorMessage(`操作失败: ${error}`);
+        }
+    }
+
+    private async keepByLineRange(startLine: number, endLine: number) {
+        const result = await vscode.window.showWarningMessage(
+            `确定只保留第 ${startLine} 到 ${endLine} 行的日志吗？此操作会删除该范围外的所有日志！`,
+            { modal: true },
+            '确定'
+        );
+
+        if (result !== '确定') {
+            return;
+        }
+
+        try {
+            const deletedLines = await this._logProcessor.keepByLineRange(startLine, endLine);
+            vscode.window.showInformationMessage(`成功删除 ${deletedLines} 行日志，只保留指定行范围内的日志`);
+            await this.loadFile(this._fileUri);
+        } catch (error) {
+            vscode.window.showErrorMessage(`操作失败: ${error}`);
         }
     }
 }
