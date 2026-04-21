@@ -502,8 +502,8 @@ export class LogViewerPanel {
             let startLine = 0;
 
             // 🔧 修复：如果前端数据未完全加载才需要重新加载
-            // 根据文件大小决定加载策略
-            if (totalLines <= 50000) {
+            // 根据文件大小决定加载策略（与 loadFile 保持一致，使用 10000 作为阈值）
+            if (totalLines <= 10000) {
                 // 小文件，一次性加载所有数据
                 startLine = 0;
                 lines = await this._logProcessor.readLines(0, totalLines);

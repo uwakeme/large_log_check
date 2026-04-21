@@ -549,13 +549,16 @@ function handleMoreLines(data) {
     updateBackgroundLoadingProgress();
 
     // 确保新数据与当前缓冲区在文件中的位置是连续的：
-    // 期望 startLine === baseLineOffset + allLines.length
+    // 期望 startLine === baseLineOffset + fullDataCache.length
     const expectedStart = baseLineOffset + fullDataCache.length;
     if (startLine !== expectedStart) {
         console.warn(`handleMoreLines: 起始行不连续, 期望 ${expectedStart}, 实际 ${startLine}，将重置缓冲区为新数据`);
         // 出现不连续时，为避免错乱，直接以新数据为准并重置偏移量
         baseLineOffset = startLine;
         fullDataCache = newLines.slice();
+        // 同步重置 allLines 以保持一致
+        allLines = [...fullDataCache];
+        originalLines = [...fullDataCache];
     } else {
         // 追加到完整数据缓存
         fullDataCache = fullDataCache.concat(newLines);
@@ -3971,20 +3974,20 @@ function updatePagination() {
             totalPages = Math.ceil(allLines.length / pageSize);
             isEstimated = true; // 估算值
         }
-    } else {
-        // 非折叠模式，使用标准计算
-        // 🔧 修复：如果数据未全部加载（baseLineOffset > 0 或未全部加载），总页数应该基于整个文件
-        if (!allDataLoaded && baseLineOffset > 0) {
-            // 数据是从中间加载的，总页数基于文件总行数估算
-            totalPages = Math.ceil(totalLinesInFile / pageSize);
-            isEstimated = true; // 这是估算值
-            console.log(`📊 部分加载模式 - 总页数基于文件总行数: ${totalLinesInFile} 行 ≈ ${totalPages} 页`);
-        } else {
-            // 数据从头开始加载，总页数基于已加载数据
-            totalPages = Math.ceil(allLines.length / pageSize);
-            isEstimated = false;
+} else {
+            // 非折叠模式，使用标准计算
+            // 🔧 修复：如果数据未全部加载，总页数应该基于整个文件
+            if (!allDataLoaded) {
+                // 数据是从中间加载的（baseLineOffset > 0）或还未完全加载，总页数基于文件总行数估算
+                totalPages = Math.ceil(totalLinesInFile / pageSize);
+                isEstimated = true; // 这是估算值
+                console.log(`📊 部分加载模式 - 总页数基于文件总行数: ${totalLinesInFile} 行 ≈ ${totalPages} 页`);
+            } else {
+                // 数据从头开始加载且已全部加载，总页数基于已加载数据
+                totalPages = Math.ceil(allLines.length / pageSize);
+                isEstimated = false;
+            }
         }
-    }
 
     if (totalPages < 1) totalPages = 1;
     if (currentPage > totalPages) currentPage = totalPages;
@@ -4138,6 +4141,9 @@ function startBackgroundLoading() {
 
     isBackgroundLoading = true;
     console.log('🔄 开始后台加载数据...');
+
+    // 重置相关状态，确保从头开始
+    baseLineOffset = 0;
 
     // 显示右下角后台加载进度
     showBackgroundLoadingIndicator();
