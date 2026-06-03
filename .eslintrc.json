@@ -2,13 +2,25 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
-    "ecmaVersion": 6,
-    "sourceType": "module"
+    "sourceType": "module",
+    "project": "./tsconfig.json"
   },
   "plugins": ["@typescript-eslint"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
   "rules": {
-    "@typescript-eslint/naming-convention": "warn",
+    "@typescript-eslint/naming-convention": [
+      "warn",
+      { "selector": "interface", "format": ["PascalCase"] },
+      { "selector": "typeAlias", "format": ["PascalCase"] },
+      { "selector": "enum", "format": ["PascalCase"] },
+      { "selector": "enumMember", "format": ["UPPER_CASE", "PascalCase"] },
+      { "selector": "class", "format": ["PascalCase"] }
+    ],
     "@typescript-eslint/semi": "warn",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
     "curly": "warn",
     "eqeqeq": "warn",
     "no-throw-literal": "warn",

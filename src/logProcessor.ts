@@ -1,903 +1,230 @@
 import * as fs from 'fs';
 import * as readline from 'readline';
+import { pipeline } from 'stream/promises';
+import { Transform, Readable } from 'stream';
+import { LogParser, LogLine, LogStats } from './logParser';
 
-export interface LogLine {
-    lineNumber: number;
-    content: string;
-    timestamp?: Date;
-    level?: string;
-}
-
-export interface LogStats {
-    totalLines: number;
-    errorCount: number;
-    warnCount: number;
-    infoCount: number;
-    debugCount: number;
-    otherCount: number;
-    timeRange?: {
-        start?: Date;
-        end?: Date;
-    };
-    // 新增：按类名统计
-    classCounts?: Map<string, number>;
-    // 新增：按方法名统计
-    methodCounts?: Map<string, number>;
-    // 新增：按线程名统计
-    threadCounts?: Map<string, number>;
-}
+// 进度回调触发间隔（行数）
+const PROGRESS_REPORT_INTERVAL = 10_000;
 
 export class LogProcessor {
     private filePath: string;
-    private totalLines: number = 0;
-
-    // 常见的日志时间戳格式正则表达式
-    private timePatterns = [
-        // 2024-01-01 12:00:00
-        /(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/,
-        // 2024/01/01 12:00:00
-        /(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})/,
-        // [2024-01-01 12:00:00]
-        /\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\]/,
-        // 01-01-2024 12:00:00
-        /(\d{2}-\d{2}-\d{4}\s+\d{2}:\d{2}:\d{2})/,
-        // ISO 8601: 2024-01-01T12:00:00
-        /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/
-    ];
-
-    // 日志级别匹配模式（按优先级从高到低排序）
-    private logLevelPatterns = [
-        { level: 'ERROR', pattern: /\[(ERROR|FATAL|SEVERE)\]|\b(ERROR|FATAL|SEVERE)\s/i },
-        { level: 'WARN', pattern: /\[(WARN|WARNING)\]|\b(WARN|WARNING)\s/i },
-        { level: 'INFO', pattern: /\[(INFO|INFORMATION)\]|\b(INFO|INFORMATION)\s/i },
-        { level: 'DEBUG', pattern: /\[(DEBUG|TRACE|VERBOSE)\]|\b(DEBUG|TRACE|VERBOSE)\s/i }
-    ];
+    private totalLines = 0;
+    private statsCache: LogStats | null = null;
+    private statsCacheMtime = 0;
 
     constructor(filePath: string) {
         this.filePath = filePath;
     }
 
+    getFilePath(): string {
+        return this.filePath;
+    }
+
     /**
-     * 获取文件总行数
-     * @param progressCallback 可选的进度回调函数，参数为当前行数
+     * 通用流式行处理:对每行调用 fold,返回累积结果。
+     * 消除了 14 处相同的 fs.createReadStream + readline 样板。
+     * fold 必须是同步的;若需异步逻辑,在外部分批处理。
+     */
+    private processLines<T>(
+        initial: T,
+        fold: (acc: T, line: string, lineNumber: number) => T,
+        onProgress?: (lineNumber: number) => void
+    ): Promise<T> {
+        return new Promise((resolve, reject) => {
+            let acc = initial;
+            let lineNumber = 0;
+            let lastReported = 0;
+            const stream = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            rl.on('line', (line) => {
+                lineNumber++;
+                acc = fold(acc, line, lineNumber);
+                if (onProgress && lineNumber - lastReported >= PROGRESS_REPORT_INTERVAL) {
+                    onProgress(lineNumber);
+                    lastReported = lineNumber;
+                }
+            });
+            rl.on('close', () => {
+                if (onProgress && lineNumber > lastReported) {
+                    onProgress(lineNumber);
+                }
+                resolve(acc);
+            });
+            rl.on('error', reject);
+        });
+    }
+
+    /**
+     * 获取文件总行数,带进度回调。
      */
     async getTotalLines(progressCallback?: (currentLines: number) => void): Promise<number> {
-        return new Promise((resolve, reject) => {
-            let lineCount = 0;
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            // 每隔10000行报告一次进度
-            const reportInterval = 10000;
-            let lastReportedCount = 0;
-
-            rl.on('line', () => {
-                lineCount++;
-                
-                // 定期报告进度
-                if (progressCallback && lineCount - lastReportedCount >= reportInterval) {
-                    progressCallback(lineCount);
-                    lastReportedCount = lineCount;
-                }
-            });
-
-            rl.on('close', () => {
-                // 最后报告一次完整的行数
-                if (progressCallback && lineCount > lastReportedCount) {
-                    progressCallback(lineCount);
-                }
-                this.totalLines = lineCount;
-                resolve(lineCount);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+        let lastReported = 0;
+        this.totalLines = await this.processLines(0, (count, _line, n) => {
+            if (progressCallback && n - lastReported >= PROGRESS_REPORT_INTERVAL) {
+                progressCallback(n);
+                lastReported = n;
+            }
+            return n;
         });
+        if (progressCallback && this.totalLines > lastReported) {
+            progressCallback(this.totalLines);
+        }
+        return this.totalLines;
     }
 
     /**
      * 读取指定范围的行
      */
     async readLines(startLine: number, count: number): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const lines: LogLine[] = [];
-            let currentLine = 0;
-            const endLine = startLine + count;
-
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                if (currentLine >= startLine && currentLine < endLine) {
-                    const timestamp = this.extractTimestamp(line);
-                    const level = this.extractLogLevel(line);
-                    lines.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-                currentLine++;
-
-                // 如果已经读取了足够的行,关闭流
-                if (currentLine >= endLine) {
-                    rl.close();
-                    stream.destroy();
-                }
-            });
-
-            rl.on('close', () => {
-                resolve(lines);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+        const endLine = startLine + count;
+        return this.processLines<LogLine[]>([], (lines, content, n) => {
+            if (n > startLine && n <= endLine) {
+                lines.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
+                });
+            }
+            return lines;
         });
+    }
+
+    /**
+     * 一次性读取整个文件,带进度回调。
+     * 统一大小文件的加载路径:不分预览/全量,UI 看到的就是一条线性进度。
+     */
+    async readAllLines(progressCallback?: (currentLine: number) => void): Promise<LogLine[]> {
+        return this.processLines<LogLine[]>([], (lines, content, n) => {
+            lines.push({
+                lineNumber: n,
+                content,
+                timestamp: LogParser.extractTimestamp(content),
+                level: LogParser.extractLogLevel(content)
+            });
+            return lines;
+        }, progressCallback);
     }
 
     /**
      * 搜索包含关键词的行
      */
-    async search(keyword: string, reverse: boolean = false, isMultiple: boolean = false): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-
-            let searchRegex: RegExp;
-            let keywords: string[] = [];
-
+    async search(keyword: string, reverse = false, isMultiple = false): Promise<LogLine[]> {
+        const keywords = isMultiple
+            ? keyword.trim().split(/\s+/).map(k => k.toLowerCase()).filter(Boolean)
+            : [];
+        const searchRegex = isMultiple ? null : new RegExp(keyword, 'i');
+        const results = await this.processLines<LogLine[]>([], (acc, content, n) => {
+            let isMatch = false;
             if (isMultiple) {
-                // 多关键词模式：预处理关键词
-                keywords = keyword.trim().split(/\s+/).map(k => k.toLowerCase());
+                if (keywords.length > 0) {
+                    const lower = content.toLowerCase();
+                    isMatch = keywords.every(k => lower.includes(k));
+                }
             } else {
-                searchRegex = new RegExp(keyword, 'i');
+                isMatch = searchRegex!.test(content);
             }
-
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                let isMatch = false;
-
-                if (isMultiple) {
-                    // 多关键词模式：检查是否包含所有关键词
-                    if (keywords.length > 0) {
-                        const lowerLine = line.toLowerCase();
-                        isMatch = keywords.every(k => lowerLine.includes(k));
-                    }
-                } else {
-                    // 正则模式
-                    isMatch = searchRegex.test(line);
-                }
-
-                if (isMatch) {
-                    const timestamp = this.extractTimestamp(line);
-                    const level = this.extractLogLevel(line);
-                    results.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                // 如果是反向搜索，倒序返回结果
-                if (reverse) {
-                    results.reverse();
-                }
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+            if (isMatch) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
+                });
+            }
+            return acc;
         });
+        return reverse ? results.reverse() : results;
     }
 
     /**
-     * 按时间过滤（不修改文件）
+     * 按时间过滤(不修改文件)
      */
     async filterByTime(timeStr: string, mode: string, keep: boolean): Promise<LogLine[]> {
-        const targetTime = this.parseTimeString(timeStr);
+        const targetTime = LogParser.parseTimeString(timeStr);
         if (!targetTime) {
             throw new Error('无法解析时间格式');
         }
-
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                const timestamp = this.extractTimestamp(line);
-                let shouldKeep = false;
-
-                if (!timestamp) {
-                    // 如果无法提取时间戳，默认保留
-                    shouldKeep = keep;
-                } else {
-                    if (mode === 'before') {
-                        // keep=true: 保留指定时间及之后的日志
-                        shouldKeep = keep ? (timestamp >= targetTime) : (timestamp < targetTime);
-                    } else {
-                        // keep=true: 保留指定时间之前的日志
-                        shouldKeep = keep ? (timestamp <= targetTime) : (timestamp > targetTime);
-                    }
-                }
-
-                if (shouldKeep) {
-                    const level = this.extractLogLevel(line);
-                    results.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+        return this.processLines<LogLine[]>([], (acc, content, n) => {
+            const timestamp = LogParser.extractTimestamp(content);
+            let shouldKeep: boolean;
+            if (!timestamp) {
+                shouldKeep = keep; // 无法解析时间戳时按 keep 决定
+            } else if (mode === 'before') {
+                shouldKeep = keep ? (timestamp >= targetTime) : (timestamp < targetTime);
+            } else {
+                shouldKeep = keep ? (timestamp <= targetTime) : (timestamp > targetTime);
+            }
+            if (shouldKeep) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp,
+                    level: LogParser.extractLogLevel(content)
+                });
+            }
+            return acc;
         });
     }
 
     /**
      * 查找第一个大于或等于指定时间的日志行
-     * 返回: { lineNumber, line, timestamp }
      */
     async findLineByTime(timeStr: string): Promise<{ lineNumber: number; line: LogLine } | null> {
-        const targetTime = this.parseTimeString(timeStr);
+        const targetTime = LogParser.parseTimeString(timeStr);
         if (!targetTime) {
             throw new Error('无法解析时间格式');
         }
-
         return new Promise((resolve, reject) => {
-            let currentLine = 0;
-            let found = false;
-
+            let n = 0;
             const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                if (found) {
-                    return; // 已经找到，跳过后续行
-                }
-
-                const timestamp = this.extractTimestamp(line);
+            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            let settled = false;
+            const settle = (fn: () => void) => {
+                if (settled) {return;}
+                settled = true;
+                stream.destroy();
+                fn();
+            };
+            rl.on('line', (content) => {
+                n++;
+                if (settled) {return;}
+                const timestamp = LogParser.extractTimestamp(content);
                 if (timestamp && timestamp >= targetTime) {
-                    found = true;
-                    const level = this.extractLogLevel(line);
-                    resolve({
-                        lineNumber: currentLine + 1,
+                    settle(() => resolve({
+                        lineNumber: n,
                         line: {
-                            lineNumber: currentLine + 1,
-                            content: line,
-                            timestamp: timestamp,
-                            level: level
+                            lineNumber: n,
+                            content,
+                            timestamp,
+                            level: LogParser.extractLogLevel(content)
                         }
-                    });
-                    stream.destroy(); // 停止读取
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                if (!found) {
-                    resolve(null); // 未找到
+                    }));
                 }
             });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+            rl.on('close', () => settle(() => resolve(null)));
+            rl.on('error', (err) => settle(() => reject(err)));
         });
     }
 
     /**
-     * 按行号过滤（不修改文件）
+     * 按行号过滤(不修改文件)
      */
     async filterByLineNumber(lineNumber: number, mode: string, keep: boolean): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                currentLine++;
-                let shouldKeep = false;
-
-                if (mode === 'before') {
-                    // keep=true: 保留指定行及之后的日志
-                    shouldKeep = keep ? (currentLine >= lineNumber) : (currentLine < lineNumber);
-                } else {
-                    // keep=true: 保留指定行之前的日志
-                    shouldKeep = keep ? (currentLine <= lineNumber) : (currentLine > lineNumber);
-                }
-
-                if (shouldKeep) {
-                    const timestamp = this.extractTimestamp(line);
-                    const level = this.extractLogLevel(line);
-                    results.push({
-                        lineNumber: currentLine,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-            });
-
-            rl.on('close', () => {
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
-        });
-    }
-
-    /**
-     * 按时间删除日志（修改原文件）
-     */
-    async deleteByTime(timeStr: string, mode: string): Promise<number> {
-        const targetTime = this.parseTimeString(timeStr);
-        if (!targetTime) {
-            throw new Error('无法解析时间格式');
-        }
-
-        return new Promise((resolve, reject) => {
-            const tempFilePath = `${this.filePath}.tmp`;
-            const writeStream = fs.createWriteStream(tempFilePath);
-            const readStream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: readStream,
-                crlfDelay: Infinity
-            });
-
-            let deletedCount = 0;
-            let keptCount = 0;
-
-            rl.on('line', (line) => {
-                const timestamp = this.extractTimestamp(line);
-                let shouldKeep = false;
-
-                if (!timestamp) {
-                    // 如果无法提取时间戳,保留该行
-                    shouldKeep = true;
-                } else {
-                    if (mode === 'before') {
-                        // 保留指定时间及之后的日志
-                        shouldKeep = timestamp >= targetTime;
-                    } else {
-                        // 保留指定时间之前的日志
-                        shouldKeep = timestamp <= targetTime;
-                    }
-                }
-
-                if (shouldKeep) {
-                    writeStream.write(line + '\n');
-                    keptCount++;
-                } else {
-                    deletedCount++;
-                }
-            });
-
-            rl.on('close', () => {
-                writeStream.end();
-                writeStream.on('finish', () => {
-                    // 替换原文件
-                    fs.unlink(this.filePath, (err) => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        fs.rename(tempFilePath, this.filePath, (err) => {
-                            if (err) {
-                                reject(err);
-                                return;
-                            }
-                            this.totalLines = keptCount;
-                            resolve(deletedCount);
-                        });
-                    });
+        return this.processLines<LogLine[]>([], (acc, content, n) => {
+            const shouldKeep = mode === 'before'
+                ? (keep ? n >= lineNumber : n < lineNumber)
+                : (keep ? n <= lineNumber : n > lineNumber);
+            if (shouldKeep) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
                 });
-            });
-
-            rl.on('error', (error) => {
-                writeStream.end();
-                fs.unlink(tempFilePath, () => { });
-                reject(error);
-            });
-        });
-    }
-
-    /**
-     * 按行数删除日志
-     */
-    async deleteByLine(lineNumber: number, mode: string): Promise<number> {
-        return new Promise((resolve, reject) => {
-            const tempFilePath = `${this.filePath}.tmp`;
-            const writeStream = fs.createWriteStream(tempFilePath);
-            const readStream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: readStream,
-                crlfDelay: Infinity
-            });
-
-            let currentLine = 0;
-            let deletedCount = 0;
-            let keptCount = 0;
-
-            rl.on('line', (line) => {
-                currentLine++;
-                let shouldKeep = false;
-
-                if (mode === 'before') {
-                    // 保留指定行及之后的日志
-                    shouldKeep = currentLine >= lineNumber;
-                } else {
-                    // 保留指定行之前的日志
-                    shouldKeep = currentLine <= lineNumber;
-                }
-
-                if (shouldKeep) {
-                    writeStream.write(line + '\n');
-                    keptCount++;
-                } else {
-                    deletedCount++;
-                }
-            });
-
-            rl.on('close', () => {
-                writeStream.end();
-                writeStream.on('finish', () => {
-                    // 替换原文件
-                    fs.unlink(this.filePath, (err) => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        fs.rename(tempFilePath, this.filePath, (err) => {
-                            if (err) {
-                                reject(err);
-                                return;
-                            }
-                            this.totalLines = keptCount;
-                            resolve(deletedCount);
-                        });
-                    });
-                });
-            });
-
-            rl.on('error', (error) => {
-                writeStream.end();
-                fs.unlink(tempFilePath, () => { });
-                reject(error);
-            });
-        });
-    }
-
-    /**
-     * 保留指定时间范围之间的日志（删除范围外的）
-     */
-    async keepByTimeRange(startTime: string, endTime: string): Promise<number> {
-        const start = this.parseTimeString(startTime);
-        const end = this.parseTimeString(endTime);
-        if (!start || !end) {
-            throw new Error('无法解析时间格式');
-        }
-
-        return new Promise((resolve, reject) => {
-            const tempFilePath = `${this.filePath}.tmp`;
-            const writeStream = fs.createWriteStream(tempFilePath);
-            const readStream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: readStream,
-                crlfDelay: Infinity
-            });
-
-            let deletedCount = 0;
-            let keptCount = 0;
-
-            rl.on('line', (line) => {
-                const timestamp = this.extractTimestamp(line);
-                let shouldKeep = true;
-
-                if (timestamp) {
-                    // 删除范围外的日志
-                    if (timestamp < start || timestamp > end) {
-                        shouldKeep = false;
-                    }
-                }
-
-                if (shouldKeep) {
-                    writeStream.write(line + '\n');
-                    keptCount++;
-                } else {
-                    deletedCount++;
-                }
-            });
-
-            rl.on('close', () => {
-                writeStream.end();
-                writeStream.on('finish', () => {
-                    fs.unlink(this.filePath, (err) => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        fs.rename(tempFilePath, this.filePath, (err) => {
-                            if (err) {
-                                reject(err);
-                                return;
-                            }
-                            this.totalLines = keptCount;
-                            resolve(deletedCount);
-                        });
-                    });
-                });
-            });
-
-            rl.on('error', (error) => {
-                writeStream.end();
-                fs.unlink(tempFilePath, () => { });
-                reject(error);
-            });
-        });
-    }
-
-    /**
-     * 保留指定行号范围的日志
-     */
-    async keepByLineRange(startLine: number, endLine: number): Promise<number> {
-        return new Promise((resolve, reject) => {
-            const tempFilePath = `${this.filePath}.tmp`;
-            const writeStream = fs.createWriteStream(tempFilePath);
-            const readStream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: readStream,
-                crlfDelay: Infinity
-            });
-
-            let currentLine = 0;
-            let deletedCount = 0;
-            let keptCount = 0;
-
-            rl.on('line', (line) => {
-                currentLine++;
-                const shouldKeep = currentLine >= startLine && currentLine <= endLine;
-
-                if (shouldKeep) {
-                    writeStream.write(line + '\n');
-                    keptCount++;
-                } else {
-                    deletedCount++;
-                }
-            });
-
-            rl.on('close', () => {
-                writeStream.end();
-                writeStream.on('finish', () => {
-                    fs.unlink(this.filePath, (err) => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        fs.rename(tempFilePath, this.filePath, (err) => {
-                            if (err) {
-                                reject(err);
-                                return;
-                            }
-                            this.totalLines = keptCount;
-                            resolve(deletedCount);
-                        });
-                    });
-                });
-            });
-
-            rl.on('error', (error) => {
-                writeStream.end();
-                fs.unlink(tempFilePath, () => { });
-                reject(error);
-            });
-        });
-    }
-
-    /**
-     * 从日志行中提取时间戳
-     */
-    private extractTimestamp(line: string): Date | undefined {
-        for (const pattern of this.timePatterns) {
-            const match = line.match(pattern);
-            if (match) {
-                const timeStr = match[1];
-                const date = this.parseTimeString(timeStr);
-                if (date) {
-                    return date;
-                }
             }
-        }
-        return undefined;
-    }
-
-    /**
-     * 从日志行中提取类名
-     * 格式：2025-11-14 09:27:02.820  INFO 3262876 [http-nio-16710-exec-8] data.access.filter.DataAccessFilter
-     */
-    private extractClassName(line: string): string | undefined {
-        // 匹配 Java 包名.类名 格式
-        const match = line.match(/\]\s+([a-z][a-z0-9_.]*[A-Z][a-zA-Z0-9_]*)/);
-        if (match) {
-            const fullClassName = match[1];
-            // 返回完整类名
-            return fullClassName;
-        }
-        return undefined;
-    }
-
-    /**
-     * 从日志行中提取方法名
-     * 格式：[catalogueSave:479] 或 [methodName:123]
-     */
-    private extractMethodName(line: string): string | undefined {
-        // 匹配 [方法名:行号] 格式
-        const match = line.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
-        if (match) {
-            return match[1];
-        }
-        return undefined;
-    }
-
-    /**
-     * 从日志行中提取线程名
-     * 格式：[scheduling-1] 或 [http-nio-16710-exec-8]
-     * 注意：需要排除 [方法名:行号] 格式和日志级别
-     */
-    private extractThreadName(line: string): string | undefined {
-        // 日志级别列表（需要排除）
-        const logLevels = ['ERROR', 'FATAL', 'SEVERE', 'WARN', 'WARNING', 'INFO', 'INFORMATION', 'DEBUG', 'TRACE', 'VERBOSE'];
-        
-        // 匹配所有方括号内的内容
-        const matches = line.match(/\[([^\]]+)\]/g);
-        if (matches) {
-            for (const match of matches) {
-                const content = match.slice(1, -1); // 移除方括号
-                
-                // 排除方法名格式 [方法名:行号]
-                if (content.includes(':') && /^[a-zA-Z_][a-zA-Z0-9_]*:\d+$/.test(content)) {
-                    continue;
-                }
-                
-                // 排除日志级别
-                if (logLevels.includes(content.toUpperCase())) {
-                    continue;
-                }
-                
-                // 检查是否像线程名（包含字母、数字、连字符、下划线）
-                if (/^[a-zA-Z][a-zA-Z0-9-_]*$/.test(content)) {
-                    return content;
-                }
-            }
-        }
-        return undefined;
-    }
-
-    /**
-     * 从日志行中提取日志级别
-     */
-    private extractLogLevel(line: string): string | undefined {
-        // 优先匹配常见的日志格式：时间戳后跟级别
-        // 例如：2025-11-14 08:48:39.308  INFO 3261008 [main]
-        const quickMatch = line.match(/\d{2}:\d{2}:\d{2}[^\w]+(ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE)\s/i);
-        if (quickMatch) {
-            const level = quickMatch[1].toUpperCase();
-            if (level === 'ERROR' || level === 'FATAL' || level === 'SEVERE') return 'ERROR';
-            if (level === 'WARN' || level === 'WARNING') return 'WARN';
-            if (level === 'INFO' || level === 'INFORMATION') return 'INFO';
-            if (level === 'DEBUG' || level === 'TRACE' || level === 'VERBOSE') return 'DEBUG';
-        }
-
-        // 使用原有的模式匹配作为后备
-        for (const levelPattern of this.logLevelPatterns) {
-            if (levelPattern.pattern.test(line)) {
-                return levelPattern.level;
-            }
-        }
-        return undefined;
-    }
-
-    /**
-     * 采样生成时间线数据（快速版本，不扫描全部文件）
-     * 通过均匀采样的方式快速获取时间分布
-     */
-    async sampleTimeline(sampleCount: number = 100): Promise<{
-        startTime?: Date;
-        endTime?: Date;
-        samples: Array<{ timestamp?: Date; lineNumber: number; level?: string }>;
-    }> {
-        return new Promise((resolve, reject) => {
-            const samples: Array<{ timestamp?: Date; lineNumber: number; level?: string }> = [];
-            let startTime: Date | undefined;
-            let endTime: Date | undefined;
-            let totalLines = 0;
-
-            // 第一遍：快速计算总行数
-            const countStream = fs.createReadStream(this.filePath);
-            const countRl = readline.createInterface({
-                input: countStream,
-                crlfDelay: Infinity
-            });
-
-            countRl.on('line', () => {
-                totalLines++;
-            });
-
-            countRl.on('close', () => {
-                if (totalLines === 0) {
-                    resolve({ samples });
-                    return;
-                }
-
-                // 第二遍：采样
-                const sampleInterval = Math.max(1, Math.floor(totalLines / sampleCount));
-                let currentLine = 0;
-                const sampleStream = fs.createReadStream(this.filePath);
-                const sampleRl = readline.createInterface({
-                    input: sampleStream,
-                    crlfDelay: Infinity
-                });
-
-                sampleRl.on('line', (line) => {
-                    currentLine++;
-
-                    // 均匀采样：每隔 sampleInterval 行采样一次
-                    if (currentLine === 1 || currentLine === totalLines || currentLine % sampleInterval === 0) {
-                        const timestamp = this.extractTimestamp(line);
-                        const level = this.extractLogLevel(line);
-
-                        if (timestamp) {
-                            samples.push({ timestamp, lineNumber: currentLine, level });
-
-                            if (!startTime || timestamp < startTime) {
-                                startTime = timestamp;
-                            }
-                            if (!endTime || timestamp > endTime) {
-                                endTime = timestamp;
-                            }
-                        }
-                    }
-                });
-
-                sampleRl.on('close', () => {
-                    resolve({ startTime, endTime, samples });
-                });
-
-                sampleRl.on('error', (error) => {
-                    reject(error);
-                });
-            });
-
-            countRl.on('error', (error) => {
-                reject(error);
-            });
-        });
-    }
-
-    /**
-     * 统计日志信息
-     */
-    async getStatistics(): Promise<LogStats> {
-        return new Promise((resolve, reject) => {
-            const stats: LogStats = {
-                totalLines: 0,
-                errorCount: 0,
-                warnCount: 0,
-                infoCount: 0,
-                debugCount: 0,
-                otherCount: 0,
-                timeRange: {},
-                classCounts: new Map<string, number>(),
-                methodCounts: new Map<string, number>(),
-                threadCounts: new Map<string, number>()
-            };
-
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                stats.totalLines++;
-
-                // 统计日志级别
-                const level = this.extractLogLevel(line);
-                if (level === 'ERROR') {
-                    stats.errorCount++;
-                } else if (level === 'WARN') {
-                    stats.warnCount++;
-                } else if (level === 'INFO') {
-                    stats.infoCount++;
-                } else if (level === 'DEBUG') {
-                    stats.debugCount++;
-                } else {
-                    stats.otherCount++;
-                }
-
-                // 统计时间范围
-                const timestamp = this.extractTimestamp(line);
-                if (timestamp) {
-                    if (!stats.timeRange!.start || timestamp < stats.timeRange!.start) {
-                        stats.timeRange!.start = timestamp;
-                    }
-                    if (!stats.timeRange!.end || timestamp > stats.timeRange!.end) {
-                        stats.timeRange!.end = timestamp;
-                    }
-                }
-
-                // 统计类名
-                const className = this.extractClassName(line);
-                if (className) {
-                    const count = stats.classCounts!.get(className) || 0;
-                    stats.classCounts!.set(className, count + 1);
-                }
-
-                // 统计方法名
-                const methodName = this.extractMethodName(line);
-                if (methodName) {
-                    const count = stats.methodCounts!.get(methodName) || 0;
-                    stats.methodCounts!.set(methodName, count + 1);
-                }
-
-                // 统计线程名
-                const threadName = this.extractThreadName(line);
-                if (threadName) {
-                    const count = stats.threadCounts!.get(threadName) || 0;
-                    stats.threadCounts!.set(threadName, count + 1);
-                }
-            });
-
-            rl.on('close', () => {
-                resolve(stats);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+            return acc;
         });
     }
 
@@ -905,81 +232,37 @@ export class LogProcessor {
      * 按线程名过滤
      */
     async filterByThreadName(threadName: string): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-            const targetThread = threadName.toLowerCase();
-            
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                const thread = this.extractThreadName(line);
-                if (thread && thread.toLowerCase() === targetThread) {
-                    const timestamp = this.extractTimestamp(line);
-                    const level = this.extractLogLevel(line);
-                    results.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                console.log(`线程过滤完成 - ${threadName}: ${results.length} 条`);
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+        const target = threadName.toLowerCase();
+        return this.processLines<LogLine[]>([], (acc, content, n) => {
+            const thread = LogParser.extractThreadName(content);
+            if (thread && thread.toLowerCase() === target) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
+                });
+            }
+            return acc;
         });
     }
 
     /**
-     * 按类名过滤
+     * 按类名过滤(子串匹配,大小写不敏感)
      */
     async filterByClassName(className: string): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-            const targetClass = className.toLowerCase();
-            
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                const classMatch = line.match(/\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.[A-Z][a-zA-Z0-9_]*)\b/);
-                if (classMatch && classMatch[1].toLowerCase().includes(targetClass)) {
-                    const timestamp = this.extractTimestamp(line);
-                    const level = this.extractLogLevel(line);
-                    results.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                console.log(`类名过滤完成 - ${className}: ${results.length} 条`);
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+        const target = className.toLowerCase();
+        return this.processLines<LogLine[]>([], (acc, content, n) => {
+            const classMatch = content.match(/\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.[A-Z][a-zA-Z0-9_]*)\b/i);
+            if (classMatch && classMatch[1].toLowerCase().includes(target)) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
+                });
+            }
+            return acc;
         });
     }
 
@@ -987,41 +270,17 @@ export class LogProcessor {
      * 按方法名过滤
      */
     async filterByMethodName(methodName: string): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-            const targetMethod = methodName.toLowerCase();
-            // 匹配 [methodName:lineNumber] 格式
-            const methodPattern = new RegExp(`\\[(${methodName}):\\d+\\]`, 'i');
-            
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                if (methodPattern.test(line)) {
-                    const timestamp = this.extractTimestamp(line);
-                    const level = this.extractLogLevel(line);
-                    results.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                console.log(`方法名过滤完成 - ${methodName}: ${results.length} 条`);
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+        const methodPattern = LogParser.buildMethodPattern(methodName);
+        return this.processLines<LogLine[]>([], (acc, content, n) => {
+            if (methodPattern.test(content)) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
+                });
+            }
+            return acc;
         });
     }
 
@@ -1029,159 +288,253 @@ export class LogProcessor {
      * 按日志级别过滤
      */
     async filterByLevel(levels: string[]): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-            const levelsSet = new Set(levels.map(l => l.toUpperCase()));
-            console.log('🔍 正在查找的级别:', Array.from(levelsSet));
-
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            let matchCount = 0;
-            let sampleLines = 0;
-            rl.on('line', (line) => {
-                const level = this.extractLogLevel(line);
-
-                // 输出前5条日志的级别提取结果
-                if (sampleLines < 5) {
-                    console.log(`第 ${currentLine + 1} 行: 提取到的级别='${level}' 内容:`, line.substring(0, 100));
-                    sampleLines++;
-                }
-
-                if (level && levelsSet.has(level)) {
-                    const timestamp = this.extractTimestamp(line);
-                    results.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                    matchCount++;
-                    if (matchCount <= 3) {
-                        console.log(`✅ 匹配 ${matchCount}: 级别='${level}'`);
-                    }
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                console.log(`📊 过滤完成 - 总共匹配: ${results.length} 条`);
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+        const levelsSet = new Set(levels.map(l => l.toUpperCase()));
+        return this.processLines<LogLine[]>([], (acc, content, n) => {
+            const level = LogParser.extractLogLevel(content);
+            if (level && levelsSet.has(level)) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level
+                });
+            }
+            return acc;
         });
     }
 
     /**
      * 正则表达式搜索
      */
-    async regexSearch(pattern: string, flags: string = 'i', reverse: boolean = false): Promise<LogLine[]> {
-        return new Promise((resolve, reject) => {
-            const results: LogLine[] = [];
-            let currentLine = 0;
-
-            let searchRegex: RegExp;
-            try {
-                searchRegex = new RegExp(pattern, flags);
-            } catch (error) {
-                reject(new Error('无效的正则表达式'));
-                return;
+    async regexSearch(pattern: string, flags = 'i', reverse = false): Promise<LogLine[]> {
+        let searchRegex: RegExp;
+        try {
+            searchRegex = new RegExp(pattern, flags);
+        } catch {
+            throw new Error('无效的正则表达式');
+        }
+        const results = await this.processLines<LogLine[]>([], (acc, content, n) => {
+            if (searchRegex.test(content)) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
+                });
             }
-
-            const stream = fs.createReadStream(this.filePath);
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
-
-            rl.on('line', (line) => {
-                if (searchRegex.test(line)) {
-                    const timestamp = this.extractTimestamp(line);
-                    const level = this.extractLogLevel(line);
-                    results.push({
-                        lineNumber: currentLine + 1,
-                        content: line,
-                        timestamp: timestamp,
-                        level: level
-                    });
-                }
-                currentLine++;
-            });
-
-            rl.on('close', () => {
-                // 如果是反向搜索，倒序返回结果
-                if (reverse) {
-                    results.reverse();
-                }
-                resolve(results);
-            });
-
-            rl.on('error', (error) => {
-                reject(error);
-            });
+            return acc;
         });
+        return reverse ? results.reverse() : results;
     }
 
     /**
-     * 导出日志到文件
+     * 统计日志信息(带文件 mtime 缓存,文件没变就不重算)
+     */
+    async getStatistics(): Promise<LogStats> {
+        const mtime = (await fs.promises.stat(this.filePath)).mtimeMs;
+        if (this.statsCache && this.statsCacheMtime === mtime) {
+            return this.statsCache;
+        }
+        const stats: LogStats = {
+            totalLines: 0,
+            errorCount: 0,
+            warnCount: 0,
+            infoCount: 0,
+            debugCount: 0,
+            otherCount: 0,
+            timeRange: {},
+            classCounts: new Map(),
+            methodCounts: new Map(),
+            threadCounts: new Map()
+        };
+        const result = await this.processLines(stats, (acc, content) => {
+            acc.totalLines++;
+            const level = LogParser.extractLogLevel(content);
+            if (level === 'ERROR') {acc.errorCount++;}
+            else if (level === 'WARN') {acc.warnCount++;}
+            else if (level === 'INFO') {acc.infoCount++;}
+            else if (level === 'DEBUG') {acc.debugCount++;}
+            else {acc.otherCount++;}
+
+            const timestamp = LogParser.extractTimestamp(content);
+            if (timestamp) {
+                if (!acc.timeRange!.start || timestamp < acc.timeRange!.start) {acc.timeRange!.start = timestamp;}
+                if (!acc.timeRange!.end || timestamp > acc.timeRange!.end) {acc.timeRange!.end = timestamp;}
+            }
+
+            const className = LogParser.extractClassName(content);
+            if (className) {acc.classCounts!.set(className, (acc.classCounts!.get(className) || 0) + 1);}
+
+            const methodName = LogParser.extractMethodName(content);
+            if (methodName) {acc.methodCounts!.set(methodName, (acc.methodCounts!.get(methodName) || 0) + 1);}
+
+            const threadName = LogParser.extractThreadName(content);
+            if (threadName) {acc.threadCounts!.set(threadName, (acc.threadCounts!.get(threadName) || 0) + 1);}
+            return acc;
+        });
+        this.statsCache = result;
+        this.statsCacheMtime = mtime;
+        return result;
+    }
+
+    /**
+     * 文件被修改后让缓存失效(删除/编辑后调用)
+     */
+    invalidateCaches(): void {
+        this.statsCache = null;
+    }
+
+    /**
+     * 采样生成时间线数据。两次扫描:第一次数总行数,第二次按 sampleInterval 采样。
+     * 返回的总行数 = 实际扫描数。
+     */
+    async sampleTimeline(sampleCount = 100): Promise<{
+        startTime?: Date;
+        endTime?: Date;
+        samples: Array<{ timestamp?: Date; lineNumber: number; level?: string }>;
+        totalLines: number;
+    }> {
+        const totalLines = await this.getTotalLines();
+        if (totalLines === 0) {
+            return { samples: [], totalLines: 0 };
+        }
+        const sampleInterval = Math.max(1, Math.floor(totalLines / sampleCount));
+        return this.processLines<{
+            startTime?: Date;
+            endTime?: Date;
+            samples: Array<{ timestamp?: Date; lineNumber: number; level?: string }>;
+            totalLines: number;
+        }>(
+            { samples: [], totalLines: 0 },
+            (acc, content, n) => {
+                acc.totalLines = n;
+                if (n === 1 || n % sampleInterval === 0) {
+                    const timestamp = LogParser.extractTimestamp(content);
+                    const level = LogParser.extractLogLevel(content);
+                    if (timestamp) {
+                        acc.samples.push({ timestamp, lineNumber: n, level });
+                        if (!acc.startTime || timestamp < acc.startTime) {acc.startTime = timestamp;}
+                        if (!acc.endTime || timestamp > acc.endTime) {acc.endTime = timestamp;}
+                    }
+                }
+                return acc;
+            }
+        );
+    }
+
+    /**
+     * 导出日志到文件(使用 pipeline 自动处理 backpressure)
      */
     async exportLogs(lines: LogLine[], outputPath: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const writeStream = fs.createWriteStream(outputPath);
-
-            for (const line of lines) {
-                writeStream.write(line.content + '\n');
+        const source = new Readable({
+            read() {
+                for (const line of lines) {
+                    this.push(line.content + '\n');
+                }
+                this.push(null);
             }
-
-            writeStream.end();
-            writeStream.on('finish', () => {
-                resolve();
-            });
-
-            writeStream.on('error', (error) => {
-                reject(error);
-            });
         });
+        const sink = fs.createWriteStream(outputPath);
+        await pipeline(source, sink);
     }
 
     /**
-     * 解析时间字符串
+     * 把流式条件写入临时文件,然后原子替换原文件。
+     * 由 shouldKeep 决定每行是否保留;返回删除/保留计数。
      */
-    private parseTimeString(timeStr: string): Date | undefined {
-        // 标准化时间字符串
-        let normalized = timeStr.trim();
-
-        // 替换 / 为 -
-        normalized = normalized.replace(/\//g, '-');
-
-        // 处理 T 分隔符
-        normalized = normalized.replace('T', ' ');
-
-        // 尝试解析
-        const date = new Date(normalized);
-
-        if (!isNaN(date.getTime())) {
-            return date;
-        }
-
-        // 尝试其他格式 DD-MM-YYYY
-        const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})(.*)$/;
-        const match = normalized.match(ddmmyyyy);
-        if (match) {
-            const reformatted = `${match[3]}-${match[2]}-${match[1]}${match[4]}`;
-            const date2 = new Date(reformatted);
-            if (!isNaN(date2.getTime())) {
-                return date2;
+    private async rewriteFile(shouldKeep: (line: string, n: number) => boolean): Promise<{ deleted: number; kept: number }> {
+        const tempFilePath = `${this.filePath}.tmp`;
+        let n = 0;
+        let deleted = 0;
+        let kept = 0;
+        try {
+            const source = fs.createReadStream(this.filePath);
+            const rl = readline.createInterface({ input: source, crlfDelay: Infinity });
+            const sink = fs.createWriteStream(tempFilePath);
+            const filter = new Transform({
+                writableObjectMode: true,
+                transform(chunk: string, _enc, cb) {
+                    n++;
+                    if (shouldKeep(chunk, n)) {
+                        kept++;
+                        cb(null, chunk + '\n');
+                    } else {
+                        deleted++;
+                        cb();
+                    }
+                }
+            });
+            try {
+                await pipeline(rl, filter, sink);
+            } catch (err) {
+                // 清理临时文件
+                await fs.promises.unlink(tempFilePath).catch(() => undefined);
+                throw err;
             }
+            // 原子替换
+            await fs.promises.unlink(this.filePath);
+            await fs.promises.rename(tempFilePath, this.filePath);
+            this.totalLines = kept;
+            this.invalidateCaches();
+            return { deleted, kept };
+        } catch (err) {
+            // 兜底清理
+            await fs.promises.unlink(tempFilePath).catch(() => undefined);
+            throw err;
         }
+    }
 
-        return undefined;
+    /**
+     * 按时间删除日志(修改原文件)
+     */
+    async deleteByTime(timeStr: string, mode: string): Promise<number> {
+        const targetTime = LogParser.parseTimeString(timeStr);
+        if (!targetTime) {
+            throw new Error('无法解析时间格式');
+        }
+        const { deleted } = await this.rewriteFile((content) => {
+            const timestamp = LogParser.extractTimestamp(content);
+            if (!timestamp) {return true;} // 解析失败默认保留
+            return mode === 'before' ? timestamp >= targetTime : timestamp <= targetTime;
+        });
+        return deleted;
+    }
+
+    /**
+     * 按行数删除日志
+     */
+    async deleteByLine(lineNumber: number, mode: string): Promise<number> {
+        const { deleted } = await this.rewriteFile((_content, n) =>
+            mode === 'before' ? n >= lineNumber : n <= lineNumber
+        );
+        return deleted;
+    }
+
+    /**
+     * 保留指定时间范围之内的日志(删除范围外)
+     */
+    async keepByTimeRange(startTime: string, endTime: string): Promise<number> {
+        const start = LogParser.parseTimeString(startTime);
+        const end = LogParser.parseTimeString(endTime);
+        if (!start || !end) {
+            throw new Error('无法解析时间格式');
+        }
+        const { deleted } = await this.rewriteFile((content) => {
+            const timestamp = LogParser.extractTimestamp(content);
+            if (!timestamp) {return true;}
+            return timestamp >= start && timestamp <= end;
+        });
+        return deleted;
+    }
+
+    /**
+     * 保留指定行号范围的日志
+     */
+    async keepByLineRange(startLine: number, endLine: number): Promise<number> {
+        const { deleted } = await this.rewriteFile((_content, n) =>
+            n >= startLine && n <= endLine
+        );
+        return deleted;
     }
 }
+

@@ -51,11 +51,6 @@
         "category": "日志查看器"
       },
       {
-        "command": "big-log-viewer.exportLogs",
-        "title": "导出当前日志",
-        "category": "日志查看器"
-      },
-      {
         "command": "big-log-viewer.showStatistics",
         "title": "显示日志统计",
         "category": "日志查看器"

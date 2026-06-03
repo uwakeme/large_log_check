@@ -540,31 +540,35 @@ function handleFileLoaded(data) {
 }
 
 function handleMoreLines(data) {
+    // 统一加载策略下,host 端 loadMoreLines 已返回全量数据而非增量片段。
+    // 但为了兼容旧版 host 或边缘场景,保留"小心的合并"逻辑:
+    // 1) 不重置页码 — 用户在浏览,不要破坏当前视图
+    // 2) 不清空已计算的页面范围 — 已渲染的页面不重算
+    // 3) 重新应用统一过滤 — 保持过滤态一致
     const newLines = data.lines || [];
-    const startLine = typeof data.startLine === 'number' ? data.startLine : (baseLineOffset + allLines.length);
+    const startLine = typeof data.startLine === 'number' ? data.startLine : 0;
 
-    console.log(` handleMoreLines: 收到 ${newLines.length} 行, startLine = ${startLine}, baseLineOffset = ${baseLineOffset}`);
-
-    // 更新右下角后台加载进度
-    updateBackgroundLoadingProgress();
-
-    // 确保新数据与当前缓冲区在文件中的位置是连续的：
-    // 期望 startLine === baseLineOffset + fullDataCache.length
-    const expectedStart = baseLineOffset + fullDataCache.length;
-    if (startLine !== expectedStart) {
-        console.warn(`handleMoreLines: 起始行不连续, 期望 ${expectedStart}, 实际 ${startLine}，将重置缓冲区为新数据`);
-        // 出现不连续时，为避免错乱，直接以新数据为准并重置偏移量
-        baseLineOffset = startLine;
+    // 如果 host 实际返回的就是全量数据(新协议),直接整批替换
+    if (startLine === 0 && newLines.length > 0) {
+        baseLineOffset = 0;
         fullDataCache = newLines.slice();
-        // 同步重置 allLines 以保持一致
         allLines = [...fullDataCache];
         originalLines = [...fullDataCache];
     } else {
-        // 追加到完整数据缓存
-        fullDataCache = fullDataCache.concat(newLines);
+        // 旧协议:增量追加,做连续性检查
+        const expectedStart = baseLineOffset + fullDataCache.length;
+        if (startLine !== expectedStart) {
+            // 出现不连续,重置缓冲区为新数据
+            baseLineOffset = startLine;
+            fullDataCache = newLines.slice();
+            allLines = [...fullDataCache];
+            originalLines = [...fullDataCache];
+        } else {
+            fullDataCache = fullDataCache.concat(newLines);
+        }
     }
-    
-    // 重新应用统一过滤（如果有过滤条件）
+
+    // 重新应用统一过滤(如果有)
     if (hasAnyFilter()) {
         applyUnifiedFilters();
     } else {
@@ -572,33 +576,24 @@ function handleMoreLines(data) {
         originalLines = [...fullDataCache];
     }
 
-    // 如果已计算过统计信息，增量更新统计数据，避免重新扫描整个文件
-    if (fileStats) {
-        updateStatsWithNewLines(newLines);
-    }
-
-    // 检查是否已加载全部数据
-    if (fullDataCache.length >= totalLinesInFile) {
-        allDataLoaded = true;
-        isBackgroundLoading = false;
-        
-        // 确保进度条显示 100% 并隐藏
-        updateBackgroundLoadingProgress();
-        setTimeout(() => {
-            hideBackgroundLoadingIndicator();
-        }, 1000); // 显示 100% 持续 1 秒后隐藏
-    }
-
-    // 更新加载状态显示
-    updateLoadingStatus();
-
-    // 加载更多数据时不重置页码，但需要重新计算
+    // 不重置页码,不重置页面缓存,只触发异步计算新页面
     handleDataChange({
-        resetPage: false,           // 不重置页码
-        clearPageRanges: false,     // 不清空已计算的页面
-        triggerAsyncCalc: true      // 触发异步计算新页面
+        resetPage: false,
+        clearPageRanges: false,
+        triggerAsyncCalc: true
     });
 }
+
+/**
+ * 统一的完整重载入口。所有需要重新获取数据的场景(滚动到底、
+ * 点击"加载更多"、过滤前需要全量数据等)都走这里,触发 host 端
+ * readAllLines 一次性加载整个文件,不再有分块/后台/增量加载。
+ */
+function requestFullReload() {
+    vscode.postMessage({ command: 'refresh' });
+}
+
+function handleSearchResults(data) {
 
 function handleSearchResults(data) {
     console.log('收到搜索结果 - 原始数据:', data);
@@ -3819,13 +3814,13 @@ function handleJumpToTimeResult(data) {
                 console.log('🔄 数据不连续，使用新数据');
                 allLines = newLines;
                 originalLines = [...newLines];
-                allDataLoaded = false;
+                allDataLoaded = true;
             }
         } else {
             // 没有已加载数据，直接使用新数据
             allLines = newLines;
             originalLines = [...newLines];
-            allDataLoaded = false;
+            allDataLoaded = true;
         }
 
         // 记录当前缓冲区在文件中的起始行，用于统一后台加载
@@ -3860,11 +3855,7 @@ function handleJumpToTimeResult(data) {
             showToast(`已跳转到第 ${data.targetLineNumber} 行`);
         }, 300);
 
-        // 如有需要，重新启用统一的后台加载逻辑
-        if (!allDataLoaded && baseLineOffset + allLines.length < totalLinesInFile) {
-            isBackgroundLoading = false;
-            startBackgroundLoading();
-        }
+        // 统一加载策略:host 端已发送完整数据,无需再触发后台分块
     } else {
         console.error('未找到目标时间的日志');
         showToast(data.message || '未找到大于或等于该时间的日志！');
@@ -4046,17 +4037,9 @@ function checkAndLoadMore() {
 }
 
 function loadMoreData() {
-    if (allDataLoaded) return;
-
-    const currentLoaded = allLines.length;
-    const remaining = totalLinesInFile - currentLoaded;
-    const toLoad = Math.min(remaining, 10000); // 每次加载10000行
-
-    vscode.postMessage({
-        command: 'loadMore',
-        startLine: currentLoaded,
-        count: toLoad
-    });
+    // 统一加载策略下,数据已一次性全量加载,此函数无操作。
+    // 触发条件(loadedLines < totalLinesInFile)在 allDataLoaded=true 时永远不成立。
+    // 保留函数仅为防止遗漏的调用点触发未定义行为。
 }
 
 function showLoadMoreHint() {
@@ -4080,48 +4063,30 @@ function showLoadMoreHint() {
 }
 
 function loadAllRemainingData() {
-    if (allDataLoaded) return;
-
-    const remaining = totalLinesInFile - allLines.length;
-    if (remaining <= 0) {
-        allDataLoaded = true;
-        return;
-    }
-
-    vscode.postMessage({
-        command: 'loadMore',
-        startLine: allLines.length,
-        count: remaining
-    });
-
-    // 隐藏加载按钮
-    const loadMoreBtn = document.getElementById('loadMoreBtn');
-    if (loadMoreBtn) {
-        loadMoreBtn.style.display = 'none';
-    }
+    // 统一加载策略下,数据已一次性全量加载,此函数无操作。
+    // "加载更多"按钮在 allDataLoaded=true 时被隐藏,此函数不会被用户触发。
 }
 
-// 请求加载全部数据（用于统一过滤）
+// 请求加载全部数据(用于统一过滤)
 function requestAllData() {
     if (allDataLoaded) {
-        // 数据已全部加载，直接应用过滤
+        // 数据已全部加载,直接应用过滤
+        // 应用过滤时**必须**重置页码到 1(过滤结果是新数据集)
         applyUnifiedFilters();
         handleDataChange({
-            resetPage: true,
-            clearPageRanges: true,
-            triggerAsyncCalc: true
+            resetPage: true,           // 重置到第一页
+            clearPageRanges: true,     // 清空已计算的页面缓存
+            triggerAsyncCalc: true      // 异步重算折叠模式下的总页数
         });
         return;
     }
-    
-    // 开始后台加载
-    startBackgroundLoading();
-    
-    // 监听加载完成事件
+
+    // 数据未完全加载(理论上不会发生 — 统一加载下始终全量)
+    // 触发完整重载,然后轮询直到 fileLoaded 事件设置 allDataLoaded=true,再应用过滤
+    requestFullReload();
     const checkInterval = setInterval(() => {
         if (allDataLoaded || fullDataCache.length >= totalLinesInFile) {
             clearInterval(checkInterval);
-            console.log('数据加载完成，应用统一过滤');
             applyUnifiedFilters();
             handleDataChange({
                 resetPage: true,
@@ -4130,65 +4095,25 @@ function requestAllData() {
             });
             showToast(`找到 ${allLines.length} 条符合条件的日志`);
         }
-    }, 1000);
+    }, 500);
 }
 
-// 后台逐步加载数据
+// 后台逐步加载数据 — 已废弃,统一改为单次 readAllLines。
+// 保留为纯 no-op:不触发任何 reload,不破坏用户当前视图。
 function startBackgroundLoading() {
     if (isBackgroundLoading || allDataLoaded) {
         return;
     }
-
-    isBackgroundLoading = true;
-    console.log('🔄 开始后台加载数据...');
-
-    // 重置相关状态，确保从头开始
-    baseLineOffset = 0;
-
-    // 显示右下角后台加载进度
-    showBackgroundLoadingIndicator();
-
-    // 更新状态栏显示
-    updateLoadingStatus();
-
-    loadNextChunk();
+    // 不做任何事 — 统一加载下数据已全量,无需后台补齐
 }
 
+// 加载下一批数据 — 已废弃,保留为 no-op。
 function loadNextChunk() {
     if (allDataLoaded || !isBackgroundLoading) {
         isBackgroundLoading = false;
         return;
     }
-
-    const remaining = totalLinesInFile - (baseLineOffset + fullDataCache.length);
-    if (remaining <= 0) {
-        allDataLoaded = true;
-        isBackgroundLoading = false;
-        console.log('后台加载完成！');
-        updateLoadingStatus();
-        
-        // 确保进度条显示 100% 并隐藏
-        updateBackgroundLoadingProgress();
-        setTimeout(() => {
-            hideBackgroundLoadingIndicator();
-        }, 1000);
-        return;
-    }
-
-    const chunkSize = Math.min(backgroundLoadChunkSize, remaining);
-    const startLine = baseLineOffset + fullDataCache.length;
-    console.log(` 后台加载: 第 ${startLine} - ${startLine + chunkSize} 行（baseOffset=${baseLineOffset}）`);
-
-    vscode.postMessage({
-        command: 'loadMore',
-        startLine: startLine,
-        count: chunkSize
-    });
-
-    // 延迟加载下一批，避免阻塞UI（每批间隔500ms）
-    setTimeout(() => {
-        loadNextChunk();
-    }, 500);
+    isBackgroundLoading = false;
 }
 
 function updateLoadingStatus() {

@@ -3,7 +3,9 @@
     "allow": [
       "Bash(/skills)",
       "Bash(claude:*)",
-      "Bash(/plugins)"
+      "Bash(/plugins)",
+      "Bash(npm run *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

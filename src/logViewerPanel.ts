@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { LogProcessor } from './logProcessor';
+import { LogLine } from './logParser';
+
+let cachedWebviewHtml: string | null = null;
 
 export class LogViewerPanel {
     // 使用 Map 来管理多个面板实例，key 为文件路径
@@ -59,6 +62,20 @@ export class LogViewerPanel {
     // 获取所有面板
     public static getAllPanels(): LogViewerPanel[] {
         return Array.from(LogViewerPanel._panels.values());
+    }
+
+    /**
+     * 公共消息发送方法。取代外部直接访问 _panel.webview。
+     */
+    public postMessage(message: unknown): void {
+        this._panel.webview.postMessage(message);
+    }
+
+    /**
+     * 获取文件 URI(供命令面板操作使用)
+     */
+    public getFileUri(): vscode.Uri {
+        return this._fileUri;
     }
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, fileUri: vscode.Uri) {
@@ -174,87 +191,42 @@ export class LogViewerPanel {
             this._panel.webview.postMessage({
                 command: 'loadingProgress',
                 data: {
-                    stage: '正在计算文件行数...',
+                    stage: '正在加载日志文件...',
                     progress: 0
                 }
             });
 
-            // 获取总行数，带进度报告
-            let estimatedTotalLines = 0;
-            const totalLines = await this._logProcessor.getTotalLines((currentLines) => {
-                // 定期报告进度
-                estimatedTotalLines = currentLines;
-                
-                // 根据文件大小估算进度（粗略估算）
-                const estimatedProgress = Math.min(50, (currentLines / 100000) * 50);
-                
+            // 单一加载流程:进度 0% → 50% 在读取阶段实时推进 → 100%
+            // 不再分"预览+后台"两阶段,大文件小文件走同一条路径
+            const lines = await this._logProcessor.readAllLines((currentLine) => {
+                const progress = Math.min(99, (currentLine / 100_000) * 99);
                 this._panel.webview.postMessage({
                     command: 'loadingProgress',
                     data: {
-                        stage: `正在计算文件行数... (${currentLines.toLocaleString()} 行)`,
-                        progress: estimatedProgress,
-                        current: currentLines
+                        stage: `正在加载日志... (${currentLine.toLocaleString()} 行)`,
+                        progress,
+                        current: currentLine
                     }
                 });
             });
 
-            // 根据文件大小决定加载策略
-            let initialLines;
-            let initialLoadCount = 2000; // 初始加载行数
+            const totalLines = lines.length;
 
-            // 发送读取数据阶段的进度
+            this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
+
+            // 发送最终进度
             this._panel.webview.postMessage({
                 command: 'loadingProgress',
                 data: {
-                    stage: `正在读取日志数据... (共 ${totalLines.toLocaleString()} 行)`,
-                    progress: 60,
+                    stage: '加载完成！',
+                    progress: 100,
+                    current: totalLines,
                     total: totalLines
                 }
             });
 
-            if (totalLines <= 10000) {
-                // 小于1万行，一次性加载所有数据
-                initialLines = await this._logProcessor.readLines(0, totalLines);
-                
-                this._panel.webview.postMessage({
-                    command: 'loadingProgress',
-                    data: {
-                        stage: '数据加载完成，正在渲染...',
-                        progress: 90,
-                        current: totalLines,
-                        total: totalLines
-                    }
-                });
-            } else {
-                // 大于1万行，先快速加载前2000行
-                initialLines = await this._logProcessor.readLines(0, initialLoadCount);
-                
-                this._panel.webview.postMessage({
-                    command: 'loadingProgress',
-                    data: {
-                        stage: `快速预览：已加载前 ${initialLoadCount.toLocaleString()} 行，正在准备界面...`,
-                        progress: 80,
-                        current: initialLoadCount,
-                        total: initialLoadCount
-                    }
-                });
-            }
-
-            this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
-
-            // 发送最终进度：小文件100%，大文件也是100%（因为"快速预览"阶段已完成）
-            this._panel.webview.postMessage({
-                command: 'loadingProgress',
-                data: {
-                    stage: initialLines.length >= totalLines ? '加载完成！' : '快速预览完成！',
-                    progress: 100,
-                    current: initialLines.length,
-                    total: initialLines.length
-                }
-            });
-
-            // 短暂延迟后再发送 fileLoaded，让用户看到进度
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // 短暂延迟后再发送 fileLoaded,让用户看到 100%
+            await new Promise(resolve => setTimeout(resolve, 300));
 
             this._panel.webview.postMessage({
                 command: 'fileLoaded',
@@ -263,12 +235,12 @@ export class LogViewerPanel {
                     filePath: fileUri.fsPath,
                     fileSize: fileSizeMB,
                     totalLines: totalLines,
-                    lines: initialLines,
-                    allLoaded: totalLines <= 10000
+                    lines: lines,
+                    allLoaded: true
                 }
             });
 
-            // 立即请求时间线采样（不等待后续数据加载）
+            // 请求时间线采样
             this.sampleTimeline(this._timelineSampleCount);
         } catch (error) {
             vscode.window.showErrorMessage(`加载文件失败: ${error}`);
@@ -276,6 +248,8 @@ export class LogViewerPanel {
     }
 
     private async loadMoreLines(startLine: number, count: number) {
+        // 统一加载策略:webview 不会主动请求分块了,但保留此函数以防遗漏。
+        // 行为是"小心的部分读" + 标记"全部加载完成",让 webview 不再请求后续。
         try {
             const lines = await this._logProcessor.readLines(startLine, count);
             this._panel.webview.postMessage({
@@ -290,7 +264,7 @@ export class LogViewerPanel {
         }
     }
 
-    private async searchLogs(keyword: string, reverse: boolean = false, isMultiple: boolean = false) {
+    private async searchLogs(keyword: string, reverse = false, isMultiple = false) {
         try {
             const results = await this._logProcessor.search(keyword, reverse, isMultiple);
             this._panel.webview.postMessage({
@@ -348,8 +322,14 @@ export class LogViewerPanel {
                     vscode.window.showInformationMessage(`成功导出 ${results.length} 行日志到: ${uri.fsPath}`);
                 }
             } else if (action === '修改原文件（危险）') {
-                // 修改原文件
-                await this.deleteByTime(timeStr, mode);
+                // 修改原文件(操作已在 modal 中确认,此处直接执行)
+                try {
+                    const deletedLines = await this._logProcessor.deleteByTime(timeStr, mode);
+                    vscode.window.showInformationMessage(`成功删除 ${deletedLines} 行日志`);
+                    await this.loadFile(this._fileUri);
+                } catch (error) {
+                    vscode.window.showErrorMessage(`删除失败: ${error}`);
+                }
             }
         } catch (error) {
             vscode.window.showErrorMessage(`操作失败: ${error}`);
@@ -398,51 +378,17 @@ export class LogViewerPanel {
                     vscode.window.showInformationMessage(`成功导出 ${results.length} 行日志到: ${uri.fsPath}`);
                 }
             } else if (action === '修改原文件（危险）') {
-                // 修改原文件
-                await this.deleteByLine(lineNumber, mode);
+                // 修改原文件(操作已在 modal 中确认,此处直接执行)
+                try {
+                    const deletedLines = await this._logProcessor.deleteByLine(lineNumber, mode);
+                    vscode.window.showInformationMessage(`成功删除 ${deletedLines} 行日志`);
+                    await this.loadFile(this._fileUri);
+                } catch (error) {
+                    vscode.window.showErrorMessage(`删除失败: ${error}`);
+                }
             }
         } catch (error) {
             vscode.window.showErrorMessage(`操作失败: ${error}`);
-        }
-    }
-
-    private async deleteByTime(timeStr: string, mode: string) {
-        const result = await vscode.window.showWarningMessage(
-            `确定要删除${mode === 'before' ? '之前' : '之后'}的日志吗？此操作会修改原文件！`,
-            { modal: true },
-            '确定'
-        );
-
-        if (result !== '确定') {
-            return;
-        }
-
-        try {
-            const deletedLines = await this._logProcessor.deleteByTime(timeStr, mode);
-            vscode.window.showInformationMessage(`成功删除 ${deletedLines} 行日志`);
-            await this.loadFile(this._fileUri);
-        } catch (error) {
-            vscode.window.showErrorMessage(`删除失败: ${error}`);
-        }
-    }
-
-    private async deleteByLine(lineNumber: number, mode: string) {
-        const result = await vscode.window.showWarningMessage(
-            `确定要删除第${lineNumber}行${mode === 'before' ? '之前' : '之后'}的日志吗？此操作会修改原文件！`,
-            { modal: true },
-            '确定'
-        );
-
-        if (result !== '确定') {
-            return;
-        }
-
-        try {
-            const deletedLines = await this._logProcessor.deleteByLine(lineNumber, mode);
-            vscode.window.showInformationMessage(`成功删除 ${deletedLines} 行日志`);
-            await this.loadFile(this._fileUri);
-        } catch (error) {
-            vscode.window.showErrorMessage(`删除失败: ${error}`);
         }
     }
 
@@ -493,31 +439,9 @@ export class LogViewerPanel {
         try {
             vscode.window.showInformationMessage(`正在加载完整日志并跳转到第 ${lineNumber} 行...`);
 
-            // 获取总行数
-            const totalLines = await this._logProcessor.getTotalLines();
-
-            // 根据文件大小决定加载策略
-            let lines;
-            let allLoaded = false;
-            let startLine = 0;
-
-            // 🔧 修复：如果前端数据未完全加载才需要重新加载
-            // 根据文件大小决定加载策略（与 loadFile 保持一致，使用 10000 作为阈值）
-            if (totalLines <= 10000) {
-                // 小文件，一次性加载所有数据
-                startLine = 0;
-                lines = await this._logProcessor.readLines(0, totalLines);
-                allLoaded = true;
-            } else {
-                // 大文件，从开头加载到目标行之后的数据
-                startLine = 0;
-                const loadCount = Math.max(lineNumber + 5000, 20000); // 至少加载2万行
-                const actualCount = Math.min(loadCount, totalLines); // 不超过总行数
-                lines = await this._logProcessor.readLines(0, actualCount);
-                allLoaded = actualCount >= totalLines;
-                
-                console.log(`跳转加载策略: 目标行${lineNumber}, 总行数${totalLines}, 加载${actualCount}行`);
-            }
+            // 统一路径:一次性加载整个文件(与 loadFile 一致),不再分大小文件
+            const lines = await this._logProcessor.readAllLines();
+            const totalLines = lines.length;
 
             // 获取文件信息
             const fileStats = await fs.promises.stat(this._fileUri.fsPath);
@@ -532,8 +456,8 @@ export class LogViewerPanel {
                     fileSize: fileSizeMB,
                     totalLines: totalLines,
                     lines: lines,
-                    allLoaded: allLoaded,
-                    startLine: startLine,
+                    allLoaded: true,
+                    startLine: 0,
                     targetLineNumber: lineNumber
                 }
             });
@@ -546,12 +470,7 @@ export class LogViewerPanel {
 
 private async filterByLevel(levels: string[]) {
         try {
-            console.log('📤 前端发送过滤请求 - 级别:', levels);
             const results = await this._logProcessor.filterByLevel(levels);
-            console.log('📥 后端返回结果数量:', results.length);
-            if (results.length > 0) {
-                console.log('👀 第一条结果 - 级别:', results[0].level, '内容:', results[0].content.substring(0, 100));
-            }
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
@@ -566,9 +485,7 @@ private async filterByLevel(levels: string[]) {
 
     private async filterByThreadName(threadName: string) {
         try {
-            console.log('📤 前端发送线程过滤请求 - 线程名:', threadName);
             const results = await this._logProcessor.filterByThreadName(threadName);
-            console.log('📥 后端返回线程过滤结果数量:', results.length);
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
@@ -583,9 +500,7 @@ private async filterByLevel(levels: string[]) {
 
     private async filterByClassName(className: string) {
         try {
-            console.log('📤 前端发送类名过滤请求 - 类名:', className);
             const results = await this._logProcessor.filterByClassName(className);
-            console.log('📥 后端返回类名过滤结果数量:', results.length);
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
@@ -600,9 +515,7 @@ private async filterByLevel(levels: string[]) {
 
     private async filterByMethodName(methodName: string) {
         try {
-            console.log('📤 前端发送方法名过滤请求 - 方法名:', methodName);
             const results = await this._logProcessor.filterByMethodName(methodName);
-            console.log('📥 后端返回方法名过滤结果数量:', results.length);
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
@@ -636,7 +549,7 @@ private async filterByLevel(levels: string[]) {
         }
     }
 
-    private async sampleTimeline(sampleCount: number = 100) {
+    private async sampleTimeline(sampleCount = 100) {
         try {
             const timelineData = await this._logProcessor.sampleTimeline(sampleCount);
             this._panel.webview.postMessage({
@@ -666,7 +579,7 @@ private async filterByLevel(levels: string[]) {
         });
     }
 
-    private async updateSettings(newSettings: any) {
+    private async updateSettings(newSettings: { searchDebounceMs?: number; collapseMinRepeatCount?: number; timelineSamplePoints?: number }) {
         const config = vscode.workspace.getConfiguration('big-log-viewer');
 
         try {
@@ -689,7 +602,7 @@ private async filterByLevel(levels: string[]) {
         }
     }
 
-    private async regexSearch(pattern: string, flags: string, reverse: boolean = false) {
+    private async regexSearch(pattern: string, flags: string, reverse = false) {
         try {
             const results = await this._logProcessor.regexSearch(pattern, flags, reverse);
             this._panel.webview.postMessage({
@@ -705,7 +618,7 @@ private async filterByLevel(levels: string[]) {
         }
     }
 
-    private async exportCurrentView(lines: any[], exportType?: string) {
+    private async exportCurrentView(lines: LogLine[], exportType?: string) {
         try {
             // 根据导出类型生成默认文件名
             let defaultFileName = 'exported.log';
@@ -740,8 +653,12 @@ private async filterByLevel(levels: string[]) {
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
-        const htmlPath = path.join(this._extensionUri.fsPath, 'src', 'webview.html');
-        let html = fs.readFileSync(htmlPath, 'utf8');
+        // 模板内容在模块加载后只读一次,后续只做占位符替换
+        if (!cachedWebviewHtml) {
+            const htmlPath = path.join(this._extensionUri.fsPath, 'src', 'webview.html');
+            cachedWebviewHtml = fs.readFileSync(htmlPath, 'utf8');
+        }
+        const html = cachedWebviewHtml;
 
         // 生成样式和脚本在 Webview 中可访问的 URI
         const styleUri = webview.asWebviewUri(
@@ -757,12 +674,10 @@ private async filterByLevel(levels: string[]) {
         );
 
         // 用占位符替换为真实路径
-        html = html
+        return html
             .replace(/%%WEBVIEW_CSS%%/g, styleUri.toString())
             .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
-
-        return html;
     }
 
     public dispose() {
