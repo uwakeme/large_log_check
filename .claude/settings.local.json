@@ -5,7 +5,10 @@
       "Bash(claude:*)",
       "Bash(/plugins)",
       "Bash(npm run *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(node --check E:/projects/large_log_check/media/webview.js)",
+      "Bash(xxd E:/projects/large_log_check/media/webview.js)",
+      "Bash(node *)"
     ]
   }
 }

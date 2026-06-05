@@ -7,6 +7,36 @@
     <!-- 样式从扩展侧注入真实路径，这里使用占位符 -->
     <link rel="stylesheet" href="%%WEBVIEW_CSS%%">
     <link rel="stylesheet" href="%%CODICONS_CSS%%">
+    <!--
+      早期握手:必须先于 webview.js 注册 message 监听器。
+      webview.js 顶部 acquireVsCodeApi() 之后有几百行同步代码才注册 listener,
+      如果 host 端在 panel 构造时立刻 postMessage,这些消息会被 VSCode 丢掉
+      (webview 未就绪时消息是丢弃的,不是缓存的)。这个内联脚本同步执行,先抢到
+      listener 槽位并把 vscode API 暴露到 window.__vscodeApi 上,
+      webview.js 通过 window.__vscodeApi 复用,避免重复 acquireVsCodeApi 抛错。
+      webview.js 加载完后,它的 message listener 接管派发。
+    -->
+    <script>
+        (function () {
+            try {
+                // acquireVsCodeApi 全局只能调一次,所以这里调用并暴露给主脚本复用。
+                window.__vscodeApi = acquireVsCodeApi();
+                // 缓存 host 在 webview.js 就绪前可能发来的所有消息
+                window.__earlyMessages = [];
+                window.addEventListener('message', function (event) {
+                    if (window.__earlyMessages) {
+                        window.__earlyMessages.push(event.data);
+                    }
+                });
+                // 注意:不在这里 postMessage webviewReady。
+                // 早期 vscode API 引用是 vscodeEarly(被 vscode.postMessage 同步消费),
+                // 但 webview.js 拿到的是 window.__vscodeApi(同一个 API 实例)。
+                // 真正的"webviewReady"握手由 webview.js 在 line 1 用 vscode.postMessage 发出。
+            } catch (e) {
+                // 静默 — 主脚本加载后会暴露自己的错误
+            }
+        })();
+    </script>
 </head>
 <body>
     <header class="toolbar" role="toolbar" aria-label="日志查看器工具栏">
@@ -107,11 +137,14 @@
     </div>
     
     <!-- 加载进度覆盖层 -->
+    <!-- 默认 display 由 CSS 控制 (.loading-overlay 默认 flex),在 webview 加载到 host 发消息
+         之间的"中间态"也是可见的,避免"闪一下"。状态文字会由 host 通过 loadingProgress
+         消息在第一时间覆盖为"正在加载日志文件...",所以这里保留一个合理的初始文案。 -->
     <div class="loading-overlay" id="loadingIndicator" role="dialog" aria-modal="true" aria-labelledby="loadingTitle" aria-describedby="loadingStage">
         <div class="loading-content">
             <div id="loadingTitle" style="font-size: 18px; margin-bottom: 20px;"><i class="codicon codicon-loading codicon-modifier-spin"></i> 正在加载日志文件...</div>
             <div id="loadingStage" style="font-size: 14px; color: var(--vscode-descriptionForeground); margin-bottom: 15px;" aria-live="polite">
-                准备读取文件...
+                正在读取文件...
             </div>
             <div style="width: 400px; margin: 0 auto;">
                 <div style="background-color: var(--vscode-editorWidget-background); height: 20px; border-radius: 10px; overflow: hidden; border: 1px solid var(--vscode-panel-border);" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="加载进度">

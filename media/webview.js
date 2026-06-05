@@ -1,4 +1,13 @@
-const vscode = acquireVsCodeApi();
+// 复用 webview.html 内联早期脚本在 <head> 里 acquireVsCodeApi 暴露的实例。
+// acquireVsCodeApi 全局只能调一次,这里不能再次调用,否则抛
+// "An instance of the VS Code API has already been acquired" 导致整个脚本中断。
+const vscode = window.__vscodeApi || acquireVsCodeApi();
+// 立刻向 host 报到:webview 已就绪,可以发消息了。
+// 必须在任何其它消息发送之前,因为 host 端在 panel 构造时是不发任何消息的,
+// 等这个信号到了才开始 loadFile。
+if (vscode && vscode.postMessage) {
+    vscode.postMessage({ command: 'webviewReady' });
+}
 let allLines = [];
 let currentSearchKeyword = '';
 let currentSearchIsRegex = false; // 当前搜索是否为正则模式
@@ -385,7 +394,16 @@ let isBackgroundLoading = false; // 是否正在后台加载
 let backgroundLoadChunkSize = 5000; // 每次后台加载的行数
 
 window.addEventListener('message', event => {
-    const message = event.data;
+    dispatchWebviewMessage(event.data);
+});
+
+/**
+ * 分发来自 host 的消息。提取成命名函数,这样 webview.html 里的早期握手脚本
+ * 可以通过 window.__webviewMessageTarget 回调进来,避免 host 在我们还没注册
+ * listener 时发来的消息被丢弃。
+ */
+function dispatchWebviewMessage(message) {
+    if (!message) {return;}
 
     switch (message.command) {
         case 'fileLoaded':
@@ -436,7 +454,20 @@ window.addEventListener('message', event => {
             updateLoadingProgress(message.data);
             break;
     }
-});
+}
+
+// 把派发器暴露给早期握手脚本;并消费 webview.html 内联脚本缓存的早期消息。
+// 这是修复"加载一直停在 0%"的关键 — host 在 panel 构造时发的第一条
+// loadingProgress: 0% 消息,会先被内联脚本缓存,等主脚本就绪后再重放。
+(function drainEarlyMessages() {
+    const early = window.__earlyMessages;
+    window.__earlyMessages = null; // 关闭缓存,以后新消息直接走主 listener
+    if (Array.isArray(early)) {
+        for (const msg of early) {
+            dispatchWebviewMessage(msg);
+        }
+    }
+})();
 
 /**
  * 更新加载进度
@@ -592,8 +623,6 @@ function handleMoreLines(data) {
 function requestFullReload() {
     vscode.postMessage({ command: 'refresh' });
 }
-
-function handleSearchResults(data) {
 
 function handleSearchResults(data) {
     console.log('收到搜索结果 - 原始数据:', data);

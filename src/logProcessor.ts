@@ -4,8 +4,13 @@ import { pipeline } from 'stream/promises';
 import { Transform, Readable } from 'stream';
 import { LogParser, LogLine, LogStats } from './logParser';
 
-// 进度回调触发间隔（行数）
-const PROGRESS_REPORT_INTERVAL = 10_000;
+// 进度回调触发间隔（行数）。processLines 的进度回调在"已读行数"超过这个
+// 增量时触发,避免每行都发 postMessage 把 webview 的 message queue 撑爆。
+const PROGRESS_REPORT_INTERVAL = 1_000;
+
+// 进度回调触发间隔（毫秒）。即便文件行数少、行很短,也要保证每 100ms 至少
+// 触发一次进度回调,这样 UI 上的进度条不会卡在 0% 不动。
+const PROGRESS_THROTTLE_MS = 100;
 
 export class LogProcessor {
     private filePath: string;
@@ -25,6 +30,10 @@ export class LogProcessor {
      * 通用流式行处理:对每行调用 fold,返回累积结果。
      * 消除了 14 处相同的 fs.createReadStream + readline 样板。
      * fold 必须是同步的;若需异步逻辑,在外部分批处理。
+     *
+     * onProgress 同时按"行数阈值"和"时间阈值"双重去重,保证:
+     *   - 大量数据时不会因为每行都触发回调而压垮 postMessage
+     *   - 数据很少时也不会因为行数不够而沉默很久
      */
     private processLines<T>(
         initial: T,
@@ -34,19 +43,27 @@ export class LogProcessor {
         return new Promise((resolve, reject) => {
             let acc = initial;
             let lineNumber = 0;
-            let lastReported = 0;
+            let lastReportedLines = 0;
+            let lastReportedAt = 0;
             const stream = fs.createReadStream(this.filePath);
             const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            const reportIfDue = () => {
+                if (!onProgress) {return;}
+                const now = Date.now();
+                if (lineNumber - lastReportedLines >= PROGRESS_REPORT_INTERVAL ||
+                    (lineNumber > lastReportedLines && now - lastReportedAt >= PROGRESS_THROTTLE_MS)) {
+                    onProgress(lineNumber);
+                    lastReportedLines = lineNumber;
+                    lastReportedAt = now;
+                }
+            };
             rl.on('line', (line) => {
                 lineNumber++;
                 acc = fold(acc, line, lineNumber);
-                if (onProgress && lineNumber - lastReported >= PROGRESS_REPORT_INTERVAL) {
-                    onProgress(lineNumber);
-                    lastReported = lineNumber;
-                }
+                reportIfDue();
             });
             rl.on('close', () => {
-                if (onProgress && lineNumber > lastReported) {
+                if (onProgress && lineNumber > lastReportedLines) {
                     onProgress(lineNumber);
                 }
                 resolve(acc);
@@ -57,13 +74,20 @@ export class LogProcessor {
 
     /**
      * 获取文件总行数,带进度回调。
+     * 复用 processLines 的"行数+时间"双阈值节流,保证数据少时也能持续看到进度推进。
      */
     async getTotalLines(progressCallback?: (currentLines: number) => void): Promise<number> {
         let lastReported = 0;
+        let lastReportedAt = 0;
         this.totalLines = await this.processLines(0, (count, _line, n) => {
-            if (progressCallback && n - lastReported >= PROGRESS_REPORT_INTERVAL) {
-                progressCallback(n);
-                lastReported = n;
+            if (progressCallback) {
+                const now = Date.now();
+                if (n - lastReported >= PROGRESS_REPORT_INTERVAL ||
+                    (n > lastReported && now - lastReportedAt >= PROGRESS_THROTTLE_MS)) {
+                    progressCallback(n);
+                    lastReported = n;
+                    lastReportedAt = now;
+                }
             }
             return n;
         });
@@ -94,6 +118,16 @@ export class LogProcessor {
     /**
      * 一次性读取整个文件,带进度回调。
      * 统一大小文件的加载路径:不分预览/全量,UI 看到的就是一条线性进度。
+     *
+     * 进度按"行数"驱动,辅以"时间节流"保底:
+     *   - 大量数据时按 PROGRESS_REPORT_INTERVAL 行触发一次,避免压垮 postMessage
+     *   - 数据很少时(单行很长或文件很小)按 PROGRESS_THROTTLE_MS 时间触发,
+     *     保证 UI 上的进度条不会卡在 0% 不动
+     *
+     * 注意:不要在这里再额外 attach stream.on('data') 来追字节数 — readline 已经
+     * 内部 attach 了 data listener,多个 listener 共存会让 readline 的内部
+     * buffer 状态机进入不一致,表现为"data 事件不触发 / 卡死"。基于行数 +
+     * 时间节流已经能提供足够平滑的进度反馈。
      */
     async readAllLines(progressCallback?: (currentLine: number) => void): Promise<LogLine[]> {
         return this.processLines<LogLine[]>([], (lines, content, n) => {

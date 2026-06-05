@@ -15,6 +15,14 @@ export class LogViewerPanel {
     private _fileUri: vscode.Uri;
     private _logProcessor: LogProcessor;
     private _timelineSampleCount: number;
+    /**
+     * webviewReady 握手:webview 的内联早期脚本会先于 webview.js 监听器注册,
+     * 它一加载完就 postMessage 'webviewReady'。在这之前 host 端不要发任何消息,
+     * 否则会被 VSCode 丢弃(未就绪 webview 的 postMessage 不是缓存,是丢弃)。
+     * 也防止在用户首次打开时"工具栏先出现一下,再变加载层"的闪烁。
+     */
+    private _isWebviewReady = false;
+    private _hasLoadedFile = false;
 
     public static createOrShow(extensionUri: vscode.Uri, fileUri: vscode.Uri) {
         const column = vscode.window.activeTextEditor
@@ -88,10 +96,11 @@ export class LogViewerPanel {
         const config = vscode.workspace.getConfiguration('big-log-viewer');
         this._timelineSampleCount = config.get<number>('timeline.samplePoints', 200);
 
-        // 设置WebView内容
+        // 设置WebView内容(HTML 同步设置,加载层在 CSS 默认就是 flex 可见)
         this._update();
-        // 将当前配置发送给 WebView
-        this.sendConfigToWebview();
+        // 注意:此时不能 postMessage 任何东西 — webview 内联早期脚本还没执行,
+        // VSCode 对未就绪 webview 的 postMessage 是直接丢弃的。
+        // 等待 webviewReady 后再做 sendConfigToWebview + loadFile。
 
         // 监听面板关闭事件
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -100,6 +109,20 @@ export class LogViewerPanel {
         this._panel.webview.onDidReceiveMessage(
             async message => {
                 switch (message.command) {
+                    case 'webviewReady':
+                        // webview 已经把内联早期脚本里的 message listener 注册好了,
+                        // 缓存的消息(若有)能正常被主脚本消费;现在才安全地开始
+                        // 发送"配置"和"loadingProgress"以及"fileLoaded"等。
+                        if (this._isWebviewReady) {return;}
+                        this._isWebviewReady = true;
+                        this.sendConfigToWebview();
+                        // 只在还没加载过时启动初次加载;防止 webview 因 hot-reload
+                        // 重新发 ready 而把已加载的数据再 load 一遍。
+                        if (!this._hasLoadedFile) {
+                            this._hasLoadedFile = true;
+                            await this.loadFile(this._fileUri);
+                        }
+                        break;
                     case 'loadMore':
                         await this.loadMoreLines(message.startLine, message.count);
                         break;
@@ -170,8 +193,11 @@ export class LogViewerPanel {
             this._disposables
         );
 
-        // 初始加载文件
-        this.loadFile(fileUri);
+        // 不在这里直接 loadFile:等 webview 报到 ready 之后再发命令。
+        // 旧逻辑:在 panel 构造时立刻 postMessage 'loadingProgress: 0%'。
+        // 问题:此时 webview.js 还没执行到第 387 行的 listener 注册,
+        // VSCode 对未就绪 webview 的 postMessage 是直接丢弃的,导致
+        // webview 永远收不到 0% 消息,进度条一直停在 HTML 默认状态。
     }
 
     // 公共方法：刷新当前文件
@@ -187,7 +213,11 @@ export class LogViewerPanel {
             const fileStats = await fs.promises.stat(fileUri.fsPath);
             const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(2);
 
-            // 发送初始加载进度
+            // 单一加载流程:进度 0% → 99% 在读取阶段实时推进 → 100%
+            // 进度条按"已读行数 / 100_000"归一化显示。processLines 内部有
+            // 100ms 时间节流,小文件也能在第一时间看到进度推进;大文件则按行数
+            // 平滑过渡。webview 的加载层在 webview.html 里默认就显示,这里立刻
+            // 推 0% 让状态文字立刻进入"正在加载",避免"闪一下"中间态。
             this._panel.webview.postMessage({
                 command: 'loadingProgress',
                 data: {
@@ -196,9 +226,12 @@ export class LogViewerPanel {
                 }
             });
 
-            // 单一加载流程:进度 0% → 50% 在读取阶段实时推进 → 100%
-            // 不再分"预览+后台"两阶段,大文件小文件走同一条路径
             const lines = await this._logProcessor.readAllLines((currentLine) => {
+                // 进度按"已读行数 / 100_000"归一化(只用于显示,不是真实进度):
+                //   - 小文件: 立即冲到 100% 是合理的(10 万行以下基本瞬间读完)
+                //   - 大文件: 进度条平滑推进,大数行数下也只会慢慢接近 99%
+                // 同时,processLines 内部有 PROGRESS_THROTTLE_MS (100ms) 时间节流,
+                // 即便文件只有几行长,callback 也会在 100ms 内首次触发,不会卡 0%。
                 const progress = Math.min(99, (currentLine / 100_000) * 99);
                 this._panel.webview.postMessage({
                     command: 'loadingProgress',
@@ -214,7 +247,7 @@ export class LogViewerPanel {
 
             this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
 
-            // 发送最终进度
+            // 发送最终进度,随即发送 fileLoaded — 不再人为加 300ms 假延迟。
             this._panel.webview.postMessage({
                 command: 'loadingProgress',
                 data: {
@@ -224,9 +257,6 @@ export class LogViewerPanel {
                     total: totalLines
                 }
             });
-
-            // 短暂延迟后再发送 fileLoaded,让用户看到 100%
-            await new Promise(resolve => setTimeout(resolve, 300));
 
             this._panel.webview.postMessage({
                 command: 'fileLoaded',
