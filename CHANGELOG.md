@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 修复打开日志文件时进度条卡 0%、一直停留在加载页面、首次打开闪一下的问题
 
-
 ## [1.2.6] - 2026-04-21
 ### Fixed
 - **修复日志初始加载时的显示异常问题**

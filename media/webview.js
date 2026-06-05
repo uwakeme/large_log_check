@@ -3282,9 +3282,8 @@ function clearCustomFilter() {
     // 恢复到原来的行号
     const restoreLine = savedFirstLineBeforeFilter;
     console.log('清除筛选 - 恢复到行:', restoreLine);
-    
+
     currentFilterType = null;
-    currentTimelineBucketIndex = null;
     currentFilterValue = null;
     hideFilterStatus();
 
@@ -3293,7 +3292,9 @@ function clearCustomFilter() {
 }
 
 /**
- * 清除所有过滤条件 - 定位到行号
+ * 清除所有过滤条件,并把视图恢复到筛选前的行号。
+ * 注意:历史上这个函数被定义过两次,旧版(已被删除)里调了不存在的 goToLine,
+ * 会抛 ReferenceError;当前版本用 jumpToLine + setTimeout 等待渲染完成。
  */
 function clearAllFiltersWithLine(restoreLine) {
     unifiedFilters = {
@@ -3306,25 +3307,23 @@ function clearAllFiltersWithLine(restoreLine) {
         levels: null,
         timeRange: null,
     };
-    
+
     applyUnifiedFilters();
-    
-    // 根据行号找到正确的页面
+
     if (restoreLine && allLines.length > 0) {
+        // 找到包含目标行的页面
         currentPage = Math.ceil(restoreLine / pageSize);
         const maxPage = Math.ceil(allLines.length / pageSize);
         currentPage = Math.min(currentPage, maxPage);
-        
+
         handleDataChange({
             resetPage: false,
             clearPageRanges: false,
             triggerAsyncCalc: true
-        }, () => {
-            // 渲染后定位到具体行
-            setTimeout(() => {
-                scrollToSpecificLine(restoreLine);
-            }, 100);
         });
+
+        // 渲染完成后再定位到目标行 — jumpToLine 内部会 scrollIntoView
+        setTimeout(() => jumpToLine(restoreLine), 50);
     } else {
         handleDataChange({
             resetPage: false,
@@ -3332,17 +3331,17 @@ function clearAllFiltersWithLine(restoreLine) {
             triggerAsyncCalc: true
         });
     }
-    
+
     showToast('已清除所有筛选条件');
 }
 
-// 滚动到指定行
+// 滚动到指定行(被 clearAllFiltersWithLine 之外的其它路径可能调用)
 function scrollToSpecificLine(targetLineNumber) {
     console.log('滚动到行:', targetLineNumber);
-    
+
     // 找到当前页面中所有行号对应的元素
     const elements = document.querySelectorAll(`[data-line="${targetLineNumber}"], [id*="line-${targetLineNumber}"]`);
-    
+
     if (elements.length > 0) {
         elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else {
@@ -3356,48 +3355,6 @@ function scrollToSpecificLine(targetLineNumber) {
             container.scrollTop = scrollTop;
         }
     }
-}
-
-// 清除所有过滤条件 - 带行号恢复
-function clearAllFiltersWithLine(restoreLine) {
-    unifiedFilters = {
-        keyword: null,
-        isRegex: false,
-        isMultiple: false,
-        threadName: null,
-        className: null,
-        methodName: null,
-        levels: null,
-        timeRange: null,
-    };
-    
-    applyUnifiedFilters();
-    
-    // 根据行号找到正确的页面
-    if (restoreLine && allLines.length > 0) {
-        // 找到包含目标行的页面
-        currentPage = Math.ceil(restoreLine / pageSize);
-        // 确保不超过最大页码
-        const maxPage = Math.ceil(allLines.length / pageSize);
-        currentPage = Math.min(currentPage, maxPage);
-        
-        handleDataChange({
-            resetPage: false,
-            clearPageRanges: false,
-            triggerAsyncCalc: true
-        });
-        
-        // 定位到具体行
-        goToLine(restoreLine);
-    } else {
-        handleDataChange({
-            resetPage: false,
-            clearPageRanges: false,
-            triggerAsyncCalc: true
-        });
-    }
-    
-    showToast('已清除所有筛选条件');
 }
 
 function showDeleteByTimeDialog() {

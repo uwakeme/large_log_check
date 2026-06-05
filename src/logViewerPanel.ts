@@ -280,6 +280,12 @@ export class LogViewerPanel {
     private async loadMoreLines(startLine: number, count: number) {
         // 统一加载策略:webview 不会主动请求分块了,但保留此函数以防遗漏。
         // 行为是"小心的部分读" + 标记"全部加载完成",让 webview 不再请求后续。
+        // 新协议下 startLine===0 实际是"全量重载",直接走 loadFile,避免走到
+        // readLines 中"n > startLine && n <= endLine"的边界问题(count-1 行)。
+        if (startLine === 0) {
+            await this.loadFile(this._fileUri);
+            return;
+        }
         try {
             const lines = await this._logProcessor.readLines(startLine, count);
             this._panel.webview.postMessage({

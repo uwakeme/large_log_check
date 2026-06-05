@@ -74,24 +74,12 @@ export class LogProcessor {
 
     /**
      * 获取文件总行数,带进度回调。
-     * 复用 processLines 的"行数+时间"双阈值节流,保证数据少时也能持续看到进度推进。
+     * 直接把回调透传给 processLines — 它内部已经有"行数+时间"双阈值节流,
+     * 不用再写第二份。结束时再补一次终值回调,保证 UI 看到 100%。
      */
     async getTotalLines(progressCallback?: (currentLines: number) => void): Promise<number> {
-        let lastReported = 0;
-        let lastReportedAt = 0;
-        this.totalLines = await this.processLines(0, (count, _line, n) => {
-            if (progressCallback) {
-                const now = Date.now();
-                if (n - lastReported >= PROGRESS_REPORT_INTERVAL ||
-                    (n > lastReported && now - lastReportedAt >= PROGRESS_THROTTLE_MS)) {
-                    progressCallback(n);
-                    lastReported = n;
-                    lastReportedAt = now;
-                }
-            }
-            return n;
-        });
-        if (progressCallback && this.totalLines > lastReported) {
+        this.totalLines = await this.processLines(0, (_count, _line, n) => n, progressCallback);
+        if (progressCallback && this.totalLines > 0) {
             progressCallback(this.totalLines);
         }
         return this.totalLines;
