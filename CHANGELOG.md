@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **新增切换主题功能** — 在「设置」面板里可切换默认(跟随 VSCode) / NEON.CYBER / AURORA.GLASS / HOLO.PRISM,立即生效。也可在 `big-log-viewer.theme` 中配置。
+
 ### Fixed
 - 修复打开日志文件时进度条卡 0%、一直停留在加载页面、首次打开闪一下的问题
 

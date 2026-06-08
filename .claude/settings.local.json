@@ -7,7 +7,14 @@
       "Bash(npm run *)",
       "Bash(npx eslint *)",
       "Bash(node *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Read(//c/Users/DELL/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python3 scripts/search.py \"developer tools dashboard log viewer futuristic tech high-end\" --design-system -p \"BigLogViewer\")",
+      "Bash(python3 \"C:/Users/DELL/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"developer tools dashboard log viewer futuristic tech high-end\" --design-system -p \"BigLogViewer\")",
+      "Read(//tmp/**)",
+      "Bash(PYTHONIOENCODING=utf-8 python3 \"C:/Users/DELL/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"developer dashboard\" --design-system -p \"BigLogViewer\")",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(grep -n \"\\\\.toolbar\\\\s*{\\\\|\\\\.filter-panel\\\\s*{\\\\|\\\\.filter-panel,\" media/themes.css)"
     ]
   }
 }

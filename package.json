@@ -113,6 +113,23 @@
           "minimum": 20,
           "maximum": 1000,
           "description": "时间线采样点数量，数值越大越精细但计算时间越长。"
+        },
+        "big-log-viewer.theme": {
+          "type": "string",
+          "enum": [
+            "default",
+            "neon",
+            "aurora",
+            "holo"
+          ],
+          "default": "default",
+          "enumDescriptions": [
+            "默认主题(跟随 VSCode 当前主题)",
+            "NEON.CYBER — 赛博朋克终端(纯黑+霓虹)",
+            "AURORA.GLASS — 玻璃拟态(深蓝紫+极光)",
+            "HOLO.PRISM — 全息棱镜(炭灰+渐变描边)"
+          ],
+          "description": "日志查看器的视觉主题。也可在工具栏的「主题」按钮中临时切换。"
         }
       }
     }

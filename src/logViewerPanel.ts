@@ -187,6 +187,18 @@ export class LogViewerPanel {
                     case 'updateSettings':
                         await this.updateSettings(message.data);
                         break;
+                    case 'updateTheme':
+                        // 用户在工具栏切换主题 — 同步到 VSCode user-level 配置
+                        // 用 Global 作用域,而不是 Workspace,这样主题跟随用户
+                        // 而不是跟随项目(每个人的眼睛偏好不同)。
+                        if (message.data && typeof message.data.theme === 'string') {
+                            const allowed = ['default', 'neon', 'aurora', 'holo'];
+                            if (allowed.includes(message.data.theme)) {
+                                const config = vscode.workspace.getConfiguration('big-log-viewer');
+                                await config.update('theme', message.data.theme, vscode.ConfigurationTarget.Global);
+                            }
+                        }
+                        break;
                 }
             },
             null,
@@ -602,6 +614,9 @@ private async filterByLevel(levels: string[]) {
         const searchDebounceMs = config.get<number>('search.debounceMs', 400);
         const collapseMinRepeatCount = config.get<number>('collapse.minRepeatCount', 2);
         const timelineSamplePoints = config.get<number>('timeline.samplePoints', 200);
+        // 主题是字符串 enum,host 端唯一来源是 VSCode 配置;
+        // webview 端的 localStorage 只是"未收到 config 前的占位值"。
+        const theme = config.get<string>('theme', 'default');
 
         this._timelineSampleCount = timelineSamplePoints;
 
@@ -610,7 +625,8 @@ private async filterByLevel(levels: string[]) {
             data: {
                 searchDebounceMs,
                 collapseMinRepeatCount,
-                timelineSamplePoints
+                timelineSamplePoints,
+                theme
             }
         });
     }
@@ -700,6 +716,9 @@ private async filterByLevel(levels: string[]) {
         const styleUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.css')
         );
+        const themesUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'themes.css')
+        );
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.js')
         );
@@ -712,6 +731,7 @@ private async filterByLevel(levels: string[]) {
         // 用占位符替换为真实路径
         return html
             .replace(/%%WEBVIEW_CSS%%/g, styleUri.toString())
+            .replace(/%%THEMES_CSS%%/g, themesUri.toString())
             .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }

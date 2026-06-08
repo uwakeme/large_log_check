@@ -24,6 +24,15 @@ body {
     gap: 10px;
     align-items: flex-start;
     flex-wrap: wrap;
+    /* 必须给 .toolbar 一个独立的 stacking context 并提升 z-index:
+     * AURORA.GLASS 等主题会给 .toolbar / .filter-panel 同时加 backdrop-filter,
+     * backdrop-filter 会创建新的 stacking context。此时工具栏里的下拉菜单
+     * (主题选择器 / 更多) 的 z-index: 1000 只在工具栏自己的上下文里生效,
+     * 而 filter-panel 是兄弟节点,DOM 顺序在后面,会绘制在下拉上方。
+     * 显式把 .toolbar 提到 z-index: 50,就能让它盖住其他面板,菜单正常显示。
+     * 其他主题虽然没 backdrop-filter,加上这个声明也完全无害。 */
+    position: relative;
+    z-index: 50;
 }
 
 .file-info {
@@ -288,6 +297,11 @@ button .codicon {
     gap: 10px;
     align-items: center;
     flex-wrap: wrap;
+    /* 与 .toolbar 的 z-index 配合,显式声明一个低于工具栏的 z-index,
+     * 防止 backdrop-filter 创建的隐式 stacking context 在某些浏览器下
+     * 渲染顺序不一致。 */
+    position: relative;
+    z-index: 1;
 }
 
 /* 筛选状态提示面板 */
@@ -320,6 +334,9 @@ button .codicon {
     border-radius: 5px;
     margin-bottom: 10px;
     overflow: hidden;
+    /* 显式声明 stacking context,避免与 .toolbar 的下拉菜单互相遮挡 */
+    position: relative;
+    z-index: 1;
 }
 
 .timeline-header {

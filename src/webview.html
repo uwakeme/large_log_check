@@ -6,6 +6,7 @@
     <title>日志查看器</title>
     <!-- 样式从扩展侧注入真实路径，这里使用占位符 -->
     <link rel="stylesheet" href="%%WEBVIEW_CSS%%">
+    <link rel="stylesheet" href="%%THEMES_CSS%%">
     <link rel="stylesheet" href="%%CODICONS_CSS%%">
     <!--
       早期握手:必须先于 webview.js 注册 message 监听器。
@@ -558,6 +559,16 @@
                     <label for="settingTimelineSample">时间线采样点数</label>
                     <input type="number" id="settingTimelineSample" min="20" max="1000" step="10">
                     <div class="hint">用于生成时间线的采样点数量，建议 100~400 之间。</div>
+                </div>
+                <div class="form-group">
+                    <label for="settingTheme">主题</label>
+                    <select id="settingTheme" style="width: 100%; padding: 6px 8px;">
+                        <option value="default">默认（跟随 VSCode）</option>
+                        <option value="neon">NEON.CYBER</option>
+                        <option value="aurora">AURORA.GLASS</option>
+                        <option value="holo">HOLO.PRISM</option>
+                    </select>
+                    <div class="hint">切换主题立即生效，无需点保存。也可在 <code>settings.json</code> 中配置 <code>big-log-viewer.theme</code>。</div>
                 </div>
             </div>
             <div class="modal-footer">

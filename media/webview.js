@@ -28,6 +28,11 @@ let isCalculatingPages = false; // 是否正在计算页面范围
 let calculationProgress = 0; // 计算进度（0-100）
 let currentCalculationId = 0; // 当前计算任务ID，用于取消旧任务
 let lastHoveredBucketIndex = null; // 时间线当前悬停的桶索引
+// 当前主题 — 在顶部 init 阶段就从 localStorage 读,避免 FOUC
+let currentTheme = (function () {
+    try { return localStorage.getItem('bigLogViewerTheme') || 'default'; }
+    catch (e) { return 'default'; }
+})();
 // 当前内存中 allLines[0] 对应的文件行索引（从 0 开始），用于统一后台增量加载起点
 let baseLineOffset = 0;
 
@@ -448,6 +453,15 @@ function dispatchWebviewMessage(message) {
                     timelineSamplePoints: typeof message.data.timelineSamplePoints === 'number' ? message.data.timelineSamplePoints : userSettings.timelineSamplePoints
                 };
                 console.log('已从扩展配置同步设置:', userSettings);
+            }
+            // 主题:host 端配置(对应 big-log-viewer.theme)优先于 localStorage,
+            // 这样 workspace 设置能强制覆盖 — localStorage 只是"未收到 config 前的占位值"。
+            if (message.data && typeof message.data.theme === 'string') {
+                const hostTheme = message.data.theme;
+                if (VALID_THEMES.includes(hostTheme) && hostTheme !== currentTheme) {
+                    applyTheme(hostTheme);
+                    try { localStorage.setItem('bigLogViewerTheme', hostTheme); } catch (e) {}
+                }
             }
             break;
         case 'loadingProgress':
@@ -2199,6 +2213,65 @@ document.addEventListener('click', function (event) {
         dropdown.classList.remove('show');
     }
 });
+
+// ========== 主题切换 ==========
+// 4 个主题:default(跟随 VSCode)/ neon(赛博朋克)/ aurora(玻璃)/ holo(全息)
+const VALID_THEMES = ['default', 'neon', 'aurora', 'holo'];
+const THEME_LABELS = {
+    default: '默认(跟随 VSCode)',
+    neon:    'NEON.CYBER',
+    aurora:  'AURORA.GLASS',
+    holo:    'HOLO.PRISM'
+};
+
+/**
+ * 应用主题到 DOM(只改 body[data-theme],不写 localStorage / 不发消息)。
+ * 由 setTheme 统一调度,确保调用方要么"完全切"(应用+持久化+通知)
+ * 要么"只是占位"(只应用,例如 webview 启动时从 localStorage 读出来立刻贴上去)。
+ */
+function applyTheme(themeName) {
+    if (!VALID_THEMES.includes(themeName)) {
+        themeName = 'default';
+    }
+    currentTheme = themeName;
+    if (themeName === 'default') {
+        // 删除 data-theme 属性,让 webview.css 的默认规则生效
+        delete document.body.dataset.theme;
+    } else {
+        document.body.dataset.theme = themeName;
+    }
+}
+
+/**
+ * 用户在设置面板里切换主题(<select> 的 change 事件)。
+ * 1. 立即应用到 DOM
+ * 2. 写 localStorage(用户级别的偏好,跨会话保留)
+ * 3. 通知 host 持久化到 big-log-viewer.theme(VSCode 用户级配置)
+ * 4. toast 提示
+ */
+function setTheme(themeName) {
+    applyTheme(themeName);
+    try { localStorage.setItem('bigLogViewerTheme', themeName); } catch (e) { /* private mode */ }
+    if (vscode && vscode.postMessage) {
+        vscode.postMessage({ command: 'updateTheme', data: { theme: themeName } });
+    }
+    if (typeof showToast === 'function') {
+        showToast(`主题已切换: ${THEME_LABELS[themeName] || themeName}`);
+    }
+}
+
+// 初始化时立即应用 — 避免默认主题闪一下再切到用户保存的主题
+applyTheme(currentTheme);
+
+// 主题切换下拉框的 change 监听(只绑定一次,放在脚本顶层,
+// 而不是 showSettingsModal 内部,避免每次打开设置面板都重新绑定)。
+(function initThemeSelectListener() {
+    const sel = document.getElementById('settingTheme');
+    if (!sel) { return; }
+    sel.addEventListener('change', function () {
+        setTheme(sel.value);
+    });
+})();
 
 function addOrEditComment(lineNumber) {
     console.log('addOrEditComment 被调用，行号:', lineNumber);
@@ -5348,6 +5421,12 @@ function showSettingsModal() {
     const timelineInput = document.getElementById('settingTimelineSample');
     if (timelineInput) {
         timelineInput.value = userSettings.timelineSamplePoints;
+    }
+
+    // 主题下拉框:把当前主题(<body data-theme> 或 'default')回填到 <select>。
+    const themeSelect = document.getElementById('settingTheme');
+    if (themeSelect) {
+        themeSelect.value = currentTheme;
     }
 
     const modal = document.getElementById('settingsModal');
