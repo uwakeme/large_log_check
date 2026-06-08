@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.2.7] - 2026-06-08
 ### Added
 - **新增切换主题功能** — 在「设置」面板里可切换默认(跟随 VSCode) / NEON.CYBER / AURORA.GLASS / HOLO.PRISM,立即生效。也可在 `big-log-viewer.theme` 中配置。
 
