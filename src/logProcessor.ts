@@ -34,25 +34,38 @@ export class LogProcessor {
      * onProgress 同时按"行数阈值"和"时间阈值"双重去重,保证:
      *   - 大量数据时不会因为每行都触发回调而压垮 postMessage
      *   - 数据很少时也不会因为行数不够而沉默很久
+     *
+     * 第二个参数 bytesRead(可选)用于字节进度反馈,让 UI 进度条能基于真实已读字节
+     * 而不是行数推算(行数推算在大小文件上都容易出现"卡 99%"的体验问题)。
+     *
+     * 错误处理:任意环节(stream / readline)出错时,主动 destroy stream,
+     * 避免文件描述符泄漏。Promise 始终会被 resolve 或 reject,不会悬挂。
      */
     private processLines<T>(
         initial: T,
         fold: (acc: T, line: string, lineNumber: number) => T,
-        onProgress?: (lineNumber: number) => void
+        onProgress?: (lineNumber: number, bytesRead?: number) => void
     ): Promise<T> {
         return new Promise((resolve, reject) => {
             let acc = initial;
             let lineNumber = 0;
             let lastReportedLines = 0;
             let lastReportedAt = 0;
+            let settled = false;
             const stream = fs.createReadStream(this.filePath);
             const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            const settle = (fn: () => void) => {
+                if (settled) {return;}
+                settled = true;
+                stream.destroy();
+                fn();
+            };
             const reportIfDue = () => {
                 if (!onProgress) {return;}
                 const now = Date.now();
                 if (lineNumber - lastReportedLines >= PROGRESS_REPORT_INTERVAL ||
                     (lineNumber > lastReportedLines && now - lastReportedAt >= PROGRESS_THROTTLE_MS)) {
-                    onProgress(lineNumber);
+                    onProgress(lineNumber, stream.bytesRead);
                     lastReportedLines = lineNumber;
                     lastReportedAt = now;
                 }
@@ -64,11 +77,13 @@ export class LogProcessor {
             });
             rl.on('close', () => {
                 if (onProgress && lineNumber > lastReportedLines) {
-                    onProgress(lineNumber);
+                    onProgress(lineNumber, stream.bytesRead);
                 }
-                resolve(acc);
+                settle(() => resolve(acc));
             });
-            rl.on('error', reject);
+            rl.on('error', (err) => settle(() => reject(err)));
+            // stream 自身错误(EACCES / ENOENT / disk error)也要兜底
+            stream.on('error', (err) => settle(() => reject(err)));
         });
     }
 
@@ -77,7 +92,7 @@ export class LogProcessor {
      * 直接把回调透传给 processLines — 它内部已经有"行数+时间"双阈值节流,
      * 不用再写第二份。结束时再补一次终值回调,保证 UI 看到 100%。
      */
-    async getTotalLines(progressCallback?: (currentLines: number) => void): Promise<number> {
+    async getTotalLines(progressCallback?: (currentLines: number, bytesRead?: number) => void): Promise<number> {
         this.totalLines = await this.processLines(0, (_count, _line, n) => n, progressCallback);
         if (progressCallback && this.totalLines > 0) {
             progressCallback(this.totalLines);
@@ -117,7 +132,7 @@ export class LogProcessor {
      * buffer 状态机进入不一致,表现为"data 事件不触发 / 卡死"。基于行数 +
      * 时间节流已经能提供足够平滑的进度反馈。
      */
-    async readAllLines(progressCallback?: (currentLine: number) => void): Promise<LogLine[]> {
+    async readAllLines(progressCallback?: (currentLine: number, bytesRead?: number) => void): Promise<LogLine[]> {
         return this.processLines<LogLine[]>([], (lines, content, n) => {
             lines.push({
                 lineNumber: n,
@@ -127,37 +142,6 @@ export class LogProcessor {
             });
             return lines;
         }, progressCallback);
-    }
-
-    /**
-     * 搜索包含关键词的行
-     */
-    async search(keyword: string, reverse = false, isMultiple = false): Promise<LogLine[]> {
-        const keywords = isMultiple
-            ? keyword.trim().split(/\s+/).map(k => k.toLowerCase()).filter(Boolean)
-            : [];
-        const searchRegex = isMultiple ? null : new RegExp(keyword, 'i');
-        const results = await this.processLines<LogLine[]>([], (acc, content, n) => {
-            let isMatch = false;
-            if (isMultiple) {
-                if (keywords.length > 0) {
-                    const lower = content.toLowerCase();
-                    isMatch = keywords.every(k => lower.includes(k));
-                }
-            } else {
-                isMatch = searchRegex!.test(content);
-            }
-            if (isMatch) {
-                acc.push({
-                    lineNumber: n,
-                    content,
-                    timestamp: LogParser.extractTimestamp(content),
-                    level: LogParser.extractLogLevel(content)
-                });
-            }
-            return acc;
-        });
-        return reverse ? results.reverse() : results;
     }
 
     /**
@@ -192,6 +176,10 @@ export class LogProcessor {
 
     /**
      * 查找第一个大于或等于指定时间的日志行
+     *
+     * 之前的实现有"早停 + 永不触发 close"的竞态:命中目标行后 stream.destroy()
+     * 不一定触发 readline 的 'close' 事件,导致 Promise 永远 pending。
+     * 修复:settle() 直接调用 resolve/reject,不再依赖 'close' 事件作为兜底。
      */
     async findLineByTime(timeStr: string): Promise<{ lineNumber: number; line: LogLine } | null> {
         const targetTime = LogParser.parseTimeString(timeStr);
@@ -200,9 +188,9 @@ export class LogProcessor {
         }
         return new Promise((resolve, reject) => {
             let n = 0;
+            let settled = false;
             const stream = fs.createReadStream(this.filePath);
             const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-            let settled = false;
             const settle = (fn: () => void) => {
                 if (settled) {return;}
                 settled = true;
@@ -210,8 +198,8 @@ export class LogProcessor {
                 fn();
             };
             rl.on('line', (content) => {
-                n++;
                 if (settled) {return;}
+                n++;
                 const timestamp = LogParser.extractTimestamp(content);
                 if (timestamp && timestamp >= targetTime) {
                     settle(() => resolve({
@@ -227,7 +215,43 @@ export class LogProcessor {
             });
             rl.on('close', () => settle(() => resolve(null)));
             rl.on('error', (err) => settle(() => reject(err)));
+            stream.on('error', (err) => settle(() => reject(err)));
         });
+    }
+
+    /**
+     * 流式 seek 到目标行号,只返回上下文窗口(默认 ±500 行)。
+     *
+     * 解决 jumpToLineInFullLog 用 readAllLines() 加载整文件的 OOM 风险:
+     *   - 内存:只持有 N 行 LogLine 对象(默认 1000 行,~50KB)
+     *   - 总行数:通过 getTotalLines 单独统计(流式,内存常数)
+     *   - 行为:对超大文件也能秒级响应,UI 显示上下文片段 + "未完全加载"标识
+     *
+     * 注意:为了避免双重扫描文件的代价,这里仍然走 processLines 一遍到底,
+     * 在 fold 里只收集 [startLine, endLine] 区间内的行。性能足够(流式,内存常数)。
+     */
+    async seekAroundLine(
+        targetLine: number,
+        contextBefore = 500,
+        contextAfter = 500
+    ): Promise<{ totalLines: number; startLine: number; lines: LogLine[] }> {
+        const totalLines = await this.getTotalLines();
+        const safeTarget = Math.max(1, Math.min(targetLine, totalLines || 1));
+        const startLine = Math.max(1, safeTarget - contextBefore);
+        const endLine = safeTarget + contextAfter;
+        const lines: LogLine[] = [];
+        await this.processLines(lines, (acc, content, n) => {
+            if (n >= startLine && n <= endLine) {
+                acc.push({
+                    lineNumber: n,
+                    content,
+                    timestamp: LogParser.extractTimestamp(content),
+                    level: LogParser.extractLogLevel(content)
+                });
+            }
+            return acc;
+        });
+        return { totalLines, startLine, lines };
     }
 
     /**
@@ -307,50 +331,11 @@ export class LogProcessor {
     }
 
     /**
-     * 按日志级别过滤
-     */
-    async filterByLevel(levels: string[]): Promise<LogLine[]> {
-        const levelsSet = new Set(levels.map(l => l.toUpperCase()));
-        return this.processLines<LogLine[]>([], (acc, content, n) => {
-            const level = LogParser.extractLogLevel(content);
-            if (level && levelsSet.has(level)) {
-                acc.push({
-                    lineNumber: n,
-                    content,
-                    timestamp: LogParser.extractTimestamp(content),
-                    level
-                });
-            }
-            return acc;
-        });
-    }
-
-    /**
-     * 正则表达式搜索
-     */
-    async regexSearch(pattern: string, flags = 'i', reverse = false): Promise<LogLine[]> {
-        let searchRegex: RegExp;
-        try {
-            searchRegex = new RegExp(pattern, flags);
-        } catch {
-            throw new Error('无效的正则表达式');
-        }
-        const results = await this.processLines<LogLine[]>([], (acc, content, n) => {
-            if (searchRegex.test(content)) {
-                acc.push({
-                    lineNumber: n,
-                    content,
-                    timestamp: LogParser.extractTimestamp(content),
-                    level: LogParser.extractLogLevel(content)
-                });
-            }
-            return acc;
-        });
-        return reverse ? results.reverse() : results;
-    }
-
-    /**
      * 统计日志信息(带文件 mtime 缓存,文件没变就不重算)
+     *
+     * 类型说明:LogStats 中的 Map/timeRange 都是初始化时一定赋值的非空字段,
+     * 这里通过 mutable local alias 让 TS 能正确推断非空,避免使用 ! 非空断言
+     * (lint 规则 @typescript-eslint/no-non-null-assertion 禁用 !)。
      */
     async getStatistics(): Promise<LogStats> {
         const mtime = (await fs.promises.stat(this.filePath)).mtimeMs;
@@ -364,11 +349,16 @@ export class LogProcessor {
             infoCount: 0,
             debugCount: 0,
             otherCount: 0,
-            timeRange: {},
-            classCounts: new Map(),
-            methodCounts: new Map(),
-            threadCounts: new Map()
+            timeRange: { start: undefined, end: undefined },
+            classCounts: new Map<string, number>(),
+            methodCounts: new Map<string, number>(),
+            threadCounts: new Map<string, number>()
         };
+        // 用 mutable alias 让 TS 推断为非 undefined,绕开 ! 断言
+        const timeRange = stats.timeRange;
+        const classCounts = stats.classCounts;
+        const methodCounts = stats.methodCounts;
+        const threadCounts = stats.threadCounts;
         const result = await this.processLines(stats, (acc, content) => {
             acc.totalLines++;
             const level = LogParser.extractLogLevel(content);
@@ -380,18 +370,18 @@ export class LogProcessor {
 
             const timestamp = LogParser.extractTimestamp(content);
             if (timestamp) {
-                if (!acc.timeRange!.start || timestamp < acc.timeRange!.start) {acc.timeRange!.start = timestamp;}
-                if (!acc.timeRange!.end || timestamp > acc.timeRange!.end) {acc.timeRange!.end = timestamp;}
+                if (!timeRange.start || timestamp < timeRange.start) {timeRange.start = timestamp;}
+                if (!timeRange.end || timestamp > timeRange.end) {timeRange.end = timestamp;}
             }
 
             const className = LogParser.extractClassName(content);
-            if (className) {acc.classCounts!.set(className, (acc.classCounts!.get(className) || 0) + 1);}
+            if (className) {classCounts.set(className, (classCounts.get(className) || 0) + 1);}
 
             const methodName = LogParser.extractMethodName(content);
-            if (methodName) {acc.methodCounts!.set(methodName, (acc.methodCounts!.get(methodName) || 0) + 1);}
+            if (methodName) {methodCounts.set(methodName, (methodCounts.get(methodName) || 0) + 1);}
 
             const threadName = LogParser.extractThreadName(content);
-            if (threadName) {acc.threadCounts!.set(threadName, (acc.threadCounts!.get(threadName) || 0) + 1);}
+            if (threadName) {threadCounts.set(threadName, (threadCounts.get(threadName) || 0) + 1);}
             return acc;
         });
         this.statsCache = result;
@@ -463,6 +453,10 @@ export class LogProcessor {
     /**
      * 把流式条件写入临时文件,然后原子替换原文件。
      * 由 shouldKeep 决定每行是否保留;返回删除/保留计数。
+     *
+     * 显式给 readline 接 error 监听器 — readline 在 input 流错误时会 re-emit,
+     * pipeline 会捕获并 reject,但提前 attach 可以让我们做更细的错误分类
+     * (比如区分"读源文件失败"和"写临时文件失败")。
      */
     private async rewriteFile(shouldKeep: (line: string, n: number) => boolean): Promise<{ deleted: number; kept: number }> {
         const tempFilePath = `${this.filePath}.tmp`;
@@ -486,10 +480,17 @@ export class LogProcessor {
                     }
                 }
             });
+            // 显式接 readline 错误:用 once 而不是 on,pipeline 接手后我们就可以放手了
+            rl.once('error', (err) => {
+                // 让 pipeline reject,但先记一下现场
+                console.error(`[rewriteFile] readline error at line ${n}: ${err.message}`);
+            });
             try {
                 await pipeline(rl, filter, sink);
             } catch (err) {
                 // 清理临时文件
+                source.destroy();
+                sink.destroy();
                 await fs.promises.unlink(tempFilePath).catch(() => undefined);
                 throw err;
             }

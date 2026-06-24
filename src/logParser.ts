@@ -12,13 +12,17 @@ export interface LogStats {
     infoCount: number;
     debugCount: number;
     otherCount: number;
-    timeRange?: {
+    /**
+     * 时间范围。start/end 在解析不到任何时间戳的日志中可能仍是 undefined,
+     * 但 timeRange 容器本身在 getStatistics() 中始终会被初始化。
+     */
+    timeRange: {
         start?: Date;
         end?: Date;
     };
-    classCounts?: Map<string, number>;
-    methodCounts?: Map<string, number>;
-    threadCounts?: Map<string, number>;
+    classCounts: Map<string, number>;
+    methodCounts: Map<string, number>;
+    threadCounts: Map<string, number>;
 }
 
 /**
@@ -48,11 +52,12 @@ export class LogParser {
         'DEBUG', 'TRACE', 'VERBOSE'
     ]);
 
-    // 预编译的提取正则
-    private static readonly threadAfterBracket = /^\[[^\]]+\]\s+([a-zA-Z][a-zA-Z0-9-_.]*)/;
-    private static readonly methodPattern = /\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/;
-    private static readonly classInBrackets = /\]\s+([a-z][a-z0-9_.]*[A-Z][a-zA-Z0-9_]*)/;
-    private static readonly classAnywhere = /\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.[A-Z][a-zA-Z0-9_]*)\b/;
+    // 预编译的提取正则(用 \p{L}/\p{N} 支持中文标识符,Java 标识符允许 Unicode 字母)
+    private static readonly methodPattern = /\[([\p{L}_][\p{L}\p{N}_]*):\d+\]/u;
+    private static readonly classInBrackets = /\]\s+([\p{L}_][\p{L}\p{N}_.]*\p{Lu}[\p{L}\p{N}_]*)/u;
+    // 包名段允许任意字母,类名段(最后一段)允许任意字母 — 中文标识符无大小写概念,
+    // 用 \p{Lu} 会漏掉纯中文类名(如 "中文.示例类")
+    private static readonly classAnywhere = /([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*\.[\p{L}_$][\p{L}\p{N}_$]*)/u;
     private static readonly levelQuickMatch = /\d{2}:\d{2}:\d{2}[^\w]+(ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE)\b/i;
     private static readonly levelBracketForm = /\[(ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE)\]/i;
     private static readonly levelBareForm = /\b(ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE)\b/i;
@@ -99,35 +104,28 @@ export class LogParser {
     /**
      * 从日志行中提取线程名。
      * 排除 [方法名:行号] 格式和日志级别 token。
-     * 取第一个像线程名的方括号内容（不再全量扫描所有方括号）。
+     *
+     * 历史 bug:早期实现的"快速路径"只看方括号后面的 token,不看括号本身,
+     * 导致 [ERROR] something / [main:42] inside 这样的行被错认为有线程名。
+     * 修复后统一走一般路径,扫描所有方括号,逐一排除级别和方法括号。
      */
     static extractThreadName(line: string): string | undefined {
-        // 快速路径：行首第一个 [...] 后跟字母开头的 token 往往是线程名
-        const afterBracket = line.match(LogParser.threadAfterBracket);
-        if (afterBracket) {
-            const candidate = afterBracket[1];
-            if (!LogParser.logLevelTokens.has(candidate.toUpperCase())) {
-                return candidate;
-            }
-        }
-
-        // 一般路径：扫所有方括号,取第一个不像方法名/级别且像线程名的
         const matches = line.match(/\[([^\]]+)\]/g);
         if (!matches) {
             return undefined;
         }
         for (const m of matches) {
             const content = m.slice(1, -1);
-            // 排除 [方法名:行号]
-            if (/^[a-zA-Z_][a-zA-Z0-9_]*:\d+$/.test(content)) {
+            // 排除 [方法名:行号](支持 Unicode 标识符)
+            if (/^[\p{L}_][\p{L}\p{N}_]*:\d+$/u.test(content)) {
                 continue;
             }
             // 排除日志级别
             if (LogParser.logLevelTokens.has(content.toUpperCase())) {
                 continue;
             }
-            // 线程名规则:字母开头,只含字母数字下划线连字符
-            if (/^[a-zA-Z][a-zA-Z0-9-_]*$/.test(content)) {
+            // 线程名规则:字母开头,只含字母数字下划线连字符(Unicode 友好)
+            if (/^[\p{L}_][\p{L}\p{N}\-_.]*$/u.test(content)) {
                 return content;
             }
         }
