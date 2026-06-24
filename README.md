@@ -275,14 +275,16 @@ vsce publish
 ```
 large_log_check/
 ├── src/
-│   ├── extension.ts          # 扩展主入口，注册命令和事件
-│   ├── logViewerPanel.ts     # WebView面板管理，负责注入 HTML/CSS/JS
-│   ├── logProcessor.ts       # 日志处理核心逻辑（读取、搜索、删除）
-│   └── webview.html          # WebView HTML 模板（结构为主）
+│   ├── extension.ts          # 扩展主入口,注册命令和事件
+│   ├── logViewerPanel.ts     # WebView 面板管理,负责注入 HTML/CSS/JS 和消息桥接
+│   ├── logProcessor.ts       # 日志处理核心逻辑(流式读取 / 过滤 / 删除 / 统计 / 时间线采样)
+│   ├── logParser.ts          # 纯函数日志解析工具(时间戳 / 级别 / 类名 / 方法名 / 线程名)
+│   └── webview.html          # WebView HTML 模板(结构为主)
 ├── media/
 │   ├── webview.css           # WebView 基础样式(默认主题)
 │   ├── themes.css            # 主题覆盖层(NEON.CYBER / AURORA.GLASS / HOLO.PRISM)
 │   └── webview.js            # WebView 前端逻辑
+├── test/                     # 单元测试(目前覆盖 logParser 纯函数)
 ├── out/                      # TypeScript 编译输出目录
 ├── package.json              # 项目配置和依赖
 ├── tsconfig.json             # TypeScript 编译配置

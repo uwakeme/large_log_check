@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **修复跳转到行号在超大文件上卡死/内存溢出** — 改为流式 seek,只读取目标行 ±500 行上下文,无论文件多大都是秒级响应
+- **修复按时间定位偶发卡死** — 部分场景下「按时间定位」命令在命中目标后不返回,现在彻底修复
+- **修复加载进度条在大文件上永远卡 99%** — 进度按真实已读字节计算,小文件秒到 100%,大文件平滑推进
+- **修复错误提示乱码** — 部分场景下方法名相关的错误提示会出现乱码字符
+- **修复纯中文类名识别失败** — Java 类名包含中文(如 `中文.示例类`)时,统计/高亮/筛选全部失效,现在能正确识别
 
 ## [1.2.7] - 2026-06-08
 ### Added

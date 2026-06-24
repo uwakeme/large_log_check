@@ -1,6 +1,16 @@
 # Architecture
 
-The extension has three runtime layers and four TypeScript source files. Knowing which layer owns a piece of state is the most important thing to internalize — most bugs come from putting state in the wrong place.
+The extension has three runtime layers and five TypeScript source files. Knowing which layer owns a piece of state is the most important thing to internalize — most bugs come from putting state in the wrong place.
+
+```
+src/extension.ts            → command registration, lifecycle
+src/logViewerPanel.ts       → WebView management, message bridge (host side)
+src/logProcessor.ts         → file I/O, stream-based read/search/filter/delete
+src/logParser.ts            → PURE functions (no I/O), extract timestamp/level/class/method/thread
+src/webview.html            → WebView HTML scaffold (consumed via logViewerPanel._getHtmlForWebview)
+```
+
+`logParser.ts` is intentionally I/O-free so it can be unit-tested in isolation and eventually shared between host and webview (currently the webview has its own copy of the extraction logic — see "Known Limitations" in the review notes).
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
