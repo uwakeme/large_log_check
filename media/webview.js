@@ -1539,19 +1539,19 @@ function highlightKeywords(content, keyword) {
                     const threadNameMatch = matchText.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
                     const threadName = threadNameMatch ? threadNameMatch[1] : '';
                     if (!threadName) continue; // 跳过无效的线程名
-                    const safeThreadName = threadName.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${safeThreadName}')" title="点击筛选线程: ${threadName}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
+                    const safeThreadName = escapeAttr(threadName);
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${safeThreadName}')" title="点击筛选线程: ${escapeAttr(threadName)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '类名') {
                     const className = matchText.trim();
                     if (!className) continue; // 跳过无效的类名
-                    const safeClassName = className.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${safeClassName}')" title="点击筛选类: ${className}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
+                    const safeClassName = escapeAttr(className);
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${safeClassName}')" title="点击筛选类: ${escapeAttr(className)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '方法名') {
                     const methodMatch = matchText.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
                     const methodName = methodMatch ? methodMatch[1] : '';
                     if (!methodName) continue; // 跳过无效的方法名
-                    const safeMethodName = methodName.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${safeMethodName}')" title="点击筛选方法: ${methodName}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
+                    const safeMethodName = escapeAttr(methodName);
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${safeMethodName}')" title="点击筛选方法: ${escapeAttr(methodName)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else {
                     html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}</span>`;
                 }
@@ -1633,6 +1633,22 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * 转义 HTML 属性值。
+ * 同时处理单/双引号、反引号、&、<、> — 不依赖外层引号类型,
+ * 避免「漏 escape 双引号导致 title 属性被截断」这类历史 bug。
+ */
+function escapeAttr(text) {
+    if (text === undefined || text === null) {return '';}
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/`/g, '&#96;');
 }
 
 function escapeRegex(str) {
@@ -1864,107 +1880,66 @@ function showStatsModal(stats) {
     const threadStats = stats.threadCounts ?
         Array.from(Object.entries(stats.threadCounts)).sort((a, b) => b[1] - a[1]).slice(0, 10) : [];
 
-    grid.innerHTML = `
-        <div class="stats-card">
-            <h3>总行数</h3>
-            <div class="value">${stats.totalLines}</div>
-        </div>
-        <div class="stats-card">
-            <h3>ERROR</h3>
-            <div class="value" style="color: #f14c4c;">${stats.errorCount}</div>
-        </div>
-        <div class="stats-card">
-            <h3>WARN</h3>
-            <div class="value" style="color: #cca700;">${stats.warnCount}</div>
-        </div>
-        <div class="stats-card">
-            <h3>INFO</h3>
-            <div class="value" style="color: #4fc1ff;">${stats.infoCount}</div>
-        </div>
-        <div class="stats-card">
-            <h3>DEBUG</h3>
-            <div class="value" style="color: #b267e6;">${stats.debugCount}</div>
-        </div>
-        <div class="stats-card">
-            <h3>其他</h3>
-            <div class="value">${stats.otherCount}</div>
-        </div>
-    `;
+    // 用 DocumentFragment 一次 append,避免之前 4 次 innerHTML += 带来的 O(n²) 重建。
+    // 可点击行用 addEventListener + dataset 传值,不再拼接 onclick 字符串 — 彻底
+    // 消除 escape 地狱(history bug: `name.replace(/'/g, "\\'")` 漏 escape " 导致
+    // title 属性被截断)。
+    const frag = document.createDocumentFragment();
+
+    const simpleCard = (title, value, color) => {
+        const d = document.createElement('div');
+        d.className = 'stats-card';
+        d.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="value"${color ? ` style="color: ${color};"` : ''}>${value}</div>`;
+        return d;
+    };
+    frag.appendChild(simpleCard('总行数', stats.totalLines));
+    frag.appendChild(simpleCard('ERROR', stats.errorCount, '#f14c4c'));
+    frag.appendChild(simpleCard('WARN', stats.warnCount, '#cca700'));
+    frag.appendChild(simpleCard('INFO', stats.infoCount, '#4fc1ff'));
+    frag.appendChild(simpleCard('DEBUG', stats.debugCount, '#b267e6'));
+    frag.appendChild(simpleCard('其他', stats.otherCount));
 
     if (stats.timeRange && stats.timeRange.start) {
-        grid.innerHTML += `
-            <div class="stats-card" style="grid-column: 1 / -1;">
-                <h3>时间范围</h3>
-                <div style="font-size: 14px;">
-                    ${new Date(stats.timeRange.start).toLocaleString()} - 
-                    ${new Date(stats.timeRange.end).toLocaleString()}
-                </div>
-            </div>
-        `;
+        const range = document.createElement('div');
+        range.className = 'stats-card';
+        range.style.gridColumn = '1 / -1';
+        range.innerHTML = `<h3>时间范围</h3><div style="font-size: 14px;">${escapeHtml(new Date(stats.timeRange.start).toLocaleString())} - ${escapeHtml(new Date(stats.timeRange.end).toLocaleString())}</div>`;
+        frag.appendChild(range);
     }
 
-    // 添加类名统计
-    if (classStats.length > 0) {
-        grid.innerHTML += `
-            <div class="stats-card" style="grid-column: 1 / -1;">
-                <h3><i class="codicon codicon-symbol-class"></i> 最活跃的类 (Top 10)</h3>
-                <div style="font-size: 13px; margin-top: 10px;">
-                    ${classStats.map(([name, count]) =>
-            `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
-                              onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
-                              onmouseout="this.style.backgroundColor='transparent'"
-                              onclick="filterByClassName('${name.replace(/'/g, "\\'")}')"
-                              title="点击筛选包含此类的日志">
-                            <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
-                            <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
-                        </div>`
-        ).join('')}
-                </div>
-            </div>
-        `;
-    }
+    // Top-N 列表卡片:onclick 用 addEventListener + closure,参数不再走字符串拼接
+    const buildListCard = (title, iconClass, items, onClickFn) => {
+        if (items.length === 0) {return null;}
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'stats-card';
+        cardDiv.style.gridColumn = '1 / -1';
+        const listEl = document.createElement('div');
+        listEl.style.cssText = 'font-size: 13px; margin-top: 10px;';
+        cardDiv.innerHTML = `<h3><i class="codicon ${iconClass}"></i> ${escapeHtml(title)}</h3>`;
+        cardDiv.appendChild(listEl);
+        for (const [name, count] of items) {
+            const row = document.createElement('div');
+            row.style.cssText = 'padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;';
+            row.title = `点击筛选 ${title}`;
+            row.addEventListener('mouseover', () => { row.style.backgroundColor = 'var(--vscode-list-hoverBackground)'; });
+            row.addEventListener('mouseout', () => { row.style.backgroundColor = 'transparent'; });
+            row.addEventListener('click', () => onClickFn(name));
+            row.innerHTML = `<span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${escapeHtml(name)}</span><span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>`;
+            listEl.appendChild(row);
+        }
+        return cardDiv;
+    };
 
-    // 添加方法名统计
-    if (methodStats.length > 0) {
-        grid.innerHTML += `
-            <div class="stats-card" style="grid-column: 1 / -1;">
-                <h3><i class="codicon codicon-symbol-method"></i> 最常调用的方法 (Top 10)</h3>
-                <div style="font-size: 13px; margin-top: 10px;">
-                    ${methodStats.map(([name, count]) =>
-            `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
-                              onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
-                              onmouseout="this.style.backgroundColor='transparent'"
-                              onclick="filterByMethodName('${name.replace(/'/g, "\\'")}')"
-                              title="点击筛选包含此方法的日志">
-                            <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
-                            <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
-                        </div>`
-        ).join('')}
-                </div>
-            </div>
-        `;
-    }
+    const classCard = buildListCard('最活跃的类 (Top 10)', 'codicon-symbol-class', classStats, filterByClassName);
+    if (classCard) {frag.appendChild(classCard);}
+    const methodCard = buildListCard('最常调用的方法 (Top 10)', 'codicon-symbol-method', methodStats, filterByMethodName);
+    if (methodCard) {frag.appendChild(methodCard);}
+    const threadCard = buildListCard('最活跃的线程 (Top 10)', 'codicon-list-tree', threadStats, filterByThreadName);
+    if (threadCard) {frag.appendChild(threadCard);}
 
-    // 添加线程名统计
-    if (threadStats.length > 0) {
-        grid.innerHTML += `
-            <div class="stats-card" style="grid-column: 1 / -1;">
-                <h3><i class="codicon codicon-list-tree"></i> 最活跃的线程 (Top 10)</h3>
-                <div style="font-size: 13px; margin-top: 10px;">
-                    ${threadStats.map(([name, count]) =>
-            `<div style="padding: 5px 0; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; transition: background-color 0.2s;" 
-                              onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" 
-                              onmouseout="this.style.backgroundColor='transparent'"
-                              onclick="filterByThreadName('${name.replace(/'/g, "\\'")}')"
-                              title="点击筛选包含此线程的日志">
-                            <span style="font-weight: bold; color: var(--vscode-textLink-foreground);">${name}</span>
-                            <span style="float: right; color: var(--vscode-descriptionForeground);">${count} 次</span>
-                        </div>`
-        ).join('')}
-                </div>
-            </div>
-        `;
-    }
+    // 单次清空 + 一次 append,DOM 只重排一次
+    grid.innerHTML = '';
+    grid.appendChild(frag);
 
     document.getElementById('statsModal').style.display = 'block';
 }
@@ -2754,18 +2729,18 @@ function extractLogFields(line) {
         for (const match of bracketMatches) {
             const bracketContent = match.slice(1, -1); // 移除方括号
             
-            // 排除方法名格式 [methodName:lineNumber]
-            if (bracketContent.includes(':') && /^[a-zA-Z_][a-zA-Z0-9_]*:\d+$/.test(bracketContent)) {
+            // 排除方法名格式 [methodName:lineNumber](Unicode 友好,与 host 端一致)
+            if (bracketContent.includes(':') && /^[\p{L}_][\p{L}\p{N}_]*:\d+$/u.test(bracketContent)) {
                 continue;
             }
-            
+
             // 排除日志级别
             if (logLevels.includes(bracketContent.toUpperCase())) {
                 continue;
             }
-            
-            // 检查是否像线程名
-            if (/^[a-zA-Z][a-zA-Z0-9-_]*$/.test(bracketContent)) {
+
+            // 检查是否像线程名(Unicode 友好)
+            if (/^[\p{L}_][\p{L}\p{N}\-_.]*$/u.test(bracketContent)) {
                 threadName = bracketContent;
                 break;
             }
@@ -2774,13 +2749,15 @@ function extractLogFields(line) {
     
 
     
-    // 提取类名 package.ClassName
-    const classMatch = content.match(/\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.[A-Z][a-zA-Z0-9_]*)\b/);
-    const className = classMatch ? classMatch[1] : '';
-    
-    // 提取方法名 [methodName:lineNumber]
-    const methodMatch = content.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
-    const methodName = methodMatch ? methodMatch[1] : '';
+    // 提取类名 package.ClassName — 与 host 端 logParser.classAnywhere 一致(Unicode 友好)
+// src/logParser.ts 才是 single source of truth,这里只是临时同步:
+// 完整方案见 CHANGELOG Unreleased — 把 logParser 编译成 webview bundle。
+const classMatch = content.match(/([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*\.[\p{L}_$][\p{L}\p{N}_$]*)/u);
+const className = classMatch ? classMatch[1] : '';
+
+// 提取方法名 [methodName:lineNumber](Unicode 友好)
+const methodMatch = content.match(/\[([\p{L}_][\p{L}\p{N}_]*):\d+\]/u);
+const methodName = methodMatch ? methodMatch[1] : '';
     
     return { threadName, className, methodName, content };
 }
@@ -4096,34 +4073,9 @@ function checkAndLoadMore() {
 }
 
 function loadMoreData() {
-    // 统一加载策略下,数据已一次性全量加载,此函数无操作。
+    // 已废弃:统一加载策略下数据已一次性全量加载,此函数无操作。
     // 触发条件(loadedLines < totalLinesInFile)在 allDataLoaded=true 时永远不成立。
-    // 保留函数仅为防止遗漏的调用点触发未定义行为。
-}
-
-function showLoadMoreHint() {
-    // 在页面底部显示加载更多按钮
-    const pagination = document.getElementById('pagination');
-    let loadMoreBtn = document.getElementById('loadMoreBtn');
-
-    if (!loadMoreBtn) {
-        loadMoreBtn = document.createElement('button');
-        loadMoreBtn.id = 'loadMoreBtn';
-        loadMoreBtn.style.backgroundColor = '#0e7490';
-        loadMoreBtn.style.marginLeft = '20px';
-        loadMoreBtn.innerHTML = '📂 加载更多数据';
-        loadMoreBtn.onclick = function () {
-            loadAllRemainingData();
-        };
-        pagination.appendChild(loadMoreBtn);
-    }
-
-    loadMoreBtn.style.display = allDataLoaded ? 'none' : 'inline-block';
-}
-
-function loadAllRemainingData() {
-    // 统一加载策略下,数据已一次性全量加载,此函数无操作。
-    // "加载更多"按钮在 allDataLoaded=true 时被隐藏,此函数不会被用户触发。
+    // 保留为 no-op 仅为防止遗漏的调用点触发未定义行为。
 }
 
 // 请求加载全部数据(用于统一过滤)

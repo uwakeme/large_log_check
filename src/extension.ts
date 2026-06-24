@@ -115,18 +115,19 @@ export function activate(context: vscode.ExtensionContext) {
         if (!panel) {return;}
 
         const lineInput = await vscode.window.showInputBox({
-            prompt: '输入行号（从1开始）',
+            prompt: '输入行号(从1开始)',
             placeHolder: '例如：100',
             validateInput: (value) => {
                 if (!value) {return '行号不能为空';}
                 const num = parseInt(value);
-                if (isNaN(num) || num < 1) {return '请输入有效的行号（大于0的整数）';}
+                if (isNaN(num) || num < 1) {return '请输入有效的行号(大于0的整数)';}
                 return null;
             }
         });
-        if (lineInput) {
-            panel.postMessage({ command: 'jumpToLineInFullLog', lineNumber: parseInt(lineInput) });
-        }
+        if (!lineInput) {return;}
+
+        // 直接执行 — 流式 seek 已保证任何文件大小都是秒级响应,无需二次确认。
+        panel.postMessage({ command: 'jumpToLineInFullLog', lineNumber: parseInt(lineInput) });
     }));
 
     // 高级搜索
