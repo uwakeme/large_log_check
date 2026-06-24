@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.2.8] - 2026-06-24
 ### Fixed
 - **修复跳转到行号在超大文件上卡死/内存溢出** — 改为流式 seek,只读取目标行 ±500 行上下文,无论文件多大都是秒级响应
 - **修复按时间定位偶发卡死** — 部分场景下「按时间定位」命令在命中目标后不返回,现在彻底修复
