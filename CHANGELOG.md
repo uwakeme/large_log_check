@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **修复注释删除按钮点击无反应** — 注释管理弹窗里和日志行右键菜单中的「删除注释」均恢复正常,删除前会有确认提示
 
 ## [1.2.8] - 2026-06-24
 ### Fixed

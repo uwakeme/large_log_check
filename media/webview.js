@@ -2307,13 +2307,17 @@ function editComment(lineNumber) {
 }
 
 function deleteComment(lineNumber) {
-    if (confirm('确定要删除这条注释吗？')) {
+    // VSCode WebView 默认禁用原生 confirm，必须用自定义弹窗
+    showCustomConfirm('确定要删除这条注释吗？', '删除注释').then(confirmed => {
+        if (!confirmed) {
+            return;
+        }
         // 确保行号是数字类型，因为 Map 的 key 可能是数字或字符串
         const lineNum = Number(lineNumber);
         comments.delete(lineNum);
         showToast('注释已删除');
         renderLines();
-    }
+    });
 }
 
 function showCommentsModal() {
@@ -2363,12 +2367,18 @@ function jumpToComment(lineNumber) {
 }
 
 function deleteCommentFromList(lineNumber) {
-    if (confirm('确定要删除这条注释吗？')) {
-        comments.delete(lineNumber);
+    // VSCode WebView 默认禁用原生 confirm，必须用自定义弹窗
+    showCustomConfirm('确定要删除这条注释吗？', '删除注释').then(confirmed => {
+        if (!confirmed) {
+            return;
+        }
+        // 确保行号是数字类型，因为 Map 的 key 可能是数字或字符串
+        const lineNum = Number(lineNumber);
+        comments.delete(lineNum);
         showCommentsModal(); // 刷新注释列表
         renderLines(); // 重新渲染
         showToast('注释已删除');
-    }
+    });
 }
 
 function showToast(message) {
