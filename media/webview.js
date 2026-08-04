@@ -16,7 +16,7 @@ let isInSearchMode = false;       // 是否处于搜索结果模式
 let searchBackup = null;          // 搜索前的状态备份（分页、滚动、数据）
 let originalLines = []; // 保存原始数据用于过滤
 let isFiltering = false; // 标记是否在过滤模式下
-let bookmarks = new Set(); // 书签集合，存储行号
+let bookmarks = new Map(); // 书签集合，key为行号（数字），value为书签名称（默认"行 N"）
 let comments = new Map(); // 注释集合，key为行号，value为注释内容
 let timelineData = null; // 时间线数据
 let fileStats = null; // 完整的文件统计信息（包含时间范围）
@@ -1949,15 +1949,75 @@ function closeStatsModal() {
 }
 
 // ========== 书签功能 ==========
+function getDefaultBookmarkName(lineNumber) {
+    return `行 ${lineNumber}`;
+}
+
 function toggleBookmark(lineNumber) {
-    if (bookmarks.has(lineNumber)) {
-        bookmarks.delete(lineNumber);
-        console.log('➖ 移除书签:', lineNumber);
+    // 快速切换（双击路径）：存在则移除，不存在则用默认名称添加
+    const num = Number(lineNumber);
+    if (bookmarks.has(num)) {
+        bookmarks.delete(num);
+        console.log('➖ 移除书签:', num);
     } else {
-        bookmarks.add(lineNumber);
-        console.log('➕ 添加书签:', lineNumber);
+        bookmarks.set(num, getDefaultBookmarkName(num));
+        console.log('➕ 添加书签:', num);
     }
     renderLines(); // 重新渲染以显示书签标记
+}
+
+function addBookmarkWithName(lineNumber) {
+    // 右键「添加书签」入口：弹出输入框让用户填写名称
+    const num = Number(lineNumber);
+    if (bookmarks.has(num)) {
+        // 已存在则直接移除，保持右键菜单的「添加/移除」互斥语义
+        bookmarks.delete(num);
+        showToast('书签已移除');
+        renderLines();
+        return;
+    }
+    showBookmarkInputModal(num);
+}
+
+let currentBookmarkLineNumber = null;
+
+function showBookmarkInputModal(lineNumber) {
+    const num = Number(lineNumber);
+    const line = allLines.find(l => l.lineNumber === num);
+    const content = line ? (line.content || line) : '';
+    const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+
+    currentBookmarkLineNumber = num;
+    document.getElementById('bookmarkInputLineNumber').textContent = num;
+    document.getElementById('bookmarkInputPreview').textContent = preview;
+    document.getElementById('bookmarkInputText').value = getDefaultBookmarkName(num);
+
+    document.getElementById('bookmarkInputModal').style.display = 'block';
+    setTimeout(() => {
+        const input = document.getElementById('bookmarkInputText');
+        input.focus();
+        // 默认全选，方便用户直接覆盖输入
+        input.select();
+    }, 100);
+}
+
+function closeBookmarkInputModal() {
+    document.getElementById('bookmarkInputModal').style.display = 'none';
+    currentBookmarkLineNumber = null;
+}
+
+function confirmBookmarkInput() {
+    if (currentBookmarkLineNumber === null) {
+        return;
+    }
+    const num = currentBookmarkLineNumber;
+    const raw = document.getElementById('bookmarkInputText').value;
+    const name = raw.trim() || getDefaultBookmarkName(num);
+
+    bookmarks.set(num, name);
+    showToast('书签已添加');
+    renderLines();
+    closeBookmarkInputModal();
 }
 
 function showBookmarksModal() {
@@ -1965,23 +2025,33 @@ function showBookmarksModal() {
     const list = document.getElementById('bookmarksList');
 
     if (bookmarks.size === 0) {
-        list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无书签<br>双击日志行可添加书签</div>';
+        list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--vscode-descriptionForeground);">暂无书签<br>双击日志行可快速添加书签；右键可自定义名称</div>';
     } else {
-        const bookmarkArray = Array.from(bookmarks).sort((a, b) => a - b);
-        list.innerHTML = bookmarkArray.map(lineNum => {
+        // 按行号排序（Map 的 entries 迭代顺序就是插入顺序，这里显式排一下）
+        const bookmarkArray = Array.from(bookmarks.entries()).sort((a, b) => a[0] - b[0]);
+        list.innerHTML = bookmarkArray.map(([lineNum, name]) => {
             // 从完整数据缓存中查找，而不是从当前显示的数据中查找
             const dataSource = fullDataCache.length > 0 ? fullDataCache : allLines;
             const line = dataSource.find(l => l.lineNumber === lineNum);
             const content = line ? (line.content || line) : '（已不存在）';
             const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
 
+            const isDefaultName = name === getDefaultBookmarkName(lineNum);
+            // 副标题：有自定义名称时，把行号作为副标题展示，方便定位
+            const subtitle = isDefaultName
+                ? ''
+                : `<div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px;">行 ${lineNum}</div>`;
+
             return `
                 <div style="padding: 10px; margin-bottom: 10px; background-color: var(--vscode-editorWidget-background); border-radius: 5px; border-left: 3px solid #ffc107; cursor: pointer; transition: background-color 0.2s;"
                      onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'"
                      onmouseout="this.style.backgroundColor='var(--vscode-editorWidget-background)'"
                      onclick="jumpToBookmark(${lineNum})">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <span style="font-weight: bold; color: var(--vscode-textLink-foreground);"><i class="codicon codicon-bookmark"></i> 行 ${lineNum}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px;">
+                        <div>
+                            <span style="font-weight: bold; color: var(--vscode-textLink-foreground);"><i class="codicon codicon-bookmark"></i> ${escapeHtml(name)}</span>
+                            ${subtitle}
+                        </div>
                         <button onclick="event.stopPropagation(); removeBookmark(${lineNum})" style="padding: 2px 8px; font-size: 11px;">删除</button>
                     </div>
                     <div style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -2464,7 +2534,13 @@ function showContextMenu(event, content, lineNumber) {
         : '<span><i class="codicon codicon-bookmark"></i></span><span>添加书签</span>';
     bookmarkItem.onclick = (e) => {
         e.stopPropagation();
-        toggleBookmark(lineNumber);
+        if (isBookmarked) {
+            // 已存在：直接移除
+            removeBookmark(lineNumber);
+        } else {
+            // 未存在：弹窗让用户自定义名称
+            addBookmarkWithName(lineNumber);
+        }
         closeContextMenu();
     };
     menu.appendChild(bookmarkItem);
@@ -2500,24 +2576,13 @@ function showContextMenu(event, content, lineNumber) {
         menu.appendChild(deleteCommentItem);
     }
 
-    // 分隔线
-    const separator3 = document.createElement('div');
-    separator3.className = 'context-menu-separator';
-    menu.appendChild(separator3);
-
-    // 定位到此行（当前视图）
-    const jumpItem = document.createElement('div');
-    jumpItem.className = 'context-menu-item';
-    jumpItem.innerHTML = '<span><i class="codicon codicon-target"></i></span><span>定位到第 ' + lineNumber + ' 行</span>';
-    jumpItem.onclick = (e) => {
-        e.stopPropagation();
-        jumpToLine(lineNumber);
-        closeContextMenu();
-    };
-    menu.appendChild(jumpItem);
-
     // 如果是搜索/过滤模式，添加"跳转到完整日志"选项
     if (currentSearchKeyword || isFiltering) {
+        // 分隔线
+        const separator3 = document.createElement('div');
+        separator3.className = 'context-menu-separator';
+        menu.appendChild(separator3);
+
         const jumpToFullLogItem = document.createElement('div');
         jumpToFullLogItem.className = 'context-menu-item';
         jumpToFullLogItem.innerHTML = '<span><i class="codicon codicon-link"></i></span><span>跳转到完整日志</span>';

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **书签支持自定义名称** — 右键日志行「添加书签」时弹出输入框,可为书签起一个易记的名字(如「第一次执行」);留空则回退到默认名称「行 N」。双击日志行仍然是快速添加/移除,使用默认名称
+### Changed
+- **移除右键菜单中的「定位到第 N 行」** — 既然能右键点中该行就已可见,无需再单独定位,菜单更精简
 ### Fixed
 - **修复注释删除按钮点击无反应** — 注释管理弹窗里和日志行右键菜单中的「删除注释」均恢复正常,删除前会有确认提示
 

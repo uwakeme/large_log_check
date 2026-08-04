@@ -424,11 +424,36 @@
                 </div>
                 <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="color: var(--vscode-descriptionForeground); font-size: 12px;">
-                        <i class="codicon codicon-lightbulb"></i> 提示：双击日志行可添加/移除书签
+                        <i class="codicon codicon-lightbulb"></i> 提示：双击日志行快速添加/移除书签；右键可自定义名称
                     </div>
                     <button id="exportBookmarksBtn" onclick="exportBookmarkedLogs()" style="padding: 8px 16px; font-size: 13px; font-weight: bold;">
                         <i class="codicon codicon-save"></i> 导出书签日志
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加书签弹窗（自定义名称） -->
+    <div id="bookmarkInputModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2><i class="codicon codicon-bookmark"></i> 添加书签</h2>
+                <span class="modal-close" onclick="closeBookmarkInputModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <div style="font-weight: bold; margin-bottom: 5px;">行号：<span id="bookmarkInputLineNumber"></span></div>
+                    <div style="font-size: 12px; color: var(--vscode-descriptionForeground); font-family: 'Consolas', monospace; background-color: var(--vscode-editorWidget-background); padding: 8px; border-radius: 3px; margin-bottom: 10px; max-height: 60px; overflow-y: auto;" id="bookmarkInputPreview"></div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">书签名称：</label>
+                    <input type="text" id="bookmarkInputText" style="width: 100%; padding: 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-family: inherit;" placeholder="例如：第一次执行" onkeydown="if(event.key === 'Enter') confirmBookmarkInput();">
+                    <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 5px;"><i class="codicon codicon-lightbulb"></i> 提示：留空则使用默认名称「行 N」</div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeBookmarkInputModal()">取消</button>
+                    <button onclick="confirmBookmarkInput()">确定</button>
                 </div>
             </div>
         </div>
