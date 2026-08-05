@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **修复右键「移除书签」误弹书签列表** — 在已添加书签的日志行上右键选择「移除书签」后,不会再无端弹出书签管理弹框,直接静默移除并提示
 
 ## [1.2.9] - 2026-08-04
 ### Added

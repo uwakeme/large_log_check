@@ -2535,8 +2535,10 @@ function showContextMenu(event, content, lineNumber) {
     bookmarkItem.onclick = (e) => {
         e.stopPropagation();
         if (isBookmarked) {
-            // 已存在：直接移除
-            removeBookmark(lineNumber);
+            // 已存在：静默移除
+            bookmarks.delete(lineNumber);
+            showToast('书签已移除');
+            renderLines();
         } else {
             // 未存在：弹窗让用户自定义名称
             addBookmarkWithName(lineNumber);
