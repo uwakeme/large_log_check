@@ -10,3 +10,6 @@ test_sample.log
 PUBLISH_GUIDE.md
 node_modules/**/.bin/**
 **/*.vsix
+docs/**
+test/**
+.zcode/**

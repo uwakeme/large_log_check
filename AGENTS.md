@@ -38,9 +38,9 @@ Professional VSCode extension for viewing and processing very large log files (m
 
 ## Testing instructions
 
-- **No test suite exists.** `pretest` is wired to `npm run compile` but no runner is installed
+- Unit tests use the built-in `node:test` runner: `npm test` (= compile + `node --test test/*.test.cjs`)
+- `test/investigationTemplates.test.cjs` covers the investigation-template pure logic (validation / storage / pipeline engine / filter-UI sync) with browser-global stubs; when adding a new template action or strategy, extend it
 - Manual test path: `npm run watch` → `F5` in VSCode → exercise the feature in the Extension Development Host
-- When introducing a test runner, wire it to `npm test` and update this section
 
 ## PR & commit conventions
 
