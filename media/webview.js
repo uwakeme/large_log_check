@@ -444,6 +444,12 @@ function dispatchWebviewMessage(message) {
         case 'showAdvancedSearch':
             showAdvancedSearchModal();
             break;
+        case 'showTemplates':
+            // 排查模板弹窗(函数定义在 investigationTemplates.js,晚于本文件加载)
+            if (typeof showTemplatesModal === 'function') {
+                showTemplatesModal();
+            }
+            break;
         case 'config':
             if (message.data) {
                 userSettings = {
@@ -2622,6 +2628,9 @@ function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
         // 显示复制成功提示
         showCopyToast();
+        // 广播"已复制"事件(排查模板的收起编辑器靠它感知复制动作后自动恢复;
+        // Clipboard API 不触发原生 copy 事件,所以这里手动派发一个)
+        document.dispatchEvent(new CustomEvent('tpl-log-copied'));
     }).catch(err => {
         console.error('复制失败:', err);
     });

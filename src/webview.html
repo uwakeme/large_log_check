@@ -61,6 +61,7 @@
             </label>
             <button id="searchBtn" onclick="search()" aria-label="开始搜索"><i class="codicon codicon-search"></i> 搜索</button>
             <button onclick="showAdvancedSearchModal()" aria-label="打开高级搜索"><i class="codicon codicon-filter"></i> 高级搜索</button>
+            <button onclick="showTemplatesModal()" aria-label="排查模板"><i class="codicon codicon-checklist"></i> 排查模板</button>
             <button onclick="showJumpDialog()" aria-label="跳转到指定行"><i class="codicon codicon-target"></i> 定位</button>
             <button onclick="showBookmarksModal()" aria-label="管理书签"><i class="codicon codicon-bookmark"></i> 书签</button>
             <button onclick="showCommentsModal()" aria-label="管理注释"><i class="codicon codicon-comment"></i> 注释</button>
@@ -654,7 +655,110 @@
         </div>
     </div>
 
+    <!-- 排查模板:模板列表 -->
+    <div id="templatesModal" class="modal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <h3><i class="codicon codicon-checklist"></i> 排查模板</h3>
+                <span class="modal-close" onclick="closeTemplatesModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="tplListContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 排查模板:编辑器(可视化 / JSON 双视图) -->
+    <div id="templateEditorModal" class="modal">
+        <div class="modal-content" style="max-width: 720px;">
+            <div class="modal-header">
+                <h3 id="tplEditorTitle"><i class="codicon codicon-edit"></i> 新建排查模板</h3>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="modal-close" onclick="tplMinimizeEditor()" title="收起编辑器:去日志里复制内容后会自动恢复" style="font-size: 18px; font-weight: normal; display: flex; align-items: center;"><i class="codicon codicon-chrome-minimize"></i></span>
+                    <span class="modal-close" onclick="closeTemplateEditor()" title="关闭">&times;</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="tplEditName">模板名称</label>
+                    <input type="text" id="tplEditName" placeholder="例如:支付回调失败排查" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;">
+                </div>
+                <div class="form-group">
+                    <label for="tplEditDesc">描述(可选)</label>
+                    <input type="text" id="tplEditDesc" placeholder="这个模板用来排查什么问题" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;">
+                </div>
+                <div class="form-group">
+                    <label>运行参数(可选,动作里用 <code>${key}</code> 引用)</label>
+                    <div id="tplEditParams"></div>
+                    <button onclick="tplAddParam()" style="padding: 2px 8px; font-size: 12px;"><i class="codicon codicon-add"></i> 添加参数</button>
+                </div>
+                <div style="display: flex; gap: 8px; margin: 12px 0 8px; align-items: center;">
+                    <button id="tplTabBtnVisual" onclick="tplSwitchEditorMode('visual')" style="padding: 3px 10px; font-size: 12px;">可视化编辑</button>
+                    <button id="tplTabBtnJson" onclick="tplSwitchEditorMode('json')" style="padding: 3px 10px; font-size: 12px;">JSON 模式</button>
+                </div>
+                <div id="tplEditorVisual">
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 12px; font-weight: bold;">动作序列(自上而下执行):</span>
+                        <select id="tplAddStepSelect" style="padding: 3px 6px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
+                            <option value="search">查询日志</option>
+                            <option value="filter">筛选</option>
+                            <option value="bookmark">打书签</option>
+                            <option value="comment">加注释</option>
+                        </select>
+                        <button onclick="tplAddStep()" style="padding: 3px 10px; font-size: 12px;"><i class="codicon codicon-add"></i> 添加动作</button>
+                    </div>
+                    <div id="tplEditSteps"></div>
+                </div>
+                <div id="tplEditorJson" style="display: none;">
+                    <textarea id="tplEditJson" rows="16" spellcheck="false" style="width: 100%; font-family: monospace; font-size: 11px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;"></textarea>
+                    <div id="tplJsonError" style="display: none; color: var(--vscode-errorForeground); font-size: 12px; margin-top: 6px;"></div>
+                    <div class="hint">支持的动作类型:search(查询)/ filter(筛选)/ bookmark(书签)/ comment(注释)/ jump(跳转)。此格式与导入/导出完全一致。</div>
+                </div>
+                <div id="tplEditorError" style="display: none; color: var(--vscode-errorForeground); font-size: 12px; margin-top: 6px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeTemplateEditor()">取消</button>
+                <button onclick="saveTemplateFromEditor()"><i class="codicon codicon-save"></i> 保存模板</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 排查模板:运行(参数表单 / 进度 / 摘要) -->
+    <div id="templateRunModal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h3><i class="codicon codicon-play"></i> 运行排查模板</h3>
+                <span class="modal-close" onclick="closeRunModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="tplRunContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 排查模板:命中选择 -->
+    <div id="templateHitsModal" class="modal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <h3><i class="codicon codicon-list-selection"></i> 选择命中</h3>
+                <span class="modal-close" onclick="tplHitAbort()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="tplHitsContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 排查模板:编辑器收起时的浮动恢复条(收起后可正常操作日志,复制后自动恢复) -->
+    <div id="tplEditorRestoreBar" style="display: none; position: fixed; top: 70px; right: 16px; z-index: 900; background-color: var(--vscode-editorWidget-background); color: var(--vscode-editorWidget-foreground); border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 8px 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); font-size: 12px; align-items: center; gap: 8px;">
+        <i class="codicon codicon-edit"></i>
+        <span>排查模板编辑中 — 复制日志后会自动恢复</span>
+        <button onclick="tplRestoreEditor()" style="padding: 2px 8px; font-size: 12px;">恢复编辑</button>
+        <button onclick="tplCloseFromRestoreBar()" style="padding: 2px 8px; font-size: 12px;">关闭编辑器</button>
+    </div>
+
     <!-- 脚本从扩展侧注入真实路径，这里使用占位符 -->
     <script src="%%WEBVIEW_JS%%"></script>
+    <script src="%%TEMPLATES_JS%%"></script>
 </body>
 </html>

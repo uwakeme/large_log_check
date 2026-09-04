@@ -135,6 +135,12 @@ export function activate(context: vscode.ExtensionContext) {
         const panel = requireActivePanel();
         if (panel) {panel.postMessage({ command: 'showAdvancedSearch' });}
     }));
+
+    // 排查模板
+    context.subscriptions.push(vscode.commands.registerCommand('big-log-viewer.showInvestigationTemplates', async () => {
+        const panel = requireActivePanel();
+        if (panel) {panel.postMessage({ command: 'showTemplates' });}
+    }));
 }
 
 export function deactivate() {

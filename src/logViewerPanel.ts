@@ -144,6 +144,12 @@ export class LogViewerPanel {
                     case 'exportLogs':
                         await this.exportCurrentView(message.lines, message.exportType);
                         break;
+                    case 'exportTemplates':
+                        await this.exportTemplates(message.templates);
+                        break;
+                    case 'importTemplates':
+                        await this.importTemplates();
+                        break;
                     case 'deleteByTime':
                         await this.deleteByTimeOptions(message.timeStr, message.mode);
                         break;
@@ -604,6 +610,65 @@ export class LogViewerPanel {
     }
 
 
+    /**
+     * 导出排查模板到 JSON 文件。内容由 webview 侧生成并校验,
+     * 宿主端只负责保存对话框与写文件(实现模式同 exportCurrentView)。
+     */
+    private async exportTemplates(templates: unknown[]) {
+        try {
+            const list = Array.isArray(templates) ? templates : [];
+            const uri = await vscode.window.showSaveDialog({
+                filters: {
+                    '模板文件': ['json'],
+                    '所有文件': ['*']
+                },
+                defaultUri: vscode.Uri.file(
+                    path.join(path.dirname(this._fileUri.fsPath), 'troubleshootTemplates.json')
+                )
+            });
+            if (!uri) {
+                return; // 用户取消
+            }
+            const payload = {
+                schemaVersion: 1,
+                exportedAt: new Date().toISOString(),
+                templates: list
+            };
+            await fs.promises.writeFile(uri.fsPath, JSON.stringify(payload, null, 2), 'utf8');
+            vscode.window.showInformationMessage(`成功导出 ${list.length} 个排查模板到: ${uri.fsPath}`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`导出排查模板失败: ${error}`);
+        }
+    }
+
+    /**
+     * 从 JSON 文件导入排查模板:宿主端负责打开对话框与读文件,
+     * 内容回传 webview 侧做白名单校验与按 id 合并。
+     */
+    private async importTemplates() {
+        try {
+            const uris = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                filters: {
+                    '模板文件': ['json'],
+                    '所有文件': ['*']
+                }
+            });
+            if (!uris || uris.length === 0) {
+                return; // 用户取消
+            }
+            const content = await fs.promises.readFile(uris[0].fsPath, 'utf8');
+            this._panel.webview.postMessage({
+                command: 'importTemplatesResult',
+                data: { content }
+            });
+        } catch (error) {
+            vscode.window.showErrorMessage(`导入排查模板失败: ${error}`);
+        }
+    }
+
     private _update() {
         const webview = this._panel.webview;
         this._panel.webview.html = this._getHtmlForWebview(webview);
@@ -627,6 +692,10 @@ export class LogViewerPanel {
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.js')
         );
+        // 排查模板功能脚本(依赖 webview.js 的全局函数,必须后加载)
+        const templatesScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'investigationTemplates.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -638,6 +707,7 @@ export class LogViewerPanel {
             .replace(/%%WEBVIEW_CSS%%/g, styleUri.toString())
             .replace(/%%THEMES_CSS%%/g, themesUri.toString())
             .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString())
+            .replace(/%%TEMPLATES_JS%%/g, templatesScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 
