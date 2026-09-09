@@ -117,6 +117,12 @@ body[data-theme="neon"] .log-line.collapsed {
     border-left: 3px solid #b14aed;
 }
 body[data-theme="neon"] .repeat-count { background: #b14aed; }
+/* 书签行 — 酸性黄,与 warn 的橙 #ffae00 区分;色条让位给级别色条 */
+body[data-theme="neon"] .log-line.bookmarked { background: rgba(255,230,0,.09); }
+body[data-theme="neon"] .log-line.bookmarked:hover { background: rgba(255,230,0,.16); }
+body[data-theme="neon"] .log-line.bookmarked:not(.error):not(.warn):not(.info):not(.debug):not(.collapsed) { border-left: 3px solid #ffe600; }
+body[data-theme="neon"] .log-line.bookmarked .log-line-number { color: #ffe600; }
+body[data-theme="neon"] .log-line.bookmarked .bookmark-icon { font-size: 12px; color: #ffe600; }
 body[data-theme="neon"] .log-line.highlight-target {
     background: rgba(255,174,0,.25);
     border-left: 3px solid #ffae00;
@@ -353,6 +359,12 @@ body[data-theme="aurora"] .log-line.collapsed {
     border-left: 3px solid #a78bfa;
 }
 body[data-theme="aurora"] .repeat-count { background: #a78bfa; }
+/* 书签行 — 极光粉(取自主题背景渐变),与各语义色区分;色条让位给级别色条 */
+body[data-theme="aurora"] .log-line.bookmarked { background: rgba(240,171,252,.10); }
+body[data-theme="aurora"] .log-line.bookmarked:hover { background: rgba(240,171,252,.18); }
+body[data-theme="aurora"] .log-line.bookmarked:not(.error):not(.warn):not(.info):not(.debug):not(.collapsed) { border-left: 3px solid #f0abfc; }
+body[data-theme="aurora"] .log-line.bookmarked .log-line-number { color: #f0abfc; }
+body[data-theme="aurora"] .log-line.bookmarked .bookmark-icon { font-size: 12px; color: #f0abfc; }
 body[data-theme="aurora"] .log-line.highlight-target {
     background: rgba(252,211,77,.18);
     border-left: 3px solid #fcd34d;
@@ -596,6 +608,12 @@ body[data-theme="holo"] .log-line.collapsed {
     border-left: 3px solid #8b5cf6;
 }
 body[data-theme="holo"] .repeat-count { background: #8b5cf6; }
+/* 书签行 — 霓虹粉,与 error 的红 #f87171 区分;色条让位给级别色条 */
+body[data-theme="holo"] .log-line.bookmarked { background: rgba(244,114,182,.10); }
+body[data-theme="holo"] .log-line.bookmarked:hover { background: rgba(244,114,182,.16); }
+body[data-theme="holo"] .log-line.bookmarked:not(.error):not(.warn):not(.info):not(.debug):not(.collapsed) { border-left: 3px solid #f472b6; }
+body[data-theme="holo"] .log-line.bookmarked .log-line-number { color: #f472b6; }
+body[data-theme="holo"] .log-line.bookmarked .bookmark-icon { font-size: 12px; color: #f472b6; }
 body[data-theme="holo"] .log-line.highlight-target {
     background: rgba(251,191,36,.15);
     border-left: 3px solid #fbbf24;

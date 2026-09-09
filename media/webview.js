@@ -1384,20 +1384,19 @@ function renderSingleLine(container, line, startIndex, index) {
         lineDiv.classList.add(line.level.toLowerCase());
     }
 
-    // 如果是书签行，添加书签标记
+    // 如果是书签行，添加书签样式类（配色由 webview.css / themes.css 按主题定义）
     if (bookmarks.has(actualLineNumber)) {
-        lineDiv.style.backgroundColor = 'rgba(255, 193, 7, 0.1)';
-        lineDiv.style.borderRight = '3px solid #ffc107';
+        lineDiv.classList.add('bookmarked');
     }
 
 const lineNumber = document.createElement('span');
     lineNumber.className = 'log-line-number';
     lineNumber.textContent = actualLineNumber.toString();
     lineNumber.dataset.line = actualLineNumber.toString();
-    
-    // 如果是书签，显示书签图标
+
+    // 如果是书签，行号前显示书签图标
     if (bookmarks.has(actualLineNumber)) {
-        lineNumber.innerHTML = '<i class="codicon codicon-bookmark" style="font-size: 10px; color: #ffc107;"></i> ' + actualLineNumber.toString();
+        lineNumber.innerHTML = '<i class="codicon codicon-bookmark bookmark-icon"></i> ' + actualLineNumber.toString();
     }
 
     const lineContent = document.createElement('span');
