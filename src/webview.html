@@ -668,9 +668,9 @@
         </div>
     </div>
 
-    <!-- 排查模板:编辑器(可视化 / JSON 双视图) -->
+    <!-- 排查模板:编辑器(流水线轨道式编排,内容由 investigationTemplates.js 动态渲染) -->
     <div id="templateEditorModal" class="modal">
-        <div class="modal-content" style="max-width: 720px;">
+        <div class="modal-content" style="max-width: 780px;">
             <div class="modal-header">
                 <h3 id="tplEditorTitle"><i class="codicon codicon-edit"></i> 新建排查模板</h3>
                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -679,44 +679,10 @@
                 </div>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label for="tplEditName">模板名称</label>
-                    <input type="text" id="tplEditName" placeholder="例如:支付回调失败排查" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;">
-                </div>
-                <div class="form-group">
-                    <label for="tplEditDesc">描述(可选)</label>
-                    <input type="text" id="tplEditDesc" placeholder="这个模板用来排查什么问题" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;">
-                </div>
-                <div class="form-group">
-                    <label>运行参数(可选,动作里用 <code>${key}</code> 引用)</label>
-                    <div id="tplEditParams"></div>
-                    <button onclick="tplAddParam()" style="padding: 2px 8px; font-size: 12px;"><i class="codicon codicon-add"></i> 添加参数</button>
-                </div>
-                <div style="display: flex; gap: 8px; margin: 12px 0 8px; align-items: center;">
-                    <button id="tplTabBtnVisual" onclick="tplSwitchEditorMode('visual')" style="padding: 3px 10px; font-size: 12px;">可视化编辑</button>
-                    <button id="tplTabBtnJson" onclick="tplSwitchEditorMode('json')" style="padding: 3px 10px; font-size: 12px;">JSON 模式</button>
-                </div>
-                <div id="tplEditorVisual">
-                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 12px; font-weight: bold;">动作序列(自上而下执行):</span>
-                        <select id="tplAddStepSelect" style="padding: 3px 6px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
-                            <option value="search">查询日志</option>
-                            <option value="filter">筛选</option>
-                            <option value="bookmark">打书签</option>
-                            <option value="comment">加注释</option>
-                        </select>
-                        <button onclick="tplAddStep()" style="padding: 3px 10px; font-size: 12px;"><i class="codicon codicon-add"></i> 添加动作</button>
-                    </div>
-                    <div id="tplEditSteps"></div>
-                </div>
-                <div id="tplEditorJson" style="display: none;">
-                    <textarea id="tplEditJson" rows="16" spellcheck="false" style="width: 100%; font-family: monospace; font-size: 11px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;"></textarea>
-                    <div id="tplJsonError" style="display: none; color: var(--vscode-errorForeground); font-size: 12px; margin-top: 6px;"></div>
-                    <div class="hint">支持的动作类型:search(查询)/ filter(筛选)/ bookmark(书签)/ comment(注释)/ jump(跳转)。此格式与导入/导出完全一致。</div>
-                </div>
-                <div id="tplEditorError" style="display: none; color: var(--vscode-errorForeground); font-size: 12px; margin-top: 6px;"></div>
+                <div id="tplEditorBody"></div>
             </div>
             <div class="modal-footer">
+                <button type="button" id="tplJsonToggle" onclick="tplSwitchEditorMode(tplEditorMode === 'json' ? 'visual' : 'json')" style="margin-right: auto; background: transparent; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; padding: 4px 0;">以 JSON 编辑</button>
                 <button onclick="closeTemplateEditor()">取消</button>
                 <button onclick="saveTemplateFromEditor()"><i class="codicon codicon-save"></i> 保存模板</button>
             </div>

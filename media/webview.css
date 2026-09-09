@@ -1254,3 +1254,232 @@ a:focus-visible {
     margin: 0;
 }
 
+/* ========== 排查模板编辑器(media/investigationTemplates.js) ========== */
+/* 只用 --vscode-* 变量,4 套主题自动适配;签名元素是带连接线的流程轨道 */
+
+.tpl-sec {
+    margin-bottom: 20px;
+}
+
+.tpl-sec-label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 10px;
+}
+
+.tpl-sec-sub {
+    font-weight: 400;
+    letter-spacing: normal;
+}
+
+.tpl-field {
+    margin-bottom: 12px;
+}
+
+.tpl-field > label {
+    display: block;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.tpl-mono {
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
+/* 参数芯片 */
+.tpl-param-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px 3px 10px;
+    margin: 0 8px 8px 0;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 12px;
+    background: var(--vscode-editorWidget-background);
+    font-size: 12px;
+}
+
+.tpl-param-chip code {
+    font-family: var(--vscode-editor-font-family, monospace);
+    color: var(--vscode-textLink-foreground);
+}
+
+.tpl-param-chip small {
+    color: var(--vscode-descriptionForeground);
+}
+
+.tpl-param-chip button {
+    padding: 0 6px;
+    font-size: 12px;
+    line-height: 16px;
+    background: transparent;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    box-shadow: none;
+    transform: none;
+}
+
+.tpl-param-chip button:hover {
+    background: transparent;
+    color: var(--vscode-errorForeground);
+    transform: none;
+}
+
+.tpl-param-add-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+/* 流程轨道:左侧连接线 + 编号圆节点 */
+.tpl-steps {
+    position: relative;
+    margin: 0 0 6px 2px;
+    padding-left: 32px;
+}
+
+.tpl-steps::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 18px;
+    bottom: 18px;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--vscode-panel-border);
+}
+
+.tpl-step {
+    position: relative;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 6px;
+    background: var(--vscode-editor-background);
+    margin-bottom: 10px;
+    transition: border-color 0.12s ease;
+}
+
+.tpl-step.tpl-open {
+    border-color: var(--vscode-focusBorder);
+}
+
+.tpl-step-num {
+    position: absolute;
+    left: -32px;
+    top: 12px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-editorWidget-background);
+    color: var(--vscode-descriptionForeground);
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.tpl-open .tpl-step-num {
+    background: var(--vscode-button-background);
+    border-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.tpl-step-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 6px;
+}
+
+.tpl-step-head:hover {
+    background: var(--vscode-list-hoverBackground);
+    cursor: pointer;
+}
+
+.tpl-open .tpl-step-head,
+.tpl-open .tpl-step-head:hover {
+    cursor: default;
+    background: transparent;
+}
+
+.tpl-step-title {
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.tpl-step-summary {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tpl-step-tools {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.tpl-step-head:hover .tpl-step-tools,
+.tpl-open .tpl-step-tools {
+    opacity: 1;
+}
+
+.tpl-step-body {
+    padding: 12px;
+    border-top: 1px solid var(--vscode-panel-border);
+}
+
+/* 「添加动作」按钮行:副色按钮,与主操作(保存)区分 */
+.tpl-add-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+.tpl-add-row button {
+    background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+    color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+    font-size: 12px;
+    padding: 4px 10px;
+    box-shadow: none;
+}
+
+.tpl-add-row button:hover {
+    background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+    transform: none;
+}
+
+.tpl-empty {
+    padding: 14px 12px;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    border: 1px dashed var(--vscode-panel-border);
+    border-radius: 6px;
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tpl-step,
+    .tpl-step-tools {
+        transition: none;
+    }
+}

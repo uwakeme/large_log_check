@@ -53,7 +53,9 @@ const TPL_LABEL_STYLE = 'display: block; font-size: 12px; margin-bottom: 5px;';
 // ---------- 运行时状态 ----------
 
 let tplEditingTemplate = null;   // 编辑器当前编辑的模板(未校验的原始对象,含 id/createdAt)
-let tplEditorMode = 'visual';    // 编辑器当前页签: 'visual' | 'json'
+let tplEditorMode = 'visual';    // 编辑器当前视图: 'visual' | 'json'
+let tplExpandedStep = null;      // 流程轨道上当前展开编辑的步骤下标(null=全部收起)
+let tplParamAdding = false;      // 参数芯片是否处于"新增"内联编辑状态
 let tplPipelineRunning = false;  // 流水线执行中标志
 let tplPipelineAbort = false;    // 「停止」按钮置位,步骤间检查
 let tplRunningTemplate = null;   // 当前正在执行的模板
@@ -433,6 +435,7 @@ function renderTemplateList() {
         const meta = [];
         if (t.params.length > 0) { meta.push(`参数 ${t.params.length} 个`); }
         meta.push(`${t.steps.length} 个动作`);
+        const flow = (t.steps || []).map(s => TPL_ACTION_TYPES[s.type] || s.type).join(' → ');
         html += '<div style="border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 10px; margin-bottom: 8px;">';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
         html += '<div style="flex: 1; min-width: 0;">';
@@ -441,6 +444,9 @@ function renderTemplateList() {
             html += `<div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px;">${escapeHtml(tplTruncate(t.description, 80))}</div>`;
         }
         html += `<div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px;">${escapeHtml(meta.join(' · '))}</div>`;
+        if (flow) {
+            html += `<div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px;">${escapeHtml(flow)}</div>`;
+        }
         html += '</div>';
         html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="runInvestigationTemplate('${escapeAttr(t.id)}')" title="运行模板"><i class="codicon codicon-play"></i> 运行</button>`;
         html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="openTemplateEditor('${escapeAttr(t.id)}')" title="编辑模板"><i class="codicon codicon-edit"></i> 编辑</button>`;
@@ -525,6 +531,7 @@ function openTemplateEditor(id) {
         const source = loadInvestigationTemplates().find(t => t.id === id);
         if (!source) { return; }
         tplEditingTemplate = JSON.parse(JSON.stringify(source));
+        tplExpandedStep = null;          // 已有模板默认全部收起,先"读"整条流程
     } else {
         tplEditingTemplate = {
             id: 'tpl_' + Date.now(),
@@ -534,8 +541,10 @@ function openTemplateEditor(id) {
             params: [],
             steps: [{ type: 'search', keywords: [''], hitPolicy: 'ask', onEmpty: 'stop', afterLastHit: false, sameThread: false }]
         };
+        tplExpandedStep = 0;             // 新模板直接展开第一步,从填关键词开始
     }
     tplEditorMode = 'visual';
+    tplParamAdding = false;
     document.getElementById('tplEditorTitle').textContent = id ? '编辑排查模板' : '新建排查模板';
     renderTemplateEditor();
     closeTemplatesModal();
@@ -548,6 +557,8 @@ function closeTemplateEditor() {
     if (bar) { bar.style.display = 'none'; }
     document.getElementById('templateEditorModal').style.display = 'none';
     tplEditingTemplate = null;
+    tplExpandedStep = null;
+    tplParamAdding = false;
 }
 
 // ---------- 编辑器收起/恢复(边看日志边填模板) ----------
@@ -605,78 +616,196 @@ function tplRemoveCopyHooks() {
     }
 }
 
-/** 整体渲染编辑器(结构性变化后调用;文本输入不触发重渲染) */
+/** 整体渲染编辑器(打开/结构性变化/JSON 切回时调用;文本输入不触发重渲染) */
 function renderTemplateEditor() {
     const t = tplEditingTemplate;
-    document.getElementById('tplEditName').value = t.name || '';
-    document.getElementById('tplEditDesc').value = t.description || '';
+    const body = document.getElementById('tplEditorBody');
+    let html = '';
+
+    // —— 模板信息 ——
+    html += '<div class="tpl-sec" id="tplEditorVisual">';
+    html += '<div class="tpl-sec-label">模板信息</div>';
+    html += `<div class="tpl-field"><label for="tplEditName">名称</label>`;
+    html += `<input id="tplEditName" placeholder="例如: 支付回调失败排查" value="${escapeAttr(t.name || '')}" style="${TPL_INPUT_STYLE}"></div>`;
+    html += `<div class="tpl-field"><label for="tplEditDesc">描述 <span style="color: var(--vscode-descriptionForeground); font-weight: normal;">(可选)</span></label>`;
+    html += `<input id="tplEditDesc" placeholder="这个模板用来排查什么问题" value="${escapeAttr(t.description || '')}" style="${TPL_INPUT_STYLE}"></div>`;
+    html += `<div class="tpl-field"><label>运行参数 <span style="color: var(--vscode-descriptionForeground); font-weight: normal;">(可选)</span> <button type="button" onclick="tplBeginAddParam()" style="background: transparent; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; padding: 0;">＋ 添加参数</button></label>`;
+    html += '<div id="tplEditParams"></div>';
+    html += `<div class="hint" style="margin-top: 5px;">动作配置里用 <code class="tpl-mono">\${参数名}</code> 引用运行时输入的值——同一套流程,换个单号就能重跑。</div>`;
+    html += '</div></div>';
+
+    // —— 排查流程(流水线轨道) ——
+    html += '<div class="tpl-sec" id="tplStepsSec">';
+    html += '<div class="tpl-sec-label">排查流程 <span class="tpl-sec-sub">自上而下依次执行</span></div>';
+    html += '<div id="tplEditSteps" class="tpl-steps"></div>';
+    html += '<div class="tpl-add-row">';
+    html += '<button type="button" onclick="tplAddStep(\'search\')">＋ 查询日志</button>';
+    html += '<button type="button" onclick="tplAddStep(\'filter\')">＋ 筛选</button>';
+    html += '<button type="button" onclick="tplAddStep(\'bookmark\')">＋ 打书签</button>';
+    html += '<button type="button" onclick="tplAddStep(\'comment\')">＋ 加注释</button>';
+    html += '</div></div>';
+
+    // —— JSON 面板(高级逃生门,默认隐藏) ——
+    html += '<div id="tplEditorJson" style="display: none;">';
+    html += '<textarea id="tplEditJson" rows="18" spellcheck="false" style="width: 100%; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;"></textarea>';
+    html += '<div id="tplJsonError" style="display: none; color: var(--vscode-errorForeground); font-size: 12px; margin-top: 6px;"></div>';
+    html += '<div class="hint" style="margin-top: 5px;">格式与导入/导出完全一致。改完点下方「返回表单编辑」或直接保存。</div>';
+    html += '</div>';
+
+    html += '<div id="tplEditorError" style="display: none; color: var(--vscode-errorForeground); font-size: 12px; margin-top: 6px;"></div>';
+
+    body.innerHTML = html;
     renderTplParams();
     renderTplSteps();
     tplSyncEditorTabs();
-    const errEl = document.getElementById('tplEditorError');
-    errEl.style.display = 'none';
-    errEl.textContent = '';
-    const jsonErr = document.getElementById('tplJsonError');
-    jsonErr.style.display = 'none';
-    jsonErr.textContent = '';
+    tplHideEditorError();
 }
 
+/** 参数以芯片形式展示,新增走内联小表单;参数数据直接落在 tplEditingTemplate.params */
 function renderTplParams() {
     const container = document.getElementById('tplEditParams');
-    const t = tplEditingTemplate;
-    if (!t.params || t.params.length === 0) {
-        container.innerHTML = '<div class="hint">暂无参数。添加参数后,动作配置里可以用 <code>${参数名}</code> 引用运行时输入的值。</div>';
-        return;
-    }
+    if (!container) { return; }
+    const params = (tplEditingTemplate && tplEditingTemplate.params) || [];
     let html = '';
-    t.params.forEach((p, i) => {
-        html += `<div class="tpl-param-row" style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center;">`;
-        html += `<input class="tpl-param-key" placeholder="参数名(如 orderNo)" value="${escapeAttr(p.key)}" style="${TPL_INPUT_STYLE} flex: 1;">`;
-        html += `<input class="tpl-param-label" placeholder="显示名(如 业务单号)" value="${escapeAttr(p.label || '')}" style="${TPL_INPUT_STYLE} flex: 1;">`;
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" title="删除参数" onclick="tplDeleteParam(${i})">×</button>`;
-        html += '</div>';
+    params.forEach((p, i) => {
+        html += '<span class="tpl-param-chip">';
+        html += `<code>${escapeHtml('${' + p.key + '}')}</code>`;
+        if (p.label && p.label !== p.key) { html += `<small>${escapeHtml(p.label)}</small>`; }
+        html += `<button type="button" title="删除参数" onclick="tplRemoveParam(${i})">×</button>`;
+        html += '</span>';
     });
+    if (tplParamAdding) {
+        html += '<div class="tpl-param-add-form">';
+        html += `<input id="tplNewParamKey" placeholder="参数名,如 orderNo" style="${TPL_INPUT_STYLE} width: 170px;" onkeydown="if(event.key==='Enter'){tplConfirmAddParam();}">`;
+        html += `<input id="tplNewParamLabel" placeholder="显示名(可选),如 业务单号" style="${TPL_INPUT_STYLE} width: 170px;" onkeydown="if(event.key==='Enter'){tplConfirmAddParam();}">`;
+        html += `<button type="button" style="${TPL_SMALL_BTN_STYLE}" onclick="tplConfirmAddParam()">确定</button>`;
+        html += `<button type="button" style="${TPL_SMALL_BTN_STYLE}" onclick="tplCancelAddParam()">取消</button>`;
+        html += '</div>';
+    }
+    if (params.length === 0 && !tplParamAdding) {
+        html += '<div class="hint">点上方「＋ 添加参数」——比如定义一个 orderNo,每次运行填不同单号。</div>';
+    }
     container.innerHTML = html;
+    if (tplParamAdding) {
+        const keyEl = document.getElementById('tplNewParamKey');
+        if (keyEl) { keyEl.focus(); }
+    }
 }
 
-function tplAddParam() {
-    const raw = collectVisualTemplate();
-    if (raw.params.length >= TPL_MAX_PARAMS) { showToast(`参数最多 ${TPL_MAX_PARAMS} 个`); return; }
-    raw.params.push({ key: '', label: '' });
-    tplEditingTemplate = { ...tplEditingTemplate, ...raw };
+function tplBeginAddParam() {
+    tplParamAdding = true;
     renderTplParams();
 }
 
-function tplDeleteParam(i) {
-    const raw = collectVisualTemplate();
-    raw.params.splice(i, 1);
-    tplEditingTemplate = { ...tplEditingTemplate, ...raw };
+function tplCancelAddParam() {
+    tplParamAdding = false;
+    renderTplParams();
+}
+
+function tplConfirmAddParam() {
+    const keyEl = document.getElementById('tplNewParamKey');
+    const labelEl = document.getElementById('tplNewParamLabel');
+    const key = (keyEl ? keyEl.value : '').trim();
+    const label = (labelEl ? labelEl.value : '').trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        showToast('参数名不合法: 字母开头,仅含字母数字下划线');
+        return;
+    }
+    const params = (tplEditingTemplate && tplEditingTemplate.params) || [];
+    if (params.some(p => p.key === key)) { showToast(`参数名重复: ${key}`); return; }
+    if (params.length >= TPL_MAX_PARAMS) { showToast(`参数最多 ${TPL_MAX_PARAMS} 个`); return; }
+    tplEditingTemplate.params = params.concat([{ key: key, label: label || key }]);
+    tplParamAdding = false;
+    renderTplParams();
+}
+
+function tplRemoveParam(i) {
+    if (!tplEditingTemplate) { return; }
+    tplEditingTemplate.params.splice(i, 1);
     renderTplParams();
 }
 
 function renderTplSteps() {
     const container = document.getElementById('tplEditSteps');
-    const t = tplEditingTemplate;
-    if (!t.steps || t.steps.length === 0) {
-        container.innerHTML = '<div class="hint">还没有动作,请在上方添加。</div>';
+    if (!container) { return; }
+    const steps = (tplEditingTemplate && tplEditingTemplate.steps) || [];
+    if (steps.length === 0) {
+        container.innerHTML = '<div class="tpl-empty">还没有步骤——从下面选一个动作,开始编排你的排查流程。</div>';
         return;
     }
-    container.innerHTML = t.steps.map((step, i) => renderTplStepRow(step, i)).join('');
+    container.innerHTML = steps.map((step, i) => renderTplStepCard(step, i)).join('');
 }
 
-function renderTplStepRow(step, i) {
+/** 生成步骤的一句可读摘要(收起状态展示,让整条流程可"读") */
+function tplStepSummary(step) {
+    const parts = [];
+    if (step.type === 'search') {
+        const kw = (Array.isArray(step.keywords) ? step.keywords : []).join(' ');
+        parts.push(`查询含「${kw || '…'}」的日志`);
+        const cons = [];
+        if (step.afterLastHit === true) { cons.push('上一步命中之后'); }
+        if (step.sameThread === true) { cons.push('仅同线程'); }
+        if (cons.length > 0) { parts.push(cons.join(' + ')); }
+        parts.push(TPL_HIT_POLICIES[step.hitPolicy] || TPL_HIT_POLICIES.ask);
+    } else if (step.type === 'filter') {
+        const fieldName = TPL_FILTER_FIELDS[step.field] || step.field;
+        if (step.value === 'lastHit') {
+            parts.push(`按${fieldName}筛选 · 从上一步命中行提取`);
+        } else if (step.field === 'levels') {
+            parts.push(`按日志级别筛选: ${(Array.isArray(step.value) ? step.value : []).join('/')}`);
+        } else if (step.field === 'timeRange' && step.value && typeof step.value === 'object') {
+            parts.push(`按时间范围筛选: ${step.value.start || '…'} ~ ${step.value.end || '…'}`);
+        } else {
+            parts.push(`按${fieldName}「${step.value || '…'}」`);
+        }
+        if (step.keepKeyword === false) { parts.push('不保留关键词'); }
+    } else if (step.type === 'bookmark') {
+        parts.push(`给${step.target === 'view' ? '当前视图' : '查询结果'}打书签${step.name ? `「${step.name}」` : ''}`);
+    } else if (step.type === 'comment') {
+        parts.push(`给${step.target === 'view' ? '当前视图' : '查询结果'}加注释${step.content ? `「${tplTruncate(step.content, 30)}」` : ''}`);
+    }
+    return parts.join(' · ');
+}
+
+function renderTplStepCard(step, i) {
     const typeName = TPL_ACTION_TYPES[step.type] || step.type;
-    let html = `<div style="border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 12px 14px; margin-bottom: 10px;">`;
-    html += '<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">';
-    html += `<strong style="font-size: 12px;">${i + 1}. ${escapeHtml(typeName)}</strong>`;
-    html += '<span style="flex: 1;"></span>';
-    html += `<button style="${TPL_SMALL_BTN_STYLE}" title="上移" onclick="tplMoveStep(${i}, -1)">↑</button>`;
-    html += `<button style="${TPL_SMALL_BTN_STYLE}" title="下移" onclick="tplMoveStep(${i}, 1)">↓</button>`;
-    html += `<button style="${TPL_SMALL_BTN_STYLE}" title="删除动作" onclick="tplDeleteStep(${i})">×</button>`;
-    html += '</div>';
-    html += renderTplStepFields(step, i);
+    const open = tplExpandedStep === i;
+    const num = String(i + 1).padStart(2, '0');
+    let html = `<div class="tpl-step${open ? ' tpl-open' : ''}">`;
+    html += `<span class="tpl-step-num">${num}</span>`;
+    html += `<div class="tpl-step-head"${open ? '' : ` onclick="tplToggleStep(${i})" title="点击展开编辑"`}>`;
+    html += `<span class="tpl-step-title">${escapeHtml(typeName)}</span>`;
+    if (!open) {
+        html += `<span class="tpl-step-summary">${escapeHtml(tplStepSummary(step))}</span>`;
+    }
+    html += '<span class="tpl-step-tools">';
+    html += `<button type="button" style="${TPL_SMALL_BTN_STYLE}" title="上移" onclick="event.stopPropagation(); tplMoveStep(${i}, -1)">↑</button>`;
+    html += `<button type="button" style="${TPL_SMALL_BTN_STYLE}" title="下移" onclick="event.stopPropagation(); tplMoveStep(${i}, 1)">↓</button>`;
+    html += `<button type="button" style="${TPL_SMALL_BTN_STYLE}" title="删除动作" onclick="event.stopPropagation(); tplDeleteStep(${i})">×</button>`;
+    html += '</span></div>';
+    if (open) {
+        html += `<div class="tpl-step-body">${renderTplStepFields(step, i)}</div>`;
+    }
     html += '</div>';
     return html;
+}
+
+/**
+ * 把当前展开步骤的表单值写回状态。
+ * 收起态的步骤不在 DOM 里,其数据以 tplEditingTemplate.steps 为准。
+ */
+function tplCommitExpandedStep() {
+    if (tplExpandedStep == null || !tplEditingTemplate) { return; }
+    const step = tplEditingTemplate.steps[tplExpandedStep];
+    if (!step) { tplExpandedStep = null; return; }
+    const fields = collectTplStepFields(step.type, tplExpandedStep);
+    tplEditingTemplate.steps[tplExpandedStep] = Object.assign({}, step, fields);
+}
+
+function tplToggleStep(i) {
+    tplCommitExpandedStep();
+    tplExpandedStep = (tplExpandedStep === i) ? null : i;
+    renderTplSteps();
 }
 
 function renderTplStepFields(step, i) {
@@ -781,40 +910,43 @@ function tplSelectOptions(options, selected) {
     return html;
 }
 
-// ---------- 编辑器结构操作(先收集当前 DOM,再变更,再重渲染) ----------
+// ---------- 编辑器结构操作(先提交展开中的表单值,再变更状态,再重渲染) ----------
 
-function tplAddStep() {
-    const raw = collectVisualTemplate();
-    if (raw.steps.length >= TPL_MAX_STEPS) { showToast(`动作最多 ${TPL_MAX_STEPS} 个`); return; }
-    const typeSelect = document.getElementById('tplAddStepSelect');
-    const type = typeSelect ? typeSelect.value : 'search';
-    raw.steps.push(tplDefaultStep(type));
-    tplEditingTemplate = { ...tplEditingTemplate, ...raw };
+function tplAddStep(type) {
+    tplCommitExpandedStep();
+    const steps = tplEditingTemplate.steps;
+    if (steps.length >= TPL_MAX_STEPS) { showToast(`动作最多 ${TPL_MAX_STEPS} 个`); return; }
+    steps.push(tplDefaultStep(type));
+    tplExpandedStep = steps.length - 1;
     renderTplSteps();
+    const openCard = document.querySelector('#tplEditSteps .tpl-open');
+    if (openCard && openCard.scrollIntoView) { openCard.scrollIntoView({ block: 'nearest' }); }
 }
 
 function tplDeleteStep(i) {
-    const raw = collectVisualTemplate();
-    raw.steps.splice(i, 1);
-    tplEditingTemplate = { ...tplEditingTemplate, ...raw };
+    tplCommitExpandedStep();
+    tplEditingTemplate.steps.splice(i, 1);
+    if (tplExpandedStep === i) { tplExpandedStep = null; }
+    else if (tplExpandedStep != null && tplExpandedStep > i) { tplExpandedStep--; }
     renderTplSteps();
 }
 
 function tplMoveStep(i, delta) {
-    const raw = collectVisualTemplate();
+    tplCommitExpandedStep();
+    const steps = tplEditingTemplate.steps;
     const j = i + delta;
-    if (j < 0 || j >= raw.steps.length) { return; }
-    const tmp = raw.steps[i];
-    raw.steps[i] = raw.steps[j];
-    raw.steps[j] = tmp;
-    tplEditingTemplate = { ...tplEditingTemplate, ...raw };
+    if (j < 0 || j >= steps.length) { return; }
+    const tmp = steps[i];
+    steps[i] = steps[j];
+    steps[j] = tmp;
+    if (tplExpandedStep === i) { tplExpandedStep = j; }
+    else if (tplExpandedStep === j) { tplExpandedStep = i; }
     renderTplSteps();
 }
 
-/** 筛选字段变化时,重绘该动作的值区域(收集-变更-重渲染) */
+/** 筛选字段变化时,重绘该动作的表单(收集-变更-重渲染,保持展开) */
 function tplStepFieldChanged(i) {
-    const raw = collectVisualTemplate();
-    tplEditingTemplate = { ...tplEditingTemplate, ...raw };
+    tplCommitExpandedStep();
     renderTplSteps();
 }
 
@@ -828,28 +960,20 @@ function tplDefaultStep(type) {
     }
 }
 
-/** 从可视化表单 DOM 收集模板原始对象(不校验) */
+/** 汇总当前模板的原始对象(不校验):名称/描述读输入框,参数与步骤读状态 */
 function collectVisualTemplate() {
+    tplCommitExpandedStep();
     const t = tplEditingTemplate || { id: 'tpl_' + Date.now(), createdAt: Date.now() };
     const nameEl = document.getElementById('tplEditName');
     const descEl = document.getElementById('tplEditDesc');
-    const raw = {
+    return {
         id: t.id,
         createdAt: t.createdAt,
         name: nameEl ? nameEl.value : (t.name || ''),
         description: descEl ? descEl.value : (t.description || ''),
-        params: [],
-        steps: []
+        params: (t.params || []).map(p => ({ key: p.key, label: p.label })),
+        steps: JSON.parse(JSON.stringify(t.steps || []))
     };
-    document.querySelectorAll('#tplEditParams .tpl-param-row').forEach(row => {
-        const key = row.querySelector('.tpl-param-key');
-        const label = row.querySelector('.tpl-param-label');
-        raw.params.push({ key: key ? key.value.trim() : '', label: label ? label.value.trim() : '' });
-    });
-    (t.steps || []).forEach((step, i) => {
-        raw.steps.push(collectTplStepFields(step.type, i));
-    });
-    return raw;
 }
 
 function collectTplStepFields(type, i) {
@@ -899,12 +1023,12 @@ function collectTplStepFields(type, i) {
     return { type: type };
 }
 
-// ---------- 编辑器页签: 可视化 / JSON ----------
+// ---------- 编辑器视图切换: 表单 / JSON(高级逃生门,入口在页脚链接) ----------
 
 function tplSwitchEditorMode(mode) {
     if (mode === tplEditorMode) { return; }
     if (mode === 'json') {
-        // 可视化 -> JSON: 先收集当前表单再序列化(收集失败也允许,让用户在 JSON 里修)
+        // 表单 -> JSON: 序列化当前状态(收集失败也允许,让用户在 JSON 里修)
         const raw = collectVisualTemplate();
         document.getElementById('tplEditJson').value = JSON.stringify({
             name: raw.name, description: raw.description, params: raw.params, steps: raw.steps
@@ -912,11 +1036,13 @@ function tplSwitchEditorMode(mode) {
         tplHideEditorError();
         tplEditorMode = 'json';
     } else {
-        // JSON -> 可视化: 解析成功才切换,失败留在 JSON 页并标错
+        // JSON -> 表单: 解析成功才切换,失败留在 JSON 并标错
         const text = document.getElementById('tplEditJson').value;
         try {
             const parsed = JSON.parse(text);
-            tplEditingTemplate = { ...tplEditingTemplate, ...parsed };
+            tplEditingTemplate = Object.assign({}, tplEditingTemplate, parsed);
+            tplExpandedStep = null;
+            tplParamAdding = false;
             tplEditorMode = 'visual';
             renderTemplateEditor();
         } catch (e) {
@@ -928,11 +1054,15 @@ function tplSwitchEditorMode(mode) {
 }
 
 function tplSyncEditorTabs() {
-    const visual = tplEditorMode === 'visual';
-    document.getElementById('tplEditorVisual').style.display = visual ? 'block' : 'none';
-    document.getElementById('tplEditorJson').style.display = visual ? 'none' : 'block';
-    document.getElementById('tplTabBtnVisual').style.opacity = visual ? '1' : '0.6';
-    document.getElementById('tplTabBtnJson').style.opacity = visual ? '0.6' : '1';
+    const json = tplEditorMode === 'json';
+    const visual = document.getElementById('tplEditorVisual');
+    const stepsSec = document.getElementById('tplStepsSec');
+    const panel = document.getElementById('tplEditorJson');
+    if (visual) { visual.style.display = json ? 'none' : 'block'; }
+    if (stepsSec) { stepsSec.style.display = json ? 'none' : 'block'; }
+    if (panel) { panel.style.display = json ? 'block' : 'none'; }
+    const btn = document.getElementById('tplJsonToggle');
+    if (btn) { btn.textContent = json ? '返回表单编辑' : '以 JSON 编辑'; }
 }
 
 function tplShowJsonError(msg) {
