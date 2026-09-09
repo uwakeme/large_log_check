@@ -418,18 +418,15 @@ button .codicon {
     padding-left: 5px;
 }
 
-/* 书签行样式（默认主题）— 左侧色条仅在该行没有级别色条时添加，避免覆盖 error/warn/info/debug */
+/* 书签行样式（默认主题）— 行首书签色条用内嵌阴影实现,与级别色条并排显示(级别在外 3px,书签在内 3px),互不覆盖 */
 .log-line.bookmarked {
-    background-color: rgba(255, 193, 7, 0.16);
+    background-color: rgba(255, 193, 7, 0.22);
+    box-shadow: inset 3px 0 0 #ffc107;
+    padding-left: 5px;
 }
 
 .log-line.bookmarked:hover {
-    background-color: rgba(255, 193, 7, 0.26);
-}
-
-.log-line.bookmarked:not(.error):not(.warn):not(.info):not(.debug):not(.collapsed) {
-    border-left: 3px solid #ffc107;
-    padding-left: 5px;
+    background-color: rgba(255, 193, 7, 0.3);
 }
 
 .log-line.bookmarked .log-line-number {
