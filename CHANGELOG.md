@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.3.1] - 2026-09-10
 ### Changed
 - **重构排查模板编辑器** — 按「编排流水线」重新设计:步骤以带连接线的流程轨道呈现,等宽字体编号节点 + 一句可读摘要,收起时整条流程可像配方一样通读,点击卡片展开编辑(同时只展开一张);添加动作改为四个一键按钮(查询/筛选/书签/注释);运行参数改为可删除的芯片,新增走内联小表单;JSON 编辑从平级页签降级为页脚「以 JSON 编辑」链接;样式迁移至主题变量类,4 套主题自动适配
 - **书签行样式按主题高亮,一眼可辨** — 书签行不再是难以察觉的淡色背景:整行有明显加深的主题色底色,行首显示书签色条(用内嵌阴影与 ERROR/WARN 等级别色条并排成双条纹,互不覆盖),行号与书签图标同色高亮;移除了基本不可见的右侧色条。配色跟随主题自动适配 — 默认主题琥珀色、NEON.CYBER 酸性黄、AURORA.GLASS 极光粉、HOLO.PRISM 霓虹粉
