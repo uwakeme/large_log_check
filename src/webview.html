@@ -506,41 +506,31 @@
         </div>
     </div>
     
-    <!-- 高级搜索弹窗 -->
+    <!-- 高级搜索弹窗(查询构建器) -->
     <div id="advancedSearchModal" class="modal">
-        <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-content adv-modal" style="max-width: 760px;">
             <div class="modal-header">
                 <h2><i class="codicon codicon-search"></i> 高级搜索</h2>
-                <span class="modal-close" onclick="closeAdvancedSearchModal()">&times;</span>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <button type="button" class="adv-ghost-btn" onclick="resetAdvSearchConditions()" title="清空所有条件"><i class="codicon codicon-clear-all"></i> 清空</button>
+                    <span class="modal-close" onclick="closeAdvancedSearchModal()" title="关闭(条件会保留)">&times;</span>
+                </div>
             </div>
-            <div class="modal-body">
-                <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <label style="font-weight: bold;">搜索条件：</label>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
-                                <span>逻辑关系：</span>
-                                <select id="advSearchLogic" style="padding: 4px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px;">
-                                    <option value="AND">AND（且）</option>
-                                    <option value="OR">OR（或）</option>
-                                </select>
-                            </label>
-                            <button onclick="addAdvSearchCondition()" style="padding: 5px 12px; font-size: 12px;"><i class="codicon codicon-add"></i> 添加条件</button>
-                        </div>
-                    </div>
-                    <div id="advSearchConditions" style="display: flex; flex-direction: column; gap: 10px;">
-                        <!-- 搜索条件将动态添加到这里 -->
-                    </div>
+            <div class="modal-body adv-body">
+                <div id="advSearchConditions" class="adv-conditions" aria-label="搜索条件列表">
+                    <!-- 条件行动态生成 -->
                 </div>
-                <div style="background-color: var(--vscode-editorWidget-background); padding: 10px; border-radius: 3px; margin-bottom: 15px; border-left: 3px solid #0e7490;">
-                    <strong><i class="codicon codicon-lightbulb"></i> 提示：</strong>
-                    <ul style="margin: 5px 0 0 20px; font-size: 12px; line-height: 1.6;">
-                        <li>支持多个搜索条件组合，可选择 AND（同时满足）或 OR（满足任一）</li>
-                        <li>线程名、类名、方法名支持精确匹配和模糊匹配</li>
-                        <li>关键词搜索支持多关键词（空格分隔）</li>
-                    </ul>
+                <button type="button" class="adv-add" onclick="addAdvSearchCondition()" title="添加一个条件">
+                    <i class="codicon codicon-add"></i> 添加条件
+                </button>
+                <div class="adv-preview" aria-live="polite">
+                    <span class="adv-preview-label">查询</span>
+                    <span id="advSearchPreview" class="adv-preview-text"></span>
                 </div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            </div>
+            <div class="modal-footer adv-footer">
+                <span class="adv-kbd-hint"><kbd>Enter</kbd> 搜索 · <kbd>Esc</kbd> 关闭</span>
+                <div style="display: flex; gap: 10px;">
                     <button onclick="closeAdvancedSearchModal()">取消</button>
                     <button onclick="confirmAdvancedSearch()"><i class="codicon codicon-search"></i> 搜索</button>
                 </div>

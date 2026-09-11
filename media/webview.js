@@ -2744,117 +2744,373 @@ function showCopyToast() {
     }, 2000);
 }
 
-// ========== 高级搜索 ==========
+// ========== 高级搜索(查询构建器) ==========
+// 交互模型:每个条件占一行(字段 + 匹配方式 + 值),行与行之间的「且/或」
+// 芯片是全局逻辑关系,点击任意芯片即整体切换,预览文字实时反映当前查询。
+// 弹窗关闭只隐藏、不清空,条件草稿保留到下一次打开继续改;「清空」才重置。
+
 let advSearchConditionId = 0;
+let advSearchLogic = 'AND';
+
+// 字段类型定义:label 用于行内下拉与查询预览,dot 是行首的类型色点(沿用
+// 应用内既有的级别/语义色,纯装饰冗余,颜色不单独承载信息)
+const ADV_SEARCH_TYPES = [
+    { value: 'keyword', label: '关键词', dot: '#4fc1ff' },
+    { value: 'thread',  label: '线程名', dot: '#89d185' },
+    { value: 'class',   label: '类名',   dot: '#b267e6' },
+    { value: 'method',  label: '方法名', dot: '#d7ba7d' },
+    { value: 'level',   label: '级别',   dot: '#f14c4c' },
+    { value: 'time',    label: '时间',   dot: '#cca700' }
+];
+
+// 各字段可用的匹配方式;为空数组表示该字段没有第二列(级别/时间)
+const ADV_SEARCH_OPERATORS = {
+    keyword: [
+        { value: 'all', label: '包含全部词' },
+        { value: 'any', label: '包含任一词' }
+    ],
+    thread: [
+        { value: 'contains', label: '包含' },
+        { value: 'exact',    label: '精确等于' }
+    ],
+    class: [
+        { value: 'contains', label: '包含' },
+        { value: 'exact',    label: '精确等于' }
+    ],
+    method: [
+        { value: 'contains', label: '包含' },
+        { value: 'exact',    label: '精确等于' }
+    ],
+    level: [],
+    time: []
+};
+
+const ADV_SEARCH_PLACEHOLDERS = {
+    keyword: '多个词用空格分隔，如：timeout payment',
+    thread:  '如：http-nio-8080-exec-1',
+    class:   '如：com.example.UserService',
+    method:  '如：getUserById'
+};
+
+function advSearchTypeMeta(type) {
+    return ADV_SEARCH_TYPES.find(t => t.value === type) || ADV_SEARCH_TYPES[0];
+}
 
 function showAdvancedSearchModal() {
     document.getElementById('advancedSearchModal').style.display = 'block';
-    // 如果没有条件，自动添加第一个
     const conditionsContainer = document.getElementById('advSearchConditions');
-    if (conditionsContainer.children.length === 0) {
+    // 草稿保留:只在完全没有条件时补一个默认行
+    if (conditionsContainer.querySelectorAll('.adv-condition').length === 0) {
         addAdvSearchCondition();
     }
+    // 聚焦第一个空文本框,直接开打
+    const inputs = conditionsContainer.querySelectorAll('input[type="text"]');
+    const target = [...inputs].find(i => !i.value.trim()) || inputs[0];
+    if (target) {
+        target.focus();
+        target.select();
+    }
+    updateAdvSearchPreview();
 }
 
 function closeAdvancedSearchModal() {
+    // 只隐藏,不清空——误关不丢草稿,重开继续改
     document.getElementById('advancedSearchModal').style.display = 'none';
-    // 清空所有条件
-    document.getElementById('advSearchConditions').innerHTML = '';
-    advSearchConditionId = 0;
 }
 
-function addAdvSearchCondition() {
+function resetAdvSearchConditions() {
+    const conditionsContainer = document.getElementById('advSearchConditions');
+    conditionsContainer.innerHTML = '';
+    advSearchConditionId = 0;
+    advSearchLogic = 'AND';
+    addAdvSearchCondition();
+}
+
+function addAdvSearchCondition(type) {
     const conditionId = advSearchConditionId++;
     const conditionsContainer = document.getElementById('advSearchConditions');
-    
-    const conditionDiv = document.createElement('div');
-    conditionDiv.id = `advSearchCondition_${conditionId}`;
-    conditionDiv.style.cssText = 'display: flex; gap: 10px; align-items: flex-start; padding: 10px; background-color: var(--vscode-editor-background); border-radius: 3px; border: 1px solid var(--vscode-panel-border);';
-    
-    conditionDiv.innerHTML = `
-        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <select id="advSearchType_${conditionId}" onchange="onAdvSearchTypeChange(${conditionId})" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
-                    <option value="keyword">关键词</option>
-                    <option value="thread">线程名</option>
-                    <option value="class">类名</option>
-                    <option value="method">方法名</option>
-                    <option value="level">日志级别</option>
-                    <option value="time">时间范围</option>
-                </select>
-                <div id="advSearchMatchType_${conditionId}" style="display: none;">
-                    <select id="advSearchMatch_${conditionId}" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
-                        <option value="exact">精确匹配</option>
-                        <option value="contains">包含</option>
-                    </select>
-                </div>
-            </div>
-            <div id="advSearchValue_${conditionId}">
-                <input type="text" id="advSearchInput_${conditionId}" placeholder="输入搜索内容（多关键词用空格分隔）" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
-            </div>
-        </div>
-        <button onclick="removeAdvSearchCondition(${conditionId})" title="删除此条件" style="padding: 6px 10px; font-size: 12px; background-color: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);"><i class="codicon codicon-close"></i></button>
+    const rowType = type || 'keyword';
+
+    // 已有条件时,先补一行逻辑连接轨道(且/或)
+    if (conditionsContainer.querySelector('.adv-condition')) {
+        const rail = document.createElement('div');
+        rail.className = 'adv-rail';
+        rail.innerHTML = `<button type="button" class="adv-logic-chip" onclick="toggleAdvSearchLogic()" title="点击切换 且/或"></button>`;
+        conditionsContainer.appendChild(rail);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'adv-condition';
+    row.id = `advSearchCondition_${conditionId}`;
+
+    const typeOptions = ADV_SEARCH_TYPES.map(t =>
+        `<option value="${t.value}" ${t.value === rowType ? 'selected' : ''}>${t.label}</option>`
+    ).join('');
+
+    row.innerHTML = `
+        <span class="adv-dot" aria-hidden="true"></span>
+        <select class="adv-select adv-type" id="advSearchType_${conditionId}" onchange="onAdvSearchTypeChange(${conditionId})" aria-label="条件字段">${typeOptions}</select>
+        <select class="adv-select adv-op" id="advSearchOp_${conditionId}" onchange="updateAdvSearchPreview()" aria-label="匹配方式"></select>
+        <div class="adv-value" id="advSearchValue_${conditionId}"></div>
+        <button type="button" class="adv-remove" onclick="removeAdvSearchCondition(${conditionId})" title="删除此条件"><i class="codicon codicon-close"></i></button>
     `;
-    
-    conditionsContainer.appendChild(conditionDiv);
+
+    conditionsContainer.appendChild(row);
+    // renderAdvOp/value 需要行已在文档中
+    onAdvSearchTypeChange(conditionId, true);
+    refreshAdvSearchLogicChips();
+    return conditionId;
 }
 
 function removeAdvSearchCondition(conditionId) {
-    const conditionDiv = document.getElementById(`advSearchCondition_${conditionId}`);
-    if (conditionDiv) {
-        conditionDiv.remove();
-    }
+    const row = document.getElementById(`advSearchCondition_${conditionId}`);
+    if (!row) return;
+    // 连接轨道跟着条件走:删行时把它上面的轨道一并移除
+    const prev = row.previousElementSibling;
+    if (prev && prev.classList.contains('adv-rail')) prev.remove();
+    row.remove();
+    updateAdvSearchPreview();
 }
 
-function onAdvSearchTypeChange(conditionId) {
-    const type = document.getElementById(`advSearchType_${conditionId}`).value;
+/** 全局切换 且/或(旧版藏在右上角下拉里,现在就放在条件之间) */
+function toggleAdvSearchLogic() {
+    advSearchLogic = advSearchLogic === 'AND' ? 'OR' : 'AND';
+    refreshAdvSearchLogicChips();
+    updateAdvSearchPreview();
+}
+
+function refreshAdvSearchLogicChips() {
+    const label = advSearchLogic === 'AND' ? '且' : '或';
+    document.querySelectorAll('.adv-logic-chip').forEach(chip => {
+        chip.textContent = label;
+        chip.dataset.logic = advSearchLogic;
+    });
+}
+
+/**
+ * 字段切换后重建第二列(匹配方式)与值区。keepValue 用于同族文本字段
+ * (关键词/线程名/类名/方法名)之间切换时保留已输入内容。
+ */
+function onAdvSearchTypeChange(conditionId, keepValue) {
+    const typeSelect = document.getElementById(`advSearchType_${conditionId}`);
+    if (!typeSelect) return;
+    const type = typeSelect.value;
+    const row = document.getElementById(`advSearchCondition_${conditionId}`);
+    const opSelect = document.getElementById(`advSearchOp_${conditionId}`);
     const valueContainer = document.getElementById(`advSearchValue_${conditionId}`);
-    const matchTypeContainer = document.getElementById(`advSearchMatchType_${conditionId}`);
-    
-    // 显示/隐藏匹配类型选择器
-    if (type === 'thread' || type === 'class' || type === 'method') {
-        matchTypeContainer.style.display = 'block';
-    } else {
-        matchTypeContainer.style.display = 'none';
+
+    // 行首色点跟字段走
+    const dot = row.querySelector('.adv-dot');
+    if (dot) dot.style.background = advSearchTypeMeta(type).dot;
+
+    const previousText = keepValue === true ? '' : (valueContainer.querySelector('input[type="text"]')?.value || '');
+
+    // 第二列:匹配方式(级别/时间没有,隐藏)
+    const operators = ADV_SEARCH_OPERATORS[type] || [];
+    opSelect.style.display = operators.length ? '' : 'none';
+    opSelect.innerHTML = operators.map((op, i) =>
+        `<option value="${op.value}" ${i === 0 ? 'selected' : ''}>${op.label}</option>`
+    ).join('');
+
+    // 值区:文本框 / 级别芯片 / 时间区间
+    if (operators.length) {
+        valueContainer.innerHTML = `<input type="text" id="advSearchInput_${conditionId}" placeholder="${ADV_SEARCH_PLACEHOLDERS[type] || ''}">`;
+        if (previousText) valueContainer.querySelector('input').value = previousText;
+    } else if (type === 'level') {
+        // 默认勾选 ERROR/WARN——加级别行通常就是为了看这两类,芯片状态下改选也最直观
+        valueContainer.innerHTML = `
+            <div class="adv-level-chips">
+                <label class="adv-level-chip" style="--lvl:#f14c4c;"><input type="checkbox" id="advSearchLevel_${conditionId}_ERROR" checked><span>ERROR</span></label>
+                <label class="adv-level-chip" style="--lvl:#cca700;"><input type="checkbox" id="advSearchLevel_${conditionId}_WARN" checked><span>WARN</span></label>
+                <label class="adv-level-chip" style="--lvl:#4fc1ff;"><input type="checkbox" id="advSearchLevel_${conditionId}_INFO"><span>INFO</span></label>
+                <label class="adv-level-chip" style="--lvl:#b267e6;"><input type="checkbox" id="advSearchLevel_${conditionId}_DEBUG"><span>DEBUG</span></label>
+                <label class="adv-level-chip adv-level-other"><input type="checkbox" id="advSearchLevel_${conditionId}_OTHER"><span>其他</span></label>
+            </div>
+        `;
+    } else if (type === 'time') {
+        valueContainer.innerHTML = `
+            <div class="adv-time-range">
+                <input type="text" id="advSearchStartTime_${conditionId}" placeholder="开始 2024-01-01 10:00:00">
+                <span class="adv-time-sep" aria-hidden="true">→</span>
+                <input type="text" id="advSearchEndTime_${conditionId}" placeholder="结束 2024-01-01 18:00:00">
+            </div>
+        `;
     }
-    
-    // 根据类型渲染不同的输入控件
-    switch (type) {
-        case 'keyword':
-        case 'thread':
-        case 'class':
-        case 'method':
-            valueContainer.innerHTML = `<input type="text" id="advSearchInput_${conditionId}" placeholder="${getPlaceholder(type)}" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">`;
-            break;
-        case 'level':
-            valueContainer.innerHTML = `
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_ERROR" checked> <span style="color: #f14c4c;">■</span> ERROR</label>
-                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_WARN" checked> <span style="color: #cca700;">■</span> WARN</label>
-                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_INFO" checked> <span style="color: #4fc1ff;">■</span> INFO</label>
-                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_DEBUG" checked> <span style="color: #b267e6;">■</span> DEBUG</label>
-                    <label style="font-size: 12px;"><input type="checkbox" id="advSearchLevel_${conditionId}_OTHER" checked> 其他</label>
-                </div>
-            `;
-            break;
-        case 'time':
-            valueContainer.innerHTML = `
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <input type="text" id="advSearchStartTime_${conditionId}" placeholder="开始时间 (2024-01-01 10:00:00)" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
-                    <input type="text" id="advSearchEndTime_${conditionId}" placeholder="结束时间 (2024-01-01 18:00:00)" style="padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; font-size: 12px;">
-                </div>
-            `;
-            break;
+
+    updateAdvSearchPreview();
+}
+
+/** 键盘:Enter 执行搜索,Esc 关闭(焦点在按钮/下拉上时交给原生行为) */
+function handleAdvSearchKeydown(event) {
+    if (event.key === 'Escape') {
+        event.stopPropagation();
+        closeAdvancedSearchModal();
+    } else if (event.key === 'Enter' &&
+               event.target.tagName !== 'BUTTON' &&
+               event.target.tagName !== 'SELECT') {
+        event.preventDefault();
+        confirmAdvancedSearch();
     }
 }
 
-function getPlaceholder(type) {
-    switch (type) {
-        case 'keyword': return '输入搜索内容（多关键词用空格分隔）';
-        case 'thread': return '输入线程名，例如：http-nio-8080-exec-1';
-        case 'class': return '输入类名，例如：com.example.UserService';
-        case 'method': return '输入方法名，例如：getUserById';
-        default: return '';
+/**
+ * 读取全部条件行。markInvalid 为 true 时(点搜索)给没填的行标红。
+ * 级别全选或全不选视为无条件(与旧版一致);时间只填一头也算有效。
+ */
+function collectAdvSearchConditions(markInvalid) {
+    const rows = document.querySelectorAll('#advSearchConditions .adv-condition');
+    const conditions = [];
+    let emptyCount = 0;
+
+    rows.forEach(row => {
+        const conditionId = row.id.split('_')[1];
+        const type = document.getElementById(`advSearchType_${conditionId}`).value;
+        let condition = null;
+
+        switch (type) {
+            case 'keyword':
+            case 'thread':
+            case 'class':
+            case 'method': {
+                const value = document.getElementById(`advSearchInput_${conditionId}`)?.value.trim();
+                if (!value) { emptyCount++; break; }
+                condition = { type, value };
+                const op = document.getElementById(`advSearchOp_${conditionId}`).value;
+                if (type === 'keyword') condition.keywordMode = op; // all | any
+                else condition.matchType = op;                      // contains | exact
+                break;
+            }
+            case 'level': {
+                const levels = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'OTHER'].filter(level =>
+                    document.getElementById(`advSearchLevel_${conditionId}_${level}`)?.checked);
+                if (levels.length === 0 || levels.length === 5) break;
+                condition = { type, levels };
+                break;
+            }
+            case 'time': {
+                const startTime = document.getElementById(`advSearchStartTime_${conditionId}`)?.value.trim() || '';
+                const endTime = document.getElementById(`advSearchEndTime_${conditionId}`)?.value.trim() || '';
+                if (!startTime && !endTime) { emptyCount++; break; }
+                condition = { type, startTime, endTime };
+                break;
+            }
+        }
+
+        if (markInvalid) row.classList.toggle('adv-invalid', !condition);
+        if (condition) conditions.push(condition);
+    });
+
+    return { logic: advSearchLogic, conditions, emptyCount };
+}
+
+/** 把一条条件翻译成一句话;空条件返回 null(预览里直接略过) */
+function describeAdvSearchCondition(condition) {
+    const quoted = `"${condition.value}"`;
+    switch (condition.type) {
+        case 'keyword':
+            return condition.keywordMode === 'any' ? `内容含任一词 ${quoted}` : `内容含全部词 ${quoted}`;
+        case 'thread':
+            return condition.matchType === 'exact' ? `线程名 = ${quoted}` : `线程名含 ${quoted}`;
+        case 'class':
+            return condition.matchType === 'exact' ? `类名 = ${quoted}` : `类名含 ${quoted}`;
+        case 'method':
+            return condition.matchType === 'exact' ? `方法名 = ${quoted}` : `方法名含 ${quoted}`;
+        case 'level':
+            return `级别为 ${condition.levels.join('/')}`;
+        case 'time': {
+            if (condition.startTime && condition.endTime) return `时间在 ${condition.startTime} → ${condition.endTime}`;
+            if (condition.startTime) return `时间从 ${condition.startTime} 起`;
+            return `时间到 ${condition.endTime} 止`;
+        }
+        default:
+            return null;
+    }
+}
+
+function buildAdvSearchPreview(logic, conditions) {
+    const parts = conditions.map(describeAdvSearchCondition).filter(Boolean);
+    if (parts.length === 0) {
+        // 有行但都没填,和完全没有行要分开说,避免「我明明加了条件」的困惑
+        const hasRows = document.querySelectorAll('#advSearchConditions .adv-condition').length > 0;
+        return hasRows ? '填写条件内容后，这里会实时描述这条查询' : '暂无条件 — 点击下方「添加条件」';
+    }
+    return parts.join(logic === 'AND' ? ' 且 ' : ' 或 ');
+}
+
+/** 静默收集(不标红)并刷新底部预览 */
+function updateAdvSearchPreview() {
+    const { logic, conditions } = collectAdvSearchConditions(false);
+    const el = document.getElementById('advSearchPreview');
+    if (el) el.textContent = buildAdvSearchPreview(logic, conditions);
+}
+
+function confirmAdvancedSearch() {
+    const { logic, conditions, emptyCount } = collectAdvSearchConditions(true);
+
+    if (conditions.length === 0) {
+        showToast(emptyCount > 0 ? '还有条件没填内容，填好或删掉再搜索' : '请先添加至少一个条件');
+        return;
+    }
+
+    const previewText = buildAdvSearchPreview(logic, conditions);
+
+    // 进入搜索模式前备份
+    if (!isInSearchMode) {
+        const container = document.getElementById('logContainer');
+        searchBackup = {
+            allLines: allLines,
+            originalLines: originalLines,
+            totalLinesInFile,
+            allDataLoaded,
+            isCollapseMode,
+            currentPage,
+            pageRanges: new Map(pageRanges),
+            scrollTop: container ? container.scrollTop : 0
+        };
+        isInSearchMode = true;
+    }
+
+    // 应用过滤条件
+    let results = [...allLines];
+
+    if (logic === 'AND') {
+        // AND 逻辑：所有条件都必须满足
+        results = results.filter(line => {
+            return conditions.every(condition => matchCondition(line, condition));
+        });
+    } else {
+        // OR 逻辑：满足任一条件即可
+        results = results.filter(line => {
+            return conditions.some(condition => matchCondition(line, condition));
+        });
+    }
+
+    allLines = results;
+    currentPage = 1;
+    isFiltering = true;
+
+    handleDataChange({
+        resetPage: true,
+        clearPageRanges: true,
+        triggerAsyncCalc: true
+    });
+
+    closeAdvancedSearchModal();
+
+    // 筛选状态栏常驻显示这条查询,让「生效中的是什么」随时可见、可一键取消
+    showFilterStatus('高级搜索: ' + previewText);
+    const clearBtn = document.querySelector('#filterStatusPanel button');
+    if (clearBtn) {
+        clearBtn.onclick = clearCustomFilter;
+        clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 取消筛选';
+    }
+
+    if (results.length === 0) {
+        showToast('未找到符合条件的日志');
+    } else if (emptyCount > 0) {
+        showToast(`找到 ${results.length} 条匹配的日志（已忽略 ${emptyCount} 个未填写的条件）`);
+    } else {
+        showToast(`找到 ${results.length} 条匹配的日志`);
     }
 }
 
@@ -2934,124 +3190,42 @@ const methodName = methodMatch ? methodMatch[1] : '';
     return { threadName, className, methodName, content };
 }
 
-function confirmAdvancedSearch() {
-    const logic = document.getElementById('advSearchLogic').value;
-    const conditionsContainer = document.getElementById('advSearchConditions');
-    
-    if (conditionsContainer.children.length === 0) {
-        showToast('请至少添加一个搜索条件');
-        return;
-    }
-    
-    // 收集所有条件
-    const conditions = [];
-    for (let i = 0; i < conditionsContainer.children.length; i++) {
-        const child = conditionsContainer.children[i];
-        const conditionId = child.id.split('_')[1];
-        const type = document.getElementById(`advSearchType_${conditionId}`).value;
-        
-        const condition = { type };
-        
-        switch (type) {
-            case 'keyword':
-            case 'thread':
-            case 'class':
-            case 'method':
-                const input = document.getElementById(`advSearchInput_${conditionId}`);
-                if (!input || !input.value.trim()) continue;
-                condition.value = input.value.trim();
-                if (type !== 'keyword') {
-                    condition.matchType = document.getElementById(`advSearchMatch_${conditionId}`).value;
-                }
-                break;
-            case 'level':
-                const levels = [];
-                if (document.getElementById(`advSearchLevel_${conditionId}_ERROR`)?.checked) levels.push('ERROR');
-                if (document.getElementById(`advSearchLevel_${conditionId}_WARN`)?.checked) levels.push('WARN');
-                if (document.getElementById(`advSearchLevel_${conditionId}_INFO`)?.checked) levels.push('INFO');
-                if (document.getElementById(`advSearchLevel_${conditionId}_DEBUG`)?.checked) levels.push('DEBUG');
-                if (document.getElementById(`advSearchLevel_${conditionId}_OTHER`)?.checked) levels.push('OTHER');
-                if (levels.length === 0 || levels.length === 5) continue; // 全选或全不选，跳过
-                condition.levels = levels;
-                break;
-            case 'time':
-                const startTime = document.getElementById(`advSearchStartTime_${conditionId}`)?.value.trim();
-                const endTime = document.getElementById(`advSearchEndTime_${conditionId}`)?.value.trim();
-                if (!startTime && !endTime) continue;
-                condition.startTime = startTime;
-                condition.endTime = endTime;
-                break;
-        }
-        
-        conditions.push(condition);
-    }
-    
-    if (conditions.length === 0) {
-        showToast('请至少填写一个有效的搜索条件');
-        return;
-    }
-    
-    console.log('高级搜索条件:', { logic, conditions });
-    
-    // 进入搜索模式前备份
-    if (!isInSearchMode) {
-        const container = document.getElementById('logContainer');
-        searchBackup = {
-            allLines: allLines,
-            originalLines: originalLines,
-            totalLinesInFile,
-            allDataLoaded,
-            isCollapseMode,
-            currentPage,
-            pageRanges: new Map(pageRanges),
-            scrollTop: container ? container.scrollTop : 0
-        };
-        isInSearchMode = true;
-    }
-    
-    // 应用过滤条件
-    let results = [...allLines];
-    
-    if (logic === 'AND') {
-        // AND 逻辑：所有条件都必须满足
-        results = results.filter(line => {
-            return conditions.every(condition => matchCondition(line, condition));
+// 弹窗内全局事件委托:任何输入/切换都实时刷新预览;重新输入时解除行的未填标红
+(function initAdvSearchDelegates() {
+    const bind = () => {
+        const container = document.getElementById('advSearchConditions');
+        if (!container) return;
+        container.addEventListener('input', event => {
+            const row = event.target.closest('.adv-condition');
+            if (row) row.classList.remove('adv-invalid');
+            updateAdvSearchPreview();
         });
+        container.addEventListener('change', updateAdvSearchPreview);
+
+        const modal = document.getElementById('advancedSearchModal');
+        if (modal) modal.addEventListener('keydown', handleAdvSearchKeydown);
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bind);
     } else {
-        // OR 逻辑：满足任一条件即可
-        results = results.filter(line => {
-            return conditions.some(condition => matchCondition(line, condition));
-        });
+        bind();
     }
-
-    allLines = results;
-    currentPage = 1;
-    isFiltering = true;
-    
-    handleDataChange({
-        resetPage: true,
-        clearPageRanges: true,
-        triggerAsyncCalc: true
-    });
-
-    closeAdvancedSearchModal();
-
-    if (results.length === 0) {
-        showToast('未找到符合条件的日志');
-    } else {
-        showToast(`找到 ${results.length} 条匹配的日志`);
-    }
-}
+}())
 
 function matchCondition(line, condition) {
     const fields = extractLogFields(line);
     const content = fields.content;
     
     switch (condition.type) {
-        case 'keyword':
-            // 多关键词搜索
+        case 'keyword': {
+            // 多关键词搜索:all = 全部词都出现(旧版行为),any = 任一词出现即命中
             const keywords = condition.value.split(/\s+/).filter(k => k);
-            return keywords.every(keyword => content.toLowerCase().includes(keyword.toLowerCase()));
+            const haystack = content.toLowerCase();
+            if (condition.keywordMode === 'any') {
+                return keywords.some(keyword => haystack.includes(keyword.toLowerCase()));
+            }
+            return keywords.every(keyword => haystack.includes(keyword.toLowerCase()));
+        }
             
         case 'thread':
             if (!fields.threadName) return false;

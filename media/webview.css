@@ -590,6 +590,234 @@ button .codicon {
     gap: 10px;
 }
 
+/* ========== 高级搜索(查询构建器) ========== */
+/* 全部使用 VSCode 主题变量,4 套主题自动适配;级别色沿用应用内既有 hex */
+
+.adv-body {
+    padding: 16px 20px;
+}
+
+.adv-conditions {
+    display: flex;
+    flex-direction: column;
+}
+
+.adv-conditions:empty::after {
+    content: "还没有条件 — 点击下方「添加条件」";
+    color: var(--vscode-descriptionForeground);
+    font-size: 12px;
+    text-align: center;
+    padding: 18px 0;
+    border: 1px dashed var(--vscode-panel-border);
+    border-radius: 4px;
+}
+
+/* 条件行:字段 + 匹配方式 + 值,一行排完 */
+.adv-condition {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background-color: var(--vscode-input-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+}
+
+.adv-condition.adv-invalid {
+    border-color: #f14c4c;
+}
+
+.adv-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background-color: var(--vscode-textLink-foreground);
+}
+
+.adv-select {
+    padding: 4px 6px;
+    background-color: var(--vscode-dropdown-background, var(--vscode-input-background));
+    color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.adv-type { min-width: 84px; }
+.adv-op { min-width: 106px; }
+
+.adv-value {
+    flex: 1;
+    min-width: 0;
+}
+
+.adv-value input[type="text"] {
+    width: 100%;
+}
+
+.adv-remove {
+    flex-shrink: 0;
+    padding: 3px 6px;
+    background: transparent;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+}
+
+.adv-remove:hover {
+    color: #f14c4c;
+}
+
+/* 行间逻辑轨道:且/或芯片,点击整体切换 */
+.adv-rail {
+    display: flex;
+    padding: 2px 0 2px 24px;
+}
+
+.adv-logic-chip {
+    padding: 0 10px;
+    font-size: 11px;
+    line-height: 18px;
+    background-color: var(--vscode-editorWidget-background);
+    color: var(--vscode-textLink-foreground);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 9px;
+    cursor: pointer;
+}
+
+.adv-logic-chip:hover {
+    border-color: var(--vscode-textLink-foreground);
+}
+
+.adv-add {
+    margin-top: 10px;
+    width: 100%;
+    padding: 6px;
+    font-size: 12px;
+    background: transparent;
+    color: var(--vscode-textLink-foreground);
+    border: 1px dashed var(--vscode-panel-border);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.adv-add:hover {
+    border-color: var(--vscode-textLink-foreground);
+}
+
+/* 查询预览:整条查询的一句话描述,搜索后同步进筛选状态栏 */
+.adv-preview {
+    margin-top: 14px;
+    padding: 8px 12px;
+    background-color: var(--vscode-editorWidget-background);
+    border-left: 3px solid var(--vscode-textLink-foreground);
+    border-radius: 3px;
+    font-size: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
+.adv-preview-label {
+    flex-shrink: 0;
+    color: var(--vscode-descriptionForeground);
+}
+
+.adv-preview-text {
+    color: var(--vscode-foreground);
+    overflow-wrap: anywhere;
+}
+
+.adv-footer {
+    justify-content: space-between;
+    align-items: center;
+}
+
+.adv-kbd-hint {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.adv-kbd-hint kbd {
+    font-family: inherit;
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--vscode-panel-border);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    background-color: var(--vscode-editorWidget-background);
+}
+
+.adv-ghost-btn {
+    padding: 3px 10px;
+    font-size: 12px;
+    background: transparent;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+}
+
+.adv-ghost-btn:hover {
+    color: var(--vscode-foreground);
+}
+
+/* 级别芯片:选中即点亮对应级别色 */
+.adv-level-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.adv-level-chip {
+    position: relative;
+    cursor: pointer;
+}
+
+.adv-level-chip input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.adv-level-chip span {
+    display: inline-block;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 10px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.adv-level-chip input:checked + span {
+    color: var(--lvl, var(--vscode-foreground));
+    border-color: var(--lvl, var(--vscode-panel-border));
+    background: rgba(128, 128, 128, 0.15);
+    background: color-mix(in srgb, var(--lvl, #888080) 14%, transparent);
+}
+
+.adv-level-chip input:focus-visible + span {
+    outline: 1px solid var(--vscode-focusBorder);
+}
+
+/* 时间区间:单行内联 */
+.adv-time-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.adv-time-range input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.adv-time-sep {
+    color: var(--vscode-descriptionForeground);
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
