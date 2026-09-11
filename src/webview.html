@@ -50,7 +50,10 @@
             </div>
         </div>
         <div class="search-box" role="search" aria-label="搜索日志">
-            <input type="text" id="searchInput" placeholder="搜索日志内容（多关键词用空格分隔）..." aria-label="搜索关键词">
+            <div class="search-input-wrap">
+                <input type="text" id="searchInput" placeholder="搜索日志内容（多关键词用空格分隔）..." aria-label="搜索关键词">
+                <div class="search-history-dropdown" id="searchHistoryDropdown" role="listbox" aria-label="搜索历史"></div>
+            </div>
             <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">
                 <input type="checkbox" id="regexMode" aria-describedby="regexModeDesc">
                 <span id="regexModeDesc">正则</span>
@@ -726,5 +729,6 @@
     <!-- 脚本从扩展侧注入真实路径，这里使用占位符 -->
     <script src="%%WEBVIEW_JS%%"></script>
     <script src="%%TEMPLATES_JS%%"></script>
+    <script src="%%SEARCH_HISTORY_JS%%"></script>
 </body>
 </html>

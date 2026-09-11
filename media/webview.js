@@ -1661,6 +1661,7 @@ function escapeRegex(str) {
 }
 
 function search() {
+    hideSearchHistoryDropdown();
     const keyword = document.getElementById('searchInput').value.trim();
     const isRegex = document.getElementById('regexMode').checked;
     const currentPageOnly = document.getElementById('currentPageOnlyMode').checked;
@@ -1676,6 +1677,9 @@ function search() {
         searchInCurrentPage(keyword, isRegex);
         return;
     }
+
+    // 搜索实际执行即记入历史(含防抖即时搜索);中间前缀由存储层自动合并
+    addSearchHistoryEntry(keyword, isRegex);
 
     // 设置关键词过滤条件（全局搜索）
     setFilterAndApply({
@@ -1800,6 +1804,89 @@ function clearCurrentPageSearch() {
         showToast('已退出当前页搜索');
     }
 }
+
+// ========== 搜索历史下拉 ==========
+// 历史数据在 media/searchHistory.js(会话级内存,按文件面板隔离);这里只做下拉的渲染与交互。
+
+let searchHistoryRenderList = [];   // 下拉当前渲染的历史条目(过滤后的子集,点击按下标取)
+
+/** 渲染历史下拉;filterText 非空时按子串过滤,无匹配则收起 */
+function renderSearchHistoryDropdown(filterText) {
+    const dropdown = document.getElementById('searchHistoryDropdown');
+    if (!dropdown) { return; }
+    const kw = String(filterText == null ? '' : filterText).trim().toLowerCase();
+    const all = getSearchHistory();
+    searchHistoryRenderList = kw
+        ? all.filter(entry => entry.keyword.toLowerCase().includes(kw))
+        : all;
+
+    if (searchHistoryRenderList.length === 0) {
+        hideSearchHistoryDropdown();
+        return;
+    }
+
+    let html = '';
+    searchHistoryRenderList.forEach((entry, index) => {
+        const badge = entry.isRegex ? '<span class="search-history-badge">.*</span>' : '';
+        html += '<div class="search-history-item" role="option">'
+            + '<button type="button" class="search-history-text" onclick="selectSearchHistoryItem(' + index + ')" title="' + escapeAttr(entry.keyword) + '">'
+            + badge + '<span class="search-history-kw">' + escapeHtml(entry.keyword) + '</span></button>'
+            + '<button type="button" class="search-history-delete" onclick="deleteSearchHistoryItem(' + index + ')" aria-label="删除该条历史"><i class="codicon codicon-close"></i></button>'
+            + '</div>';
+    });
+    html += '<button type="button" class="search-history-footer" onclick="clearSearchHistoryDropdown()"><i class="codicon codicon-clear-all"></i> 清空历史</button>';
+    dropdown.innerHTML = html;
+    dropdown.classList.add('show');
+}
+
+/** 聚焦搜索框时弹出历史下拉(按当前输入过滤) */
+function showSearchHistoryDropdown() {
+    renderSearchHistoryDropdown(document.getElementById('searchInput').value);
+}
+
+function hideSearchHistoryDropdown() {
+    const dropdown = document.getElementById('searchHistoryDropdown');
+    if (dropdown) { dropdown.classList.remove('show'); }
+}
+
+/** 下拉打开时跟随输入实时过滤;未打开则不动 */
+function updateSearchHistoryFilter() {
+    const dropdown = document.getElementById('searchHistoryDropdown');
+    if (dropdown && dropdown.classList.contains('show')) {
+        renderSearchHistoryDropdown(document.getElementById('searchInput').value);
+    }
+}
+
+/** 点击历史条目:还原关键词与正则开关,立即执行全局搜索 */
+function selectSearchHistoryItem(index) {
+    const entry = searchHistoryRenderList[index];
+    if (!entry) { return; }
+    document.getElementById('searchInput').value = entry.keyword;
+    document.getElementById('regexMode').checked = entry.isRegex;
+    hideSearchHistoryDropdown();
+    search();
+}
+
+function deleteSearchHistoryItem(index) {
+    const entry = searchHistoryRenderList[index];
+    if (!entry) { return; }
+    searchHistoryRenderList = removeSearchHistoryEntry(entry.keyword, entry.isRegex);
+    renderSearchHistoryDropdown(document.getElementById('searchInput').value);
+}
+
+function clearSearchHistoryDropdown() {
+    clearSearchHistory();
+    hideSearchHistoryDropdown();
+    showToast('已清空搜索历史');
+}
+
+// 点击搜索框外部时关闭历史下拉(镜像「更多」菜单的外部关闭)
+document.addEventListener('click', function (event) {
+    const wrap = document.querySelector('.search-input-wrap');
+    if (wrap && !wrap.contains(event.target)) {
+        hideSearchHistoryDropdown();
+    }
+});
 
 function applyFilter() {
     const levels = [];
@@ -4827,6 +4914,8 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
 
     // 输入时即时搜索（防抖）
     input.addEventListener('input', function () {
+        // 搜索历史下拉打开时跟随输入实时过滤
+        updateSearchHistoryFilter();
         // 防抖：用户停止输入一小段时间后再触发搜索，避免频繁请求
         if (instantSearchTimer) {
             clearTimeout(instantSearchTimer);
@@ -4837,7 +4926,19 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
         }, userSettings.searchDebounceMs || 400); // 防抖间隔可通过设置调整
     });
 
-    // 回车键触发搜索（保持原行为）
+    // 聚焦搜索框时弹出搜索历史
+    input.addEventListener('focus', function () {
+        showSearchHistoryDropdown();
+    });
+
+    // Esc 关闭搜索历史下拉
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            hideSearchHistoryDropdown();
+        }
+    });
+
+    // 回车键触发搜索
     input.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             search();

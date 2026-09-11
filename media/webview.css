@@ -1046,6 +1046,99 @@ select option {
     display: block;
 }
 
+/* 搜索历史下拉(锚定在搜索输入框正下方,聚焦弹出) */
+.search-input-wrap {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 200px;
+}
+
+.search-history-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--vscode-editorWidget-background);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 3px;
+    z-index: 1000;
+    margin-top: 2px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.search-history-dropdown.show {
+    display: block;
+}
+
+.search-history-dropdown button {
+    width: 100%;
+    border: none;
+    background: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    font-size: 13px;
+    min-height: 28px;
+    padding: 4px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+}
+
+.search-history-dropdown button:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.search-history-item {
+    display: flex;
+    align-items: center;
+}
+
+.search-history-item .search-history-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.search-history-kw {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-history-badge {
+    flex: none;
+    font-size: 11px;
+    line-height: 16px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background-color: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+}
+
+.search-history-item .search-history-delete {
+    flex: none;
+    width: auto;
+    color: var(--vscode-descriptionForeground);
+}
+
+.search-history-item .search-history-delete:hover {
+    color: var(--vscode-errorForeground);
+    background-color: transparent;
+}
+
+.search-history-footer {
+    border-top: 1px solid var(--vscode-panel-border);
+    justify-content: center;
+    color: var(--vscode-descriptionForeground);
+    font-size: 12px;
+}
+
 .form-group {
     margin-bottom: 16px;
 }

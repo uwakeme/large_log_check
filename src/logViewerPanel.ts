@@ -696,6 +696,10 @@ export class LogViewerPanel {
         const templatesScriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'investigationTemplates.js')
         );
+        // 搜索历史存储脚本(纯存储逻辑,webview.js 运行时调用其全局函数)
+        const searchHistoryScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'searchHistory.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -708,6 +712,7 @@ export class LogViewerPanel {
             .replace(/%%THEMES_CSS%%/g, themesUri.toString())
             .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString())
             .replace(/%%TEMPLATES_JS%%/g, templatesScriptUri.toString())
+            .replace(/%%SEARCH_HISTORY_JS%%/g, searchHistoryScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 

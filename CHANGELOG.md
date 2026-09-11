@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **新增搜索历史** — 搜索过的关键词自动记住,重新聚焦搜索框即弹出历史下拉,点击条目一键还原关键词与正则开关并重新搜索。执行过的全局搜索都会记录,输入停顿后自动触发的即时搜索也算;打字过程的中间前缀自动合并进最终关键词,不会被半截关键词塞满。「当前页」搜索与高级搜索不进历史;下拉打开时输入可按子串实时过滤,正则条目带 `.*` 徽标,支持单条删除与一键清空;按(关键词+正则)去重、最新在前,上限 50 条。历史按日志文件隔离、仅当前会话有效,关闭查看器即清空
 
 ## [1.3.1] - 2026-09-10
 ### Changed
