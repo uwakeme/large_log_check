@@ -11,7 +11,7 @@ Professional VSCode extension for viewing and processing very large log files (m
 - Clean:       `npm run clean`     (rimraf out)
 - Rebuild:     `npm run rebuild`   (clean + compile)
 - Package:     `npm run package`   (vsce package → .vsix)
-- Publish:     `npm run publish`   (vsce publish — VSCode Marketplace)
+- Publish:     `npm run publish`   (vsce publish — NOT used in practice; releases are manual uploads, see Release process)
 
 ## Project layout
 
@@ -39,7 +39,8 @@ Professional VSCode extension for viewing and processing very large log files (m
 ## Testing instructions
 
 - Unit tests use the built-in `node:test` runner: `npm test` (= compile + `node --test test/*.test.cjs`)
-- `test/investigationTemplates.test.cjs` covers the investigation-template pure logic (validation / storage / pipeline engine / filter-UI sync) with browser-global stubs; when adding a new template action or strategy, extend it
+- `test/` is currently empty — the previous `investigationTemplates.test.cjs` / `searchHistory.test.cjs` were removed in 2026-09, so `npm test` passes with 0 tests (the unmatched glob is tolerated, and so is `vsce package`'s prepublish chain)
+- If tests are reintroduced, keep them in `test/*.test.cjs`; webview-side modules need browser-global stubs (localStorage etc.) to run under node:test
 - Manual test path: `npm run watch` → `F5` in VSCode → exercise the feature in the Extension Development Host
 
 ## PR & commit conventions
@@ -49,6 +50,19 @@ Professional VSCode extension for viewing and processing very large log files (m
 - Conventional commits, often in Chinese — see `git log --oneline -20` for the current style
 - Open the PR via `gh pr create` once `npm run lint` and `npm run compile` are green
 - **Cursor rule (always applied):** every new user-facing feature must update `README.md` and `CHANGELOG.md` in the same commit. Unreleased features go under `## [Unreleased]` at the top of `CHANGELOG.md`. One entry per feature per release — do not duplicate.
+
+## Release process (every version)
+
+1. Bump `version` in `package.json`
+2. Move CHANGELOG `## [Unreleased]` entries into `## [x.y.z] - YYYY-MM-DD`; keep an empty `## [Unreleased]` at the top
+3. `npm run package` — the `vscode:prepublish` chain (lint + compile + test) must pass; artifact is `big-log-viewer-<version>.vsix`
+4. Commit as `<old> -> <new>` (e.g. `1.3.1 -> 1.3.2`), then create an annotated tag `v<x.y.z>` on that commit
+5. Push `main` and the tag together — every release MUST be tagged, because the README version badge reads the latest tag
+6. Generate the GitHub Release page content for the tag and hand it to the user; they create the release and upload the `.vsix` themselves (to GitHub and to the Marketplace — never run `vsce publish`):
+   - Title: `大日志文件查看器 v<x.y.z>`
+   - Notes: condensed from the release's CHANGELOG section — one short bullet per entry under `### Added / Changed / Fixed`
+   - **No install instructions in the notes** — "how to install" lives only in `README.md`; the release body carries just the changelog summary, and the `.vsix` goes in as the attached binary
+   - Label: Latest
 
 ## Architecture (key facts)
 
