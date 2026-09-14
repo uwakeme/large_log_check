@@ -213,6 +213,10 @@ export class LogViewerPanel {
 
     private async loadFile(fileUri: vscode.Uri) {
         this._fileUri = fileUri;
+        // v1.3.3：在替换 _logProcessor 之前先让旧对象释放缓存。alias 变更后用户可能
+        // 调到 refresh() 重新打开同一文件（不切换 filePath），旧 _logProcessor 里的
+        // statsCache 是 mtime 键控的旧口径统计，必须清掉让重新加载走新别名。
+        this._logProcessor.invalidateCaches();
         this._logProcessor = new LogProcessor(fileUri.fsPath);
 
         try {

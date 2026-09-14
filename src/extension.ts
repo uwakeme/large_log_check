@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LogViewerPanel } from './logViewerPanel';
+import { parseLevelAliases, setLevelAliases } from './logParser';
 
 /**
  * 获取当前活动的日志面板,如果没有则提示用户并返回 undefined。
@@ -14,6 +15,19 @@ function requireActivePanel(): LogViewerPanel | undefined {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+    // v1.3.3：启动时初始化级别别名（一次性全局读取）
+    {
+        const config = vscode.workspace.getConfiguration('big-log-viewer');
+        setLevelAliases(parseLevelAliases(config.get('level.aliases')));
+    }
+    // v1.3.3：监听配置变更，一次性注册在 extension.ts（多面板不会重复注册、提示只出现一次）
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (!e.affectsConfiguration('big-log-viewer.level.aliases')) { return; }
+        const config = vscode.workspace.getConfiguration('big-log-viewer');
+        setLevelAliases(parseLevelAliases(config.get('level.aliases')));
+        vscode.window.showInformationMessage('日志级别别名已更新，重新打开或刷新日志文件后生效');
+    }));
+
     // 打开日志文件
     context.subscriptions.push(vscode.commands.registerCommand('big-log-viewer.openLogFile', async (uri?: vscode.Uri) => {
         let fileUri: vscode.Uri | undefined = uri;
