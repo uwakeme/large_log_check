@@ -4400,53 +4400,39 @@ function refresh() {
 
 // 分页功能
 function updatePagination() {
-    let isEstimated = false; // 标记总页数是否为估算值
+    // v1.3.3.4：去掉 isEstimated 标志（之前用于"计算中.../≥ X"虚数显示），页码必须显示具体数字。
 
-    // 在折叠模式下，总页数难以精确计算，需要动态估算
+    // 在折叠模式下，总页数 = pageRanges 实际算到的最大页（不估算 +1）。
+    // 异步重算进行中时，totalPages 暂时是"已算到的最大页"；等异步算完该值自动更新为完整页数。
     if (isCollapseMode) {
-        // 如果已经有页面范围记录，根据最后一页的结束位置估算
         if (pageRanges.size > 0) {
-            const maxPage = Math.max(...pageRanges.keys());
-            const maxRange = pageRanges.get(maxPage);
-
-            if (maxRange.end >= allLines.length) {
-                // 已经到达最后，总页数就是已知的最大页
-                totalPages = maxPage;
-                isEstimated = false; // 精确值
-            } else {
-                // 还有更多数据，至少比当前已知最大页多1页，以便启用"下一页"按钮
-                totalPages = maxPage + 1;
-                isEstimated = true; // 估算值
-            }
+            totalPages = Math.max(...pageRanges.keys());
         } else {
-            // 没有记录，使用标准计算作为初始估算
+            // pageRanges 还没开始算，按标准公式给个保守初值；异步算完后 updatePagination
+            // 会被 calculateAllPagesAsync 内部多次回调更新（line 1142、1153），最终收敛为准确值。
             totalPages = Math.ceil(allLines.length / pageSize);
-            isEstimated = true; // 估算值
         }
-} else {
-            // 非折叠模式，使用标准计算
-            // 🔧 修复：如果数据未全部加载，总页数应该基于整个文件
-            if (!allDataLoaded) {
-                // 数据是从中间加载的（baseLineOffset > 0）或还未完全加载，总页数基于文件总行数估算
-                totalPages = Math.ceil(totalLinesInFile / pageSize);
-                isEstimated = true; // 这是估算值
-                console.log(`📊 部分加载模式 - 总页数基于文件总行数: ${totalLinesInFile} 行 ≈ ${totalPages} 页`);
-            } else {
-                // 数据从头开始加载且已全部加载，总页数基于已加载数据
-                totalPages = Math.ceil(allLines.length / pageSize);
-                isEstimated = false;
-            }
+    } else {
+        // 非折叠模式，使用标准计算
+        // 如果数据未全部加载，总页数应该基于整个文件（否则用户只看到已加载部分的分页）
+        if (!allDataLoaded) {
+            totalPages = Math.ceil(totalLinesInFile / pageSize);
+            console.log(`📊 部分加载模式 - 总页数基于文件总行数: ${totalLinesInFile} 行 = ${totalPages} 页`);
+        } else {
+            // 数据从头开始加载且已全部加载，总页数基于已加载数据
+            totalPages = Math.ceil(allLines.length / pageSize);
         }
+    }
 
     if (totalPages < 1) totalPages = 1;
-    // v1.3.3.2：折叠模式下，若 currentPage 超出 totalPages 估算（jumpToLine 行号估页超过
-    // pageRanges 异步重算覆盖范围），把 totalPages 提升到 currentPage，保持 UI 一致；
-    // 渲染时 pageRanges.has(currentPage)=false 会走 line 890 标准分页 fallback，
-    // 内容正确。非折叠模式维持原有"currentPage 超出时夹回 totalPages"行为。
+    // v1.3.3.4：去掉"计算中..."和"≥ X"虚数显示。页码必须是准确数字——
+    // 折叠模式显示 pageRanges 实际算到的最大页（不 +1 估算），非折叠模式按 allLines.length / pageSize 算。
+    // 异步重算进行中时 totalPages 暂时是已算到的页数（之前算过的稳定值），等算完自动更新。
+    // v1.3.3.2 保留：currentPage 超出 totalPages 估计时（jumpToLine 行号估页），
+    // 折叠模式把 totalPages 提升到 currentPage；非折叠模式夹回。
     if (currentPage > totalPages) {
         if (isCollapseMode) {
             totalPages = currentPage;
-            isEstimated = true;
         } else {
             currentPage = totalPages;
         }
@@ -4454,18 +4440,9 @@ function updatePagination() {
 
     document.getElementById('currentPageInput').value = currentPage;
 
-    // 显示总页数：计算中、估算值或精确值
+    // 显示总页数：永远是具体数字（之前有"计算中..."和"≥ X"虚数显示，已移除）
     const totalPagesElement = document.getElementById('totalPages');
-    if (isCalculatingPages) {
-        // 正在计算中
-        totalPagesElement.textContent = `计算中... ${calculationProgress}%`;
-    } else if (isEstimated) {
-        // 估算值
-        totalPagesElement.textContent = `≥ ${totalPages - 1}`;
-    } else {
-        // 精确值
-        totalPagesElement.textContent = totalPages;
-    }
+    totalPagesElement.textContent = totalPages;
 
     document.getElementById('totalLinesInPage').textContent = allLines.length;
 
@@ -4473,8 +4450,10 @@ function updatePagination() {
     document.getElementById('firstPageBtn').disabled = currentPage === 1;
     document.getElementById('prevPageBtn').disabled = currentPage === 1;
 
-    // 在折叠模式下，如果是估算值，说明还有更多数据，不禁用“下一页”按钮
-    if (isCollapseMode && isEstimated) {
+    // 在折叠模式下，如果 pageRanges 没算到当前页（isCalculatingPages 或 maxRange.end < allLines.length），
+    // 表明还有更多页，"下一页"和"末页"按钮不应禁用——点下去触发新一轮异步重算。
+    if (isCollapseMode && (isCalculatingPages ||
+        (pageRanges.size > 0 && pageRanges.get(Math.max(...pageRanges.keys()))?.end < allLines.length))) {
         document.getElementById('nextPageBtn').disabled = false;
         document.getElementById('lastPageBtn').disabled = false;
     } else {
