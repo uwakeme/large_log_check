@@ -282,12 +282,13 @@ function setFilterAndApply(filters, options = {}) {
         }
         
         applyUnifiedFilters();
-        
+
         // 更新界面
-        // 如果是用户操作，保留当前页；如果是后端返回结果，重置页码
-        const shouldResetPage = options.resetPage !== undefined ? options.resetPage : !isUserAction;
-        const shouldClearRanges = options.clearPageRanges !== undefined ? options.clearPageRanges : !isUserAction;
-        
+        // v1.3.3 行为变化：数据集替换后「保持当前页」没有连续性，统一回到第 1 页并整体重算分页。
+        // 这也是 A 组「替换 allLines 必须失效折叠分页状态」原则在 setFilterAndApply 入口的体现。
+        const shouldResetPage = options.resetPage !== undefined ? options.resetPage : true;
+        const shouldClearRanges = options.clearPageRanges !== undefined ? options.clearPageRanges : true;
+
         handleDataChange({
             resetPage: shouldResetPage,
             clearPageRanges: shouldClearRanges,
@@ -699,10 +700,10 @@ function handleFilterResults(data) {
         currentFilterValue = data.methodName;
     }
 
-    // 统一处理数据变更 - 不重置页码，保留当前页面
+    // 统一处理数据变更 - v1.3.3：数据集已替换，整体失效折叠分页状态并回到第 1 页
     handleDataChange({
-        resetPage: false,
-        clearPageRanges: false,
+        resetPage: true,
+        clearPageRanges: true,
         triggerAsyncCalc: true
     });
 
@@ -786,6 +787,11 @@ function handleTimelineData(data) {
 }
 
 function handleJumpToLineInFullLogResult(data) {
+    // v1.3.3：慢路径落地前先退出折叠模式，与 jumpToLineInFullLog 快路径保持对称。
+    // 原因同快路径注释：折叠感知的 pageRanges 会对 ±500 行片段继续折叠分页，与
+    // jumpToLine 的原始行号页码语义错位。
+    exitCollapseMode();
+
     // 重新加载完整日志数据
     document.getElementById('fileName').textContent = data.fileName;
     document.getElementById('fileSize').textContent = data.fileSize;
@@ -1081,6 +1087,17 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
         // 找到最后已计算的页面
         const lastPage = Math.max(...Array.from(pageRanges.keys()));
         const lastRange = pageRanges.get(lastPage);
+
+        // v1.3.3 A5 防御加固：若 lastRange.end 已超出当前数据集，说明 pageRanges 是旧数据集的产物
+        // （典型场景：用户先前在更大数据集上折叠浏览，后续 allLines 被搜索/筛选/跳替换成了更小的集合，
+        // 上层漏传了 clearPageRanges:true）。此时续算逻辑会因 while 条件 (lastEndIndex < allLines.length)
+        // 直接不成立而静默空转、pageRanges 错位留到 updatePagination 用。强制走全量重算。
+        if (lastRange && lastRange.end > allLines.length) {
+            console.warn(`⚠️ 折叠 pageRanges 陈旧(lastRange.end=${lastRange.end} > allLines.length=${allLines.length})，放弃续算，全量重算`);
+            pageRanges.clear();
+            shouldClearRanges = true;
+        }
+
         if (lastRange) {
             pageNum = lastPage + 1;
             lastEndIndex = lastRange.end;
@@ -1738,20 +1755,25 @@ function searchInCurrentPage(keyword, isRegex) {
     
     allLines = results;
     currentPage = 1;
-    
-    // 重新渲染
-    renderLines();
-    updatePagination();
-    
+
+    // v1.3.3：改走 handleDataChange 触发正确的状态机（pageRanges 失效、异步重算、updatePagination），
+    // 替代原裸调 renderLines()+updatePagination() 绕过 handleDataChange 的做法。
+    // 折叠模式保持（exitCollapseMode 不调用）。
+    handleDataChange({
+        resetPage: true,
+        clearPageRanges: true,
+        triggerAsyncCalc: true
+    });
+
     // 显示提示和恢复按钮
     showToast(`在当前页找到 ${results.length} 条匹配日志`);
-    
+
     // 保存原始数据，用于恢复
     window._currentPageSearchBackup = {
         originalAllLines: originalAllLines,
         originalCurrentPage: originalCurrentPage
     };
-    
+
     // 显示提示信息
     showCurrentPageSearchStatus(keyword, results.length);
 }
@@ -1779,28 +1801,33 @@ function clearCurrentPageSearch() {
         // 恢复原始数据
         allLines = window._currentPageSearchBackup.originalAllLines;
         currentPage = window._currentPageSearchBackup.originalCurrentPage;
-        
+
         // 清除备份
         window._currentPageSearchBackup = null;
-        
+
         // 清除搜索关键词
         currentSearchKeyword = '';
         currentSearchIsRegex = false;
         currentSearchIsMultiple = false;
-        
-        // 重新渲染
-        renderLines();
-        updatePagination();
-        
+
+        // v1.3.3：改走 handleDataChange 替代裸调 renderLines()+updatePagination()。
+        // resetPage:false 保留恢复的页码；clearPageRanges:true 清掉当前页搜索小数据集的 pageRanges
+        // 让异步按恢复后的全量数据集重算。
+        handleDataChange({
+            resetPage: false,
+            clearPageRanges: true,
+            triggerAsyncCalc: true
+        });
+
         // 隐藏状态面板
         hideFilterStatus();
-        
+
         // 恢复清除按钮的原始行为
         const panel = document.getElementById('filterStatusPanel');
         const clearBtn = panel.querySelector('button');
         clearBtn.onclick = clearCustomFilter;
         clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 取消筛选';
-        
+
         showToast('已退出当前页搜索');
     }
 }
@@ -3708,13 +3735,15 @@ function clearAllFiltersWithLine(restoreLine) {
 
     if (restoreLine && allLines.length > 0) {
         // 找到包含目标行的页面
+        // v1.3.3：保留恢复的页码（resetPage:false），但清掉折叠模式下基于筛选小数据集算的 pageRanges（clearPageRanges:true），
+        // 让异步重算按恢复后的全量数据集刷新 pageRanges。
         currentPage = Math.ceil(restoreLine / pageSize);
         const maxPage = Math.ceil(allLines.length / pageSize);
         currentPage = Math.min(currentPage, maxPage);
 
         handleDataChange({
             resetPage: false,
-            clearPageRanges: false,
+            clearPageRanges: true,
             triggerAsyncCalc: true
         });
 
@@ -3722,8 +3751,8 @@ function clearAllFiltersWithLine(restoreLine) {
         setTimeout(() => jumpToLine(restoreLine), 50);
     } else {
         handleDataChange({
-            resetPage: false,
-            clearPageRanges: false,
+            resetPage: true,
+            clearPageRanges: true,
             triggerAsyncCalc: true
         });
     }
@@ -4066,6 +4095,21 @@ function jumpToLine(lineNumber) {
     }, 100);
 }
 
+// v1.3.3：跳转完整日志前退出折叠模式。折叠语境下的页码语义（每页 ≈ 几十条折叠组）
+// 对完整日志（每页 = pageSize 行原始日志）无意义，沿用会导致 jumpToLine 的折叠分支
+// 估页错位。异步计算循环在 isCollapseMode=false 时有守卫（1092/1102/1115）自行退出，无泄漏。
+function exitCollapseMode() {
+    if (!isCollapseMode) { return; }
+    isCollapseMode = false;
+    const cb = document.getElementById('collapseRepeated');
+    if (cb) { cb.checked = false; }
+    expandedGroups.clear();
+    pageRanges.clear();
+    isCalculatingPages = false;
+    calculationProgress = 0;
+    currentCalculationId++; // 让可能仍在运行的异步分页计算立即失效
+}
+
 // 从搜索结果跳转到完整日志的指定行
 function jumpToLineInFullLog(lineNumber) {
     console.log('🚀 跳转到完整日志的行:', lineNumber);
@@ -4077,6 +4121,9 @@ function jumpToLineInFullLog(lineNumber) {
 
     // 🔧 关键修复：如果数据已经完全加载，直接在当前数据中跳转，不需要重新加载
     if (allDataLoaded && fullDataCache.length > 0) {
+        // v1.3.3：恢复 fullDataCache 之前先退出折叠模式，避免后续 handleDataChange 重新触发
+        // 折叠感知的 pageRanges 异步计算。
+        exitCollapseMode();
         console.log('数据已完全加载，直接跳转到目标行');
         
         // 恢复到完整日志模式
