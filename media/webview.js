@@ -786,12 +786,11 @@ function handleTimelineData(data) {
     generateTimelineFromSamples(data);
 }
 
-function handleJumpToLineInFullLogResult(data) {
-    // v1.3.3：慢路径落地前先退出折叠模式，与 jumpToLineInFullLog 快路径保持对称。
-    // 原因同快路径注释：折叠感知的 pageRanges 会对 ±500 行片段继续折叠分页，与
-    // jumpToLine 的原始行号页码语义错位。
-    exitCollapseMode();
-
+async function handleJumpToLineInFullLogResult(data) {
+    // v1.3.3.1：撤销对 exitCollapseMode() 的调用，与快路径保持对称。
+    // 折叠模式由用户偏好驱动，跳转完整日志不应取消。
+    // v1.3.3.3：async + await calculateAllPagesAsync(true) —— 折叠模式 + 后端回包
+    // 跳转后等 pageRanges 异步重算完成再 jumpToLine，渲染时折叠感知分支能精确命中。
     // 重新加载完整日志数据
     document.getElementById('fileName').textContent = data.fileName;
     document.getElementById('fileSize').textContent = data.fileSize;
@@ -810,10 +809,10 @@ function handleJumpToLineInFullLogResult(data) {
 
     allLines = data.lines;
     originalLines = [...data.lines];
-    
+
     // 🔧 关键修复：更新完整数据缓存，确保跳转后显示正确的内容
     fullDataCache = [...data.lines];
-    
+
     // 🔧 清空统一过滤条件，确保显示完整日志
     unifiedFilters = {
         keyword: null,
@@ -832,7 +831,7 @@ function handleJumpToLineInFullLogResult(data) {
     if (allLines.length > 0) {
         const firstLine = allLines[0].lineNumber || 0;
         const lastLine = allLines[allLines.length - 1].lineNumber || 0;
-        
+
         if (allDataLoaded) {
             showToast(`已加载完整日志，跳转到第 ${data.targetLineNumber} 行`);
         } else if (baseLineOffset === 0) {
@@ -844,10 +843,17 @@ function handleJumpToLineInFullLogResult(data) {
         }
     }
 
-    // 统一处理数据变更（但不重置页码，因为要跳转到目标行）
-    handleDataChange({
-        resetPage: false  // 不重置页码，由 jumpToLine 决定
-    });
+    // 手动同步渲染：让界面立刻显示新数据（折叠模式按 pageRanges 估算显示）
+    pageRanges.clear();
+    updatePagination();
+    renderLines();
+
+    // 折叠模式：await 异步重算完成 pageRanges，再跳页（让折叠感知分支精确命中）
+    if (isCollapseMode) {
+        console.log('⏳ 等待折叠 pageRanges 异步重算完成（慢路径）...');
+        await calculateAllPagesAsync(true);
+        console.log('✓ pageRanges 重算完成');
+    }
 
     // 跳转到目标行
     jumpToLine(data.targetLineNumber);
@@ -4040,13 +4046,19 @@ function jumpToLine(lineNumber) {
 
         if (targetIndex !== -1) {
             // 根据索引位置估算页码（折叠模式下可能不准确，但比直接用行号好）
+            // v1.3.3.2：去掉 Math.min(estimatedPage, totalPages) 限制。
+            // 折叠模式下 totalPages 是基于 pageRanges 异步重算结果估算的（line 4330），
+            // 异步算到 5 页时 totalPages=6，但目标行在全量中可能在第 217 页——
+            // 之前用 min 强行夹到 6 导致跳转错位。渲染时 pageRanges 没有当前页
+            // 会走 line 890 标准分页 fallback，内容是正确的。updatePagination 折叠感知
+            // 分支会基于 currentPage 修正 totalPages（line 4410 处的 isCollapseMode 分支）。
             const estimatedPage = Math.ceil((targetIndex + 1) / pageSize);
-            currentPage = Math.max(1, Math.min(estimatedPage, totalPages));
+            currentPage = Math.max(1, estimatedPage);
             console.log(`📍 目标行索引: ${targetIndex}，估算页码: ${estimatedPage}`);
         } else {
             // 完全找不到，使用行号估算（最后的备用方案）
             const estimatedPage = Math.ceil(lineNumber / pageSize);
-            currentPage = Math.max(1, Math.min(estimatedPage, totalPages));
+            currentPage = Math.max(1, estimatedPage);
             console.log(`完全找不到目标行，使用行号估算: ${estimatedPage}`);
         }
     } else {
@@ -4109,7 +4121,12 @@ function exitCollapseMode() {
 }
 
 // 从搜索结果跳转到完整日志的指定行
-function jumpToLineInFullLog(lineNumber) {
+// v1.3.3.3：改成 async function —— 折叠模式 + 搜索后跳转需要等 pageRanges 异步重算
+// 完成后再 jumpToLine，否则折叠感知分支（line 4007）的 pageRanges 不含目标页、
+// 落到标准分页 fallback（line 890），视觉上没有折叠徽标。await calculateAllPagesAsync
+// 让 pageRanges 按全量数据算完整（约 100-200ms），jumpToLine 折叠感知分支即可
+// 精确找到目标页所在折叠页。
+async function jumpToLineInFullLog(lineNumber) {
     console.log('🚀 跳转到完整日志的行:', lineNumber);
 
     // 清除搜索关键词和过滤状态
@@ -4119,19 +4136,23 @@ function jumpToLineInFullLog(lineNumber) {
 
     // 🔧 关键修复：如果数据已经完全加载，直接在当前数据中跳转，不需要重新加载
     if (allDataLoaded && fullDataCache.length > 0) {
-        // v1.3.3：恢复 fullDataCache 之前先退出折叠模式，避免后续 handleDataChange 重新触发
-        // 折叠感知的 pageRanges 异步计算。
-        exitCollapseMode();
+        // v1.3.3.1：撤销对 exitCollapseMode() 的调用。「跳转到完整日志」按字面意思指的是
+        // 切到不被搜索/筛选影响的全量数据视图，但折叠是用户主动勾的视图偏好，
+        // 不应被跳转动作连带取消。复选框 #collapseRepeated 与 isCollapseMode 保持。
+        // v1.3.3.3：把 handleDataChange({resetPage:false}) 拆成「手动同步渲染 + await
+        // 异步重算」三步，await 让 pageRanges 按全量数据算完整后 jumpToLine 折叠感知
+        // 分支能精确找到目标页（之前 fire-and-forget 触发异步，pageRanges 没算到目标页，
+        // 跳页后走标准分页 fallback、视觉上没折叠徽标）。
         console.log('数据已完全加载，直接跳转到目标行');
-        
+
         // 恢复到完整日志模式
         isInSearchMode = false;
         searchBackup = null;
-        
+
         // 🔧 关键修复：从完整数据缓存恢复数据
         allLines = [...fullDataCache];
         originalLines = [...fullDataCache];
-        
+
         // 🔧 清空统一过滤条件，确保显示完整日志
         unifiedFilters = {
             keyword: null,
@@ -4143,9 +4164,19 @@ function jumpToLineInFullLog(lineNumber) {
             levels: null,
             timeRange: null,
         };
-        
-        // 重新渲染并跳转
-        handleDataChange({ resetPage: false });
+
+        // 手动同步渲染：让界面立刻显示全量数据（折叠模式按 pageRanges 估算显示）
+        pageRanges.clear();
+        updatePagination();
+        renderLines();
+
+        // 折叠模式：await 异步重算完成 pageRanges，再跳页（让折叠感知分支精确命中）
+        if (isCollapseMode) {
+            console.log('⏳ 等待折叠 pageRanges 异步重算完成...');
+            await calculateAllPagesAsync(true);
+            console.log('✓ pageRanges 重算完成');
+        }
+
         jumpToLine(lineNumber);
         drawTimeline();
         showToast(`已跳转到第 ${lineNumber} 行`);
@@ -4408,7 +4439,18 @@ function updatePagination() {
         }
 
     if (totalPages < 1) totalPages = 1;
-    if (currentPage > totalPages) currentPage = totalPages;
+    // v1.3.3.2：折叠模式下，若 currentPage 超出 totalPages 估算（jumpToLine 行号估页超过
+    // pageRanges 异步重算覆盖范围），把 totalPages 提升到 currentPage，保持 UI 一致；
+    // 渲染时 pageRanges.has(currentPage)=false 会走 line 890 标准分页 fallback，
+    // 内容正确。非折叠模式维持原有"currentPage 超出时夹回 totalPages"行为。
+    if (currentPage > totalPages) {
+        if (isCollapseMode) {
+            totalPages = currentPage;
+            isEstimated = true;
+        } else {
+            currentPage = totalPages;
+        }
+    }
 
     document.getElementById('currentPageInput').value = currentPage;
 
