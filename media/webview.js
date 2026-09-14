@@ -1096,9 +1096,7 @@ async function calculateAllPagesAsync(shouldClearRanges = true) {
             console.warn(`⚠️ 折叠 pageRanges 陈旧(lastRange.end=${lastRange.end} > allLines.length=${allLines.length})，放弃续算，全量重算`);
             pageRanges.clear();
             shouldClearRanges = true;
-        }
-
-        if (lastRange) {
+        } else if (lastRange) {
             pageNum = lastPage + 1;
             lastEndIndex = lastRange.end;
             console.log(`📊 任务 #${myCalculationId} 从第 ${pageNum} 页继续计算 (上次结束位置: ${lastEndIndex})`);
