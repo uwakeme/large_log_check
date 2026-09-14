@@ -45,11 +45,60 @@ Professional VSCode extension for viewing and processing very large log files (m
 
 ## PR & commit conventions
 
-- Default branch: `master` (verify with `git symbolic-ref --short refs/remotes/origin/HEAD` or `git config init.defaultBranch`)
-- Branch from `master`; never push to it directly
+- Default branch: `main` (verify with `git symbolic-ref --short refs/remotes/origin/HEAD` or `git config init.defaultBranch`)
+- Branch from `main`; never push to it directly
 - Conventional commits, often in Chinese — see `git log --oneline -20` for the current style
 - Open the PR via `gh pr create` once `npm run lint` and `npm run compile` are green
 - **Cursor rule (always applied):** every new user-facing feature must update `README.md` and `CHANGELOG.md` in the same commit. Unreleased features go under `## [Unreleased]` at the top of `CHANGELOG.md`. One entry per feature per release — do not duplicate.
+
+### CHANGELOG 风格（v1.3.3 起生效，2026-09-14）
+
+CHANGELOG 是**给用户看的**，不是开发人员自己看的：
+
+- **写业务和功能的变化与修改**，不写内部实现细节
+- **不写专业术语**（"陈旧守卫"、"pageRanges"、"handleDataChange" 这类开发内部概念不放）
+- **不写方法名 / 类名 / 内部函数名**（`setFilterAndApply`、`LogParser.extractLogLevel` 这类不放）
+- **不写 issue 编号 / commit hash / PR 链接**（不是开发 changelog，是用户 changelog）
+- **不写版本号 / 日期在描述里**（版本号在 `## [1.x.y]` 标题上，描述里不重复）
+- **直接说用户能看到的现象或行为**，而不是改了什么代码
+- **简洁易懂**：一条 entry 一两句话，看完知道发生了什么变化、是否需要做什么操作
+
+正例（用户视角）：
+
+> - **折叠模式下搜索/筛选后页数不刷新、出现空白页** — 折叠浏览到第 N 页后搜索或筛选，**总页数仍显示 N 页**，翻到后面几页会完全空白
+> - **支持自定义日志级别缩写** — 像 `I` / `E` / `W` 这种简写现在能识别为 INFO / ERROR / WARN，在「设置 → 扩展 → 大日志文件查看器 → Level Aliases」里调整
+
+反例（开发视角，不要这么写）：
+
+> - 修复 `setFilterAndApply` 中 `clearPageRanges: false` 导致 `calculateAllPagesAsync` 续算逻辑静默空转
+> - 新增 `big-log-viewer.level.aliases` 配置 schema 覆盖 `DEFAULT_LEVEL_ALIASES`，正则 alternation 长 token 排前避免短 token 抢先
+
+> 如果一条 entry 同时既有用户视角的"现象/行为"，又有开发视角的"内部修复方案"，**只写用户视角那条**。开发视角的细节走 git log / commit message / 代码注释，不进 CHANGELOG。
+
+### Approval gates（v1.3.3 起生效，2026-09-14）
+
+凡是会修改仓库历史或对远程产生副作用的动作，**必须先获得用户明确确认**，再由 agent 实际执行；agent 不主动触发。
+
+| 动作 | 必须确认 | 说明 |
+| --- | --- | --- |
+| `git add` + `git commit` | ✅ | 不自动 commit，先输出 diff 摘要等用户点头 |
+| `git tag`（含 `git tag -a`）| ✅ | 不自动打 tag，附注消息也要用户过目 |
+| `git push`（含 `git push --follow-tags`、`git push --force`）| ✅ | 远程写入是单向且可见，不自动 push |
+| `vsce publish` / `ovsx publish` | ✅ | 不可逆的 Marketplace 发布，**永远不自动执行**（与下文 Release process 配合） |
+| `git reset --hard` / `git commit --amend` 已推送的提交 | ✅ | 改写历史的动作，先确认再执行 |
+| `npm run package` 产物（`*.vsix`）| ⚠️ 可选 | 用户没要求发版就不必生成；如已生成且要丢弃，落到 `mavis-trash`（非永久 `Remove-Item`） |
+
+**约定的交互仪式**：
+
+1. agent 完成代码/测试/文档改动后，停下，输出一段「建议的下一步」列出候选动作（commit / tag / push / publish / .vsix）
+2. 等用户回复「可以提交」「帮我 push」之类明确指令
+3. agent 才执行对应命令，且在执行前再次 echo 命令与影响范围
+
+**不要做的事**：
+
+- 不把「计划已批准」等同于「可以自动 commit / push / publish」—— plan 阶段是设计，实现完成后才进入发版动作；发版动作始终是另一道闸
+- 不在脚本/批量动作里夹带 `git commit` 或 `git push`（`vscode:prepublish` 钩子只跑 lint / compile / test，不提交任何东西）
+- 不在网络异常、命令失败后自动重试 push / publish（先回报用户）
 
 ## Release process (every version)
 
