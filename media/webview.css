@@ -656,6 +656,19 @@ button .codicon {
     width: 100%;
 }
 
+/* 高级搜索文本输入框包装(承载历史下拉);与首页 .search-input-wrap 同款结构 */
+.adv-input-wrap {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+}
+
+.adv-input-wrap > input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
 .adv-remove {
     flex-shrink: 0;
     padding: 3px 6px;
@@ -1274,7 +1287,9 @@ select option {
     display: block;
 }
 
-/* 搜索历史下拉(锚定在搜索输入框正下方,聚焦弹出) */
+/* 搜索历史下拉(锚定在搜索输入框正下方,聚焦弹出)
+   position:fixed + JS 计算坐标,这样不论下拉挂在哪(首页 toolbar / 高级搜索 modal),
+   都能逃出 modal 的 overflow:hidden / 嵌套滚动容器,避免被裁掉 */
 .search-input-wrap {
     position: relative;
     display: flex;
@@ -1284,18 +1299,15 @@ select option {
 
 .search-history-dropdown {
     display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
+    position: fixed;
     background-color: var(--vscode-editorWidget-background);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     border: 1px solid var(--vscode-panel-border);
     border-radius: 3px;
-    z-index: 1000;
-    margin-top: 2px;
+    z-index: 1100;
     max-height: 300px;
     overflow-y: auto;
+    /* top / left / width 由 JS 根据当前激活输入框的 rect 计算并写入 */
 }
 
 .search-history-dropdown.show {

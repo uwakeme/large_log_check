@@ -65,14 +65,13 @@ let tplCurrentHits = null;       // 命中选择弹窗当前展示的命中数�
 // ---------- 小工具 ----------
 
 /**
- * 解析字符串中的 ${key} 占位符。未声明/未填写的参数原样保留,
- * 方便用户看出"这个位置需要填参数"。
+ * 解析字符串中的 ${key} 占位符。已声明但运行时没填值的参数按空串处理;
+ * 未声明的占位符(如模板里写错参数名)原样保留,方便用户看出"这个位置需要填参数"。
  */
 function resolveTplString(str, paramValues) {
     return String(str == null ? '' : str).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (m, key) => {
-        if (paramValues && Object.prototype.hasOwnProperty.call(paramValues, key) && paramValues[key] != null) {
-            const v = String(paramValues[key]).trim();
-            if (v) { return v; }
+        if (paramValues && Object.prototype.hasOwnProperty.call(paramValues, key)) {
+            return String(paramValues[key] == null ? '' : paramValues[key]).trim();
         }
         return m;
     });
@@ -1411,8 +1410,8 @@ async function executeTplStep(step, index, paramValues, context, summary) {
         const targets = tplCollectTargets(step, context, summary, at);
         if (!targets) { return; }
         for (const line of targets) {
-            const name = step.name ? resolveTplString(step.name, paramValues) : `行 ${line.lineNumber}`;
-            bookmarks.set(line.lineNumber, name);
+            const name = step.name ? resolveTplString(step.name, paramValues).trim() : '';
+            bookmarks.set(line.lineNumber, name || `行 ${line.lineNumber}`);
         }
         summary.bookmarks += targets.length;
         renderLines();
