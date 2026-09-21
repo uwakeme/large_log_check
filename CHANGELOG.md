@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.3.3] - 2026-09-21
 ### Fixed
 - **排查模板运行时没填的参数按空处理** — 模板里声明了的参数，运行时留空的话，动作里的 `${参数}` 位置不再原样显示参数名，而是按空处理：搜索关键词因此全空时走该动作配置的「0 条命中」策略，筛选/注释为空时提示跳过，书签名回退到默认的「行 N」
 - **折叠模式下搜索/筛选后页数不刷新、出现空白页** — 折叠浏览到第 N 页后搜索或筛选，**总页数仍显示 N 页**，翻到后面几页会完全空白
