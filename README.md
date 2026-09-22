@@ -35,6 +35,7 @@
         <li><a href="#日志裁剪">日志裁剪</a></li>
       </ul>
     </li>
+    <li><a href="#支持的日志格式">支持的日志格式</a></li>
     <li><a href="#配置">配置</a></li>
     <li><a href="#命令面板">命令面板</a></li>
     <li><a href="#主题">主题</a></li>
@@ -246,6 +247,34 @@ npm run package
 > 裁剪和删除会直接修改原文件，且不可恢复。操作前务必备份重要日志。
 
 「日志裁剪」支持四种方式：删除指定时间之前/之后的日志、删除指定行号之前/之后的日志、只保留时间范围内的日志、只保留行号范围内的日志。命令面板里的「按时间删除日志」「按行数删除日志」效果相同。
+
+<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
+
+## 支持的日志格式
+
+查看器本身是通用文本查看器，任何 `.log` / `.txt` 都能打开、搜索、加书签；在此基础上，每行会自动识别**时间戳**和**日志级别**（归一化为 ERROR / WARN / INFO / DEBUG 四档，FATAL、SEVERE 计入 ERROR，TRACE、VERBOSE 计入 DEBUG）。下表是常见日志组件默认/典型输出的实测结果：
+
+| 日志组件 | 时间戳 | 级别 |
+| --- | :-: | :-: |
+| Logback / Log4j / Log4j2 / SLF4J、Spring Boot 默认格式 | ✓ | ✓ |
+| log4net / NLog（.NET） | ✓ | ✓ |
+| Python logging（`%(asctime)s` 格式）、Gunicorn | ✓ | ✓ |
+| logrus、zap 控制台格式（Go） | ✓ | ✓ |
+| Rails、Laravel / Monolog、winston 文本格式 | ✓ | ✓ |
+| Go 标准库 log、IIS W3C、syslog RFC5424 | ✓ | — |
+| Docker json-file、bunyan（JSON 内含 ISO 时间字段） | ✓ | — |
+| Tomcat catalina（JUL）、JBoss / WildFly 默认 pattern | — | ✓ |
+| Serilog Console 默认（`[12:00:00 INF]`）、Apache error log | — | ✓ |
+| Python logging 默认格式、uvicorn（`INFO:` 前缀） | — | ✓ |
+| nginx / Apache access log（`01/Jan/2024` 英文月份日期） | — | — |
+| syslog RFC3164 传统格式、uWSGI | — | — |
+| pino 等 epoch 毫秒时间戳 + 数字级别的 JSON 日志 | — | — |
+
+几点说明：
+
+- 识别不到时间戳只影响**时间范围过滤、时间线导航、按时间裁剪**这三类功能，打开、搜索、级别过滤、书签、注释全部照常可用；堆栈续行等没有时间戳的行也照常显示。
+- 自动识别的时间戳格式见[「打开日志文件」](#打开日志文件)一节；日期里带英文月份（`01/Jan/2024`、`Jan 01, 2024`）或完全没有日期的格式目前识别不了。
+- 级别简写 `E` / `W` / `I` / `D`、`ERR` / `WRN` / `INF` / `DBG` / `TRC` 默认就能识别；如果你们的日志用了别的缩写（比如 `EXC`、`CRIT`），可以在设置里配[级别别名](#配置)。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
