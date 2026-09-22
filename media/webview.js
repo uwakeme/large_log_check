@@ -155,7 +155,7 @@ function applyUnifiedFilters() {
                 command: 'filterByThread',
                 threadName: unifiedFilters.threadName
             });
-            showToast('正在请求后端过滤...');
+            showToast('正在过滤日志...');
             return; // 等待后端结果，不继续处理
         } else {
             // 数据已完全加载，在前端过滤
@@ -180,7 +180,7 @@ function applyUnifiedFilters() {
                 command: 'filterByClass',
                 className: unifiedFilters.className
             });
-            showToast('正在请求后端过滤...');
+            showToast('正在过滤日志...');
             return;
         } else {
             const targetClass = unifiedFilters.className.toLowerCase();
@@ -201,7 +201,7 @@ function applyUnifiedFilters() {
                 command: 'filterByMethod',
                 methodName: unifiedFilters.methodName
             });
-            showToast('正在请求后端过滤...');
+            showToast('正在过滤日志...');
             return;
         } else {
             const targetMethod = unifiedFilters.methodName.toLowerCase();
@@ -304,7 +304,7 @@ function setFilterAndApply(filters, options = {}) {
     } else {
         // 数据未完全加载，请求后台加载全部数据
         console.log('数据未完全加载，请求后台加载全部数据');
-        showToast(' 正在加载完整数据，请稍候...');
+        showToast('正在加载完整数据，请稍候...');
         
         // 请求后台继续加载
         requestAllData();
@@ -1743,7 +1743,7 @@ function searchInCurrentPage(keyword, isRegex) {
     });
     
     if (results.length === 0) {
-        showToast(`当前页未找到包含 "${keyword}" 的日志`);
+        showToast(`当前页未找到包含「${keyword}」的日志`);
         return;
     }
     
@@ -2645,14 +2645,14 @@ function deleteCommentFromList(lineNumber) {
     });
 }
 
-function showToast(message) {
+function showToast(message, type) {
     const toast = document.createElement('div');
     toast.textContent = message;
     toast.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background-color: #10b981;
+        background-color: ${type === 'error' ? '#ef4444' : '#10b981'};
         color: white;
         padding: 10px 20px;
         border-radius: 5px;
@@ -4306,7 +4306,7 @@ async function jumpToLineInFullLog(lineNumber) {
 
     // 数据未完全加载，需要请求后端重新加载
     console.log('数据未完全加载，请求后端加载完整日志');
-    showToast('📦 正在加载完整日志...');
+    showToast('正在加载完整日志...');
 
     // 请求后端重新加载完整日志，并跳转到指定行
     vscode.postMessage({
@@ -4437,7 +4437,7 @@ function handleJumpToTimeResult(data) {
         // 统一加载策略:host 端已发送完整数据,无需再触发后台分块
     } else {
         console.error('未找到目标时间的日志');
-        showToast(data.message || '未找到大于或等于该时间的日志！');
+        showToast(data.message || '未找到大于或等于该时间的日志');
     }
 }
 
@@ -6021,7 +6021,7 @@ function deleteHighlightRule(index) {
     }
 
     // 使用自定义确认对话框
-    showCustomConfirm(`确定要删除规则 "${rule.name}" 吗？`, '删除规则').then(confirmed => {
+    showCustomConfirm(`确定要删除规则「${rule.name}」吗？`, '删除规则').then(confirmed => {
         if (confirmed) {
             console.log('用户确认删除');
             customHighlightRules.splice(index, 1);

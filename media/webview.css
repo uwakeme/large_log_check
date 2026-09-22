@@ -189,6 +189,9 @@ button .codicon {
     user-select: none;
     text-align: right;
     padding-right: 10px;
+    /* 行号不换行：行号超宽时向左延伸（否则会继承 pre-wrap/break-all 在数字中间断行） */
+    white-space: nowrap;
+    word-break: normal;
 }
 
 .log-line-content {
@@ -429,8 +432,11 @@ button .codicon {
     background-color: rgba(255, 193, 7, 0.3);
 }
 
+/* 书签行的行号 = 图标 + 行号，比纯行号宽：盒加宽并向左借位，右缘保持不动，正文列不横移 */
 .log-line.bookmarked .log-line-number {
     color: #ffc107;
+    width: 74px;
+    margin-left: -14px;
 }
 
 .log-line.bookmarked .bookmark-icon {
@@ -1637,6 +1643,12 @@ a:focus-visible {
 .tpl-param-chip code {
     font-family: var(--vscode-editor-font-family, monospace);
     color: var(--vscode-textLink-foreground);
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.tpl-param-chip code:hover {
+    background: var(--vscode-list-hoverBackground);
 }
 
 .tpl-param-chip small {

@@ -61,6 +61,7 @@ let tplPipelineAbort = false;    // 「停止」按钮置位,步骤间检查
 let tplRunningTemplate = null;   // 当前正在执行的模板
 let tplHitResolver = null;       // 命中选择弹窗的 Promise resolve
 let tplCurrentHits = null;       // 命中选择弹窗当前展示的命中数组
+let tplLastParamTarget = null;   // 编辑器里最后聚焦的动作输入框(参数芯片点击插入的目标)
 
 // ---------- 小工具 ----------
 
@@ -116,7 +117,7 @@ function saveInvestigationTemplates(list) {
         localStorage.setItem(TPL_STORAGE_KEY, JSON.stringify(list.slice(0, TPL_MAX_COUNT)));
         return true;
     } catch (e) {
-        showToast('保存排查模板失败: ' + (e && e.message ? e.message : e));
+        showToast('保存排查模板失败: ' + (e && e.message ? e.message : e), 'error');
         return false;
     }
 }
@@ -271,7 +272,7 @@ function importTemplatesFromText(text) {
     try {
         parsed = JSON.parse(text);
     } catch (e) {
-        showToast('导入失败: 内容不是合法的 JSON');
+        showToast('导入失败: 内容不是合法的 JSON', 'error');
         return;
     }
     let list = null;
@@ -280,7 +281,7 @@ function importTemplatesFromText(text) {
     else if (parsed && parsed.template && typeof parsed.template === 'object') { list = [parsed.template]; }
     else if (parsed && typeof parsed === 'object' && (parsed.name || parsed.steps)) { list = [parsed]; }
     if (!list) {
-        showToast('导入失败: 未识别的模板格式');
+        showToast('导入失败: 未识别的模板格式', 'error');
         return;
     }
 
@@ -296,12 +297,12 @@ function importTemplatesFromText(text) {
         else { store.push(result.template); added++; }
     }
     if (added + updated === 0) {
-        showToast(`导入失败: 没有有效的模板` + (invalid ? `(无效条目 ${invalid} 个)` : ''));
+        showToast(`导入失败: 没有有效的模板` + (invalid ? `(无效条目 ${invalid} 个)` : ''), 'error');
         return;
     }
     if (saveInvestigationTemplates(store)) {
         renderTemplateList();
-        showToast(`导入完成: 新增 ${added} · 更新 ${updated}` + (invalid ? ` · 无效跳过 ${invalid}` : ''));
+        showToast(`导入完成: 新增 ${added} · 更新 ${updated}` + (invalid ? ` · 跳过无效 ${invalid} 条` : ''));
     }
 }
 
@@ -378,7 +379,7 @@ function showTplPasteModal() {
         title.className = 'confirm-title';
         title.textContent = '粘贴模板 JSON';
         const area = document.createElement('textarea');
-        area.placeholder = '把同事发来的模板 JSON 粘贴到这里…';
+        area.placeholder = '把模板 JSON 粘贴到这里…';
         area.style.cssText = 'width: 100%; height: 200px; margin: 8px 0; font-family: monospace; font-size: 11px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border);';
         const buttons = document.createElement('div');
         buttons.className = 'confirm-buttons';
@@ -479,7 +480,7 @@ function duplicateTemplate(id) {
         name: source.name + ' 副本',
         createdAt: Date.now()
     });
-    if (!copy.ok) { showToast('复制失败: ' + copy.error); return; }
+    if (!copy.ok) { showToast('复制失败: ' + copy.error, 'error'); return; }
     store.push(copy.template);
     if (saveInvestigationTemplates(store)) {
         renderTemplateList();
@@ -503,7 +504,7 @@ async function exportTemplateToClipboard(id) {
     const target = store.find(t => t.id === id);
     if (!target) { return; }
     const ok = await tplCopyText(tplExportPayload([target]));
-    if (ok) { showToast('模板 JSON 已复制到剪贴板,可直接粘贴发给同事'); }
+    if (ok) { showToast('模板 JSON 已复制到剪贴板,可直接粘贴分享'); }
 }
 
 function exportTemplateToFile(id) {
@@ -630,7 +631,7 @@ function renderTemplateEditor() {
     html += `<input id="tplEditDesc" placeholder="这个模板用来排查什么问题" value="${escapeAttr(t.description || '')}" style="${TPL_INPUT_STYLE}"></div>`;
     html += `<div class="tpl-field"><label>运行参数 <span style="color: var(--vscode-descriptionForeground); font-weight: normal;">(可选)</span> <button type="button" onclick="tplBeginAddParam()" style="background: transparent; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; padding: 0;">＋ 添加参数</button></label>`;
     html += '<div id="tplEditParams"></div>';
-    html += `<div class="hint" style="margin-top: 5px;">动作配置里用 <code class="tpl-mono">\${参数名}</code> 引用运行时输入的值——同一套流程,换个单号就能重跑。</div>`;
+    html += `<div class="hint" style="margin-top: 5px;">动作配置里用 <code class="tpl-mono">\${参数名}</code> 引用运行时输入的值——点参数芯片可直接插入到光标处,同一套流程,换个单号就能重跑。</div>`;
     html += '</div></div>';
 
     // —— 排查流程(流水线轨道) ——
@@ -668,7 +669,7 @@ function renderTplParams() {
     let html = '';
     params.forEach((p, i) => {
         html += '<span class="tpl-param-chip">';
-        html += `<code>${escapeHtml('${' + p.key + '}')}</code>`;
+        html += `<code class="tpl-param-insert" title="点击插入到下方输入框光标处" onclick="tplInsertParam('${escapeAttr(p.key)}')">${escapeHtml('${' + p.key + '}')}</code>`;
         if (p.label && p.label !== p.key) { html += `<small>${escapeHtml(p.label)}</small>`; }
         html += `<button type="button" title="删除参数" onclick="tplRemoveParam(${i})">×</button>`;
         html += '</span>';
@@ -707,12 +708,12 @@ function tplConfirmAddParam() {
     const key = (keyEl ? keyEl.value : '').trim();
     const label = (labelEl ? labelEl.value : '').trim();
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-        showToast('参数名不合法: 字母开头,仅含字母数字下划线');
+        showToast('参数名不合法: 字母开头,仅含字母数字下划线', 'error');
         return;
     }
     const params = (tplEditingTemplate && tplEditingTemplate.params) || [];
-    if (params.some(p => p.key === key)) { showToast(`参数名重复: ${key}`); return; }
-    if (params.length >= TPL_MAX_PARAMS) { showToast(`参数最多 ${TPL_MAX_PARAMS} 个`); return; }
+    if (params.some(p => p.key === key)) { showToast(`参数名重复: ${key}`, 'error'); return; }
+    if (params.length >= TPL_MAX_PARAMS) { showToast(`参数最多 ${TPL_MAX_PARAMS} 个`, 'error'); return; }
     tplEditingTemplate.params = params.concat([{ key: key, label: label || key }]);
     tplParamAdding = false;
     renderTplParams();
@@ -722,6 +723,34 @@ function tplRemoveParam(i) {
     if (!tplEditingTemplate) { return; }
     tplEditingTemplate.params.splice(i, 1);
     renderTplParams();
+}
+
+// 记录编辑器里最后聚焦的动作输入框/JSON 文本域,供参数芯片点击插入。
+// 模板名称/描述、运行弹窗等其余输入框不记录——${参数} 只在动作配置里有意义。
+document.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) { return; }
+    if (t.type === 'checkbox' || t.type === 'radio') { return; }
+    tplLastParamTarget = (t.id === 'tplEditJson' || (t.closest && t.closest('#tplEditSteps'))) ? t : null;
+});
+
+/**
+ * 参数芯片点击:把 ${key} 插入最后聚焦的动作输入框光标处;
+ * 没有正在编辑的动作输入框时退化为复制到剪贴板。
+ */
+async function tplInsertParam(key) {
+    const token = '${' + key + '}';
+    const el = tplLastParamTarget;
+    if (el && document.contains(el) && !el.disabled && !el.readOnly) {
+        const pos = (typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
+        const end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : pos;
+        el.value = el.value.slice(0, pos) + token + el.value.slice(end);
+        el.focus();
+        try { el.setSelectionRange(pos + token.length, pos + token.length); } catch (e) { /* 该类型控件不支持选区,忽略 */ }
+        return;
+    }
+    const ok = await tplCopyText(token);
+    if (ok) { showToast(`已复制 ${token},粘贴到要用的输入框即可`); }
 }
 
 function renderTplSteps() {
@@ -829,7 +858,7 @@ function renderTplStepFields(step, i) {
         html += `<label style="display: flex; align-items: center; gap: 5px; cursor: pointer;"><input type="checkbox" id="tplStep_${p}_afterLastHit"${afterLastHit ? ' checked' : ''}> 从上一步命中之后开始查</label>`;
         html += `<label style="display: flex; align-items: center; gap: 5px; cursor: pointer;"><input type="checkbox" id="tplStep_${p}_sameThread"${sameThread ? ' checked' : ''}> 仅同线程日志</label>`;
         html += '</div>';
-        html += '<div class="hint" style="margin-top: 5px;">两个勾选项都依赖上一步查询选中的命中行;配合「自动选第一条」即可实现「找上一条日志之后的下一处匹配」。</div>';
+        html += '<div class="hint" style="margin-top: 5px;">两个勾选项都基于上一步查询的命中行(「保留全部」时以最后一条为基准);配合「自动选第一条」即可实现「找上一条日志之后的下一处匹配」。</div>';
         return html;
     }
 
@@ -914,7 +943,7 @@ function tplSelectOptions(options, selected) {
 function tplAddStep(type) {
     tplCommitExpandedStep();
     const steps = tplEditingTemplate.steps;
-    if (steps.length >= TPL_MAX_STEPS) { showToast(`动作最多 ${TPL_MAX_STEPS} 个`); return; }
+    if (steps.length >= TPL_MAX_STEPS) { showToast(`动作最多 ${TPL_MAX_STEPS} 个`, 'error'); return; }
     steps.push(tplDefaultStep(type));
     tplExpandedStep = steps.length - 1;
     renderTplSteps();
@@ -1105,7 +1134,7 @@ function saveTemplateFromEditor() {
         if (tplEditorMode === 'json') {
             tplShowJsonError('模板校验失败: ' + result.error);
         } else {
-            showToast('保存失败: ' + result.error);
+            showToast('保存失败: ' + result.error, 'error');
         }
         return;
     }
@@ -1124,11 +1153,11 @@ function saveTemplateFromEditor() {
 
 function runInvestigationTemplate(id) {
     if (tplPipelineRunning) {
-        showToast('已有模板正在运行,请先等待完成或点击停止');
+        showToast('已有模板正在运行,请先等待完成或点击停止', 'error');
         return;
     }
     if (!allDataLoaded) {
-        showToast('日志尚未完全加载,请等待加载完成后再运行模板');
+        showToast('日志尚未完全加载,请等待加载完成后再运行模板', 'error');
         return;
     }
     const template = loadInvestigationTemplates().find(t => t.id === id);
@@ -1449,7 +1478,7 @@ function tplCollectTargets(step, context, summary, at) {
 
 function tplHandleEmpty(step, summary, at, reason) {
     if (step.onEmpty === 'skip') {
-        summary.warnings.push(`${at}: ${reason},已按配置跳过`);
+        summary.warnings.push(`${at}: ${reason},已按「跳过本步继续」跳过`);
         return;
     }
     showToast(reason);
