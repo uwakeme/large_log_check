@@ -54,8 +54,8 @@ export function activate(context: vscode.ExtensionContext) {
         if (!panel) {return;}
 
         const options = await vscode.window.showQuickPick([
-            { label: '删除指定时间之前的日志', value: 'before' },
-            { label: '删除指定时间之后的日志', value: 'after' }
+            { label: '删除指定时间之前的日志', value: 'before' as const },
+            { label: '删除指定时间之后的日志', value: 'after' as const }
         ], { placeHolder: '选择删除方式' });
         if (!options) {return;}
 
@@ -79,8 +79,8 @@ export function activate(context: vscode.ExtensionContext) {
         if (!panel) {return;}
 
         const options = await vscode.window.showQuickPick([
-            { label: '删除指定行之前的日志', value: 'before' },
-            { label: '删除指定行之后的日志', value: 'after' }
+            { label: '删除指定行之前的日志', value: 'before' as const },
+            { label: '删除指定行之后的日志', value: 'after' as const }
         ], { placeHolder: '选择删除方式' });
         if (!options) {return;}
 
@@ -105,10 +105,11 @@ export function activate(context: vscode.ExtensionContext) {
         if (panel) {await panel.refresh();}
     }));
 
-    // 显示统计
+    // 显示统计 — 直达宿主统计链路。旧实现往 webview 推 {command:'getStatistics'},
+    // 但 webview 的 dispatcher 没有对应 case,命令面板触发时静默无动作。
     context.subscriptions.push(vscode.commands.registerCommand('big-log-viewer.showStatistics', async () => {
         const panel = requireActivePanel();
-        if (panel) {panel.postMessage({ command: 'getStatistics' });}
+        if (panel) {await panel.showStatistics();}
     }));
 
     // 书签管理
@@ -141,7 +142,9 @@ export function activate(context: vscode.ExtensionContext) {
         if (!lineInput) {return;}
 
         // 直接执行 — 流式 seek 已保证任何文件大小都是秒级响应,无需二次确认。
-        panel.postMessage({ command: 'jumpToLineInFullLog', lineNumber: parseInt(lineInput) });
+        // 直达宿主 seek,再由 jumpToLineInFullLogResult 回推 webview。
+        // 旧实现往 webview 推同名命令,webview dispatcher 没有该 case,定位静默失败。
+        await panel.jumpToLine(parseInt(lineInput));
     }));
 
     // 高级搜索

@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 防纵深:即便某处把日志内容拼进了 innerHTML,CSP 也会拦住外联脚本/请求。
+         script/style 保留 'unsafe-inline' — 页面大量使用内联 onclick 与 style 属性。 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src %%CSP_SOURCE%% 'unsafe-inline'; style-src %%CSP_SOURCE%% 'unsafe-inline'; font-src %%CSP_SOURCE%%; img-src %%CSP_SOURCE%% data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
     <title>日志查看器</title>
     <!-- 样式从扩展侧注入真实路径，这里使用占位符 -->
     <link rel="stylesheet" href="%%WEBVIEW_CSS%%">
@@ -75,7 +78,7 @@
                     <button onclick="showStats(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-graph"></i> 统计</button>
                     <button id="exportBtn" onclick="exportLogs(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-save"></i> 导出</button>
                     <button onclick="showDeleteModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-trash"></i> 日志裁剪</button>
-                    <button onclick="console.log('设置按钮被点击'); showSettingsModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-settings"></i> 设置</button>
+                    <button onclick="showSettingsModal(); closeMoreMenu();" role="menuitem"><i class="codicon codicon-settings"></i> 设置</button>
                 </div>
             </div>
             <button id="refreshBtn" onclick="refresh()" aria-label="刷新日志文件"><i class="codicon codicon-refresh"></i> 刷新</button>

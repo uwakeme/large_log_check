@@ -12,18 +12,23 @@ const PROGRESS_REPORT_INTERVAL = 1_000;
 // 触发一次进度回调,这样 UI 上的进度条不会卡在 0% 不动。
 const PROGRESS_THROTTLE_MS = 100;
 
+// 统计里 class/method/thread 计数 Map 的上限:兜底类名正则会匹配到 URL/版本号等
+// 噪声,无上限时一份脏日志能把宿主内存撑爆。到达上限后只累加已有 key。
+const MAX_STATS_KEYS = 10_000;
+
 export class LogProcessor {
-    private filePath: string;
-    private totalLines = 0;
-    private statsCache: LogStats | null = null;
-    private statsCacheMtime = 0;
+    private _filePath: string;
+    private _totalLines = 0;
+    private _totalLinesMtime = 0;
+    private _statsCache: LogStats | null = null;
+    private _statsCacheMtime = 0;
 
     constructor(filePath: string) {
-        this.filePath = filePath;
+        this._filePath = filePath;
     }
 
     getFilePath(): string {
-        return this.filePath;
+        return this._filePath;
     }
 
     /**
@@ -44,7 +49,8 @@ export class LogProcessor {
     private processLines<T>(
         initial: T,
         fold: (acc: T, line: string, lineNumber: number) => T,
-        onProgress?: (lineNumber: number, bytesRead?: number) => void
+        onProgress?: (lineNumber: number, bytesRead?: number) => void,
+        shouldStop?: (acc: T, lineNumber: number) => boolean
     ): Promise<T> {
         return new Promise((resolve, reject) => {
             let acc = initial;
@@ -52,7 +58,7 @@ export class LogProcessor {
             let lastReportedLines = 0;
             let lastReportedAt = 0;
             let settled = false;
-            const stream = fs.createReadStream(this.filePath);
+            const stream = fs.createReadStream(this._filePath);
             const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
             const settle = (fn: () => void) => {
                 if (settled) {return;}
@@ -74,6 +80,10 @@ export class LogProcessor {
                 lineNumber++;
                 acc = fold(acc, line, lineNumber);
                 reportIfDue();
+                // 早停:窗口型读取收满目标行后不再扫文件剩余部分
+                if (shouldStop && shouldStop(acc, lineNumber)) {
+                    settle(() => resolve(acc));
+                }
             });
             rl.on('close', () => {
                 if (onProgress && lineNumber > lastReportedLines) {
@@ -93,20 +103,28 @@ export class LogProcessor {
      * 不用再写第二份。结束时再补一次终值回调,保证 UI 看到 100%。
      */
     async getTotalLines(progressCallback?: (currentLines: number, bytesRead?: number) => void): Promise<number> {
-        this.totalLines = await this.processLines(0, (_count, _line, n) => n, progressCallback);
-        if (progressCallback && this.totalLines > 0) {
-            progressCallback(this.totalLines);
+        // mtime 缓存:文件没变就不再整扫一遍(时间线采样、跳转都靠它省一次全量读)
+        const mtime = (await fs.promises.stat(this._filePath)).mtimeMs;
+        if (this._totalLines > 0 && this._totalLinesMtime === mtime) {
+            if (progressCallback) { progressCallback(this._totalLines); }
+            return this._totalLines;
         }
-        return this.totalLines;
+        this._totalLines = await this.processLines(0, (_count, _line, n) => n, progressCallback);
+        this._totalLinesMtime = mtime;
+        if (progressCallback && this._totalLines > 0) {
+            progressCallback(this._totalLines);
+        }
+        return this._totalLines;
     }
 
     /**
-     * 读取指定范围的行
+     * 读取从 startLine(含)开始的 count 行 — 闭区间语义,与 seekAroundLine 一致。
+     * 收满即停:目标窗口之后的文件尾部不再白扫。
      */
     async readLines(startLine: number, count: number): Promise<LogLine[]> {
-        const endLine = startLine + count;
+        const endLine = startLine + count - 1;
         return this.processLines<LogLine[]>([], (lines, content, n) => {
-            if (n > startLine && n <= endLine) {
+            if (n >= startLine && n <= endLine) {
                 lines.push({
                     lineNumber: n,
                     content,
@@ -115,7 +133,7 @@ export class LogProcessor {
                 });
             }
             return lines;
-        });
+        }, undefined, (_acc, n) => n >= endLine);
     }
 
     /**
@@ -133,7 +151,10 @@ export class LogProcessor {
      * 时间节流已经能提供足够平滑的进度反馈。
      */
     async readAllLines(progressCallback?: (currentLine: number, bytesRead?: number) => void): Promise<LogLine[]> {
-        return this.processLines<LogLine[]>([], (lines, content, n) => {
+        // 读之前记下 mtime:全文件扫完后顺手把总行数缓存好,
+        // 后续 getTotalLines(时间线采样等)直接命中,不再二次整扫。
+        const mtime = (await fs.promises.stat(this._filePath)).mtimeMs;
+        const lines = await this.processLines<LogLine[]>([], (lines, content, n) => {
             lines.push({
                 lineNumber: n,
                 content,
@@ -142,6 +163,9 @@ export class LogProcessor {
             });
             return lines;
         }, progressCallback);
+        this._totalLines = lines.length;
+        this._totalLinesMtime = mtime;
+        return lines;
     }
 
     /**
@@ -189,7 +213,7 @@ export class LogProcessor {
         return new Promise((resolve, reject) => {
             let n = 0;
             let settled = false;
-            const stream = fs.createReadStream(this.filePath);
+            const stream = fs.createReadStream(this._filePath);
             const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
             const settle = (fn: () => void) => {
                 if (settled) {return;}
@@ -235,23 +259,53 @@ export class LogProcessor {
         contextBefore = 500,
         contextAfter = 500
     ): Promise<{ totalLines: number; startLine: number; lines: LogLine[] }> {
-        const totalLines = await this.getTotalLines();
-        const safeTarget = Math.max(1, Math.min(targetLine, totalLines || 1));
+        const safeTarget = Math.max(1, targetLine);
         const startLine = Math.max(1, safeTarget - contextBefore);
         const endLine = safeTarget + contextAfter;
-        const lines: LogLine[] = [];
-        await this.processLines(lines, (acc, content, n) => {
+        const mtime = (await fs.promises.stat(this._filePath)).mtimeMs;
+
+        // 单次扫描同时做三件事:数总行数、收集目标窗口、维护尾部环形缓冲。
+        // 旧实现是 getTotalLines 整扫一遍 + processLines 再整扫一遍(两遍全文件)。
+        // 尾部缓冲只存原始字符串引用(不跑时间戳/级别正则),用于 target 超出
+        // 文件末尾时兜底返回最后一屏,等价于旧的"钳到总行数"行为。
+        const windowLines: LogLine[] = [];
+        const tailCap = endLine - startLine + 1;
+        const tail: Array<{ n: number; content: string } | undefined> = new Array(tailCap);
+        let tailCount = 0;
+        const result = await this.processLines<{ count: number }>({ count: 0 }, (acc, content, n) => {
+            acc.count = n;
             if (n >= startLine && n <= endLine) {
-                acc.push({
+                windowLines.push({
                     lineNumber: n,
                     content,
                     timestamp: LogParser.extractTimestamp(content),
                     level: LogParser.extractLogLevel(content)
                 });
             }
+            tail[(n - 1) % tailCap] = { n, content };
+            tailCount = n;
             return acc;
         });
-        return { totalLines, startLine, lines };
+        this._totalLines = result.count;
+        this._totalLinesMtime = mtime;
+
+        if (windowLines.length === 0 && tailCount > 0) {
+            // target 超出文件末尾:退回最后一屏
+            const offset = tailCount > tailCap ? tailCount % tailCap : 0;
+            const raw: Array<{ n: number; content: string }> = [];
+            for (let i = 0; i < Math.min(tailCount, tailCap); i++) {
+                const item = tail[(offset + i) % tailCap];
+                if (item) { raw.push(item); }
+            }
+            const lines = raw.map(t => ({
+                lineNumber: t.n,
+                content: t.content,
+                timestamp: LogParser.extractTimestamp(t.content),
+                level: LogParser.extractLogLevel(t.content)
+            }));
+            return { totalLines: result.count, startLine: lines.length > 0 ? lines[0].lineNumber : 1, lines };
+        }
+        return { totalLines: result.count, startLine, lines: windowLines };
     }
 
     /**
@@ -338,9 +392,9 @@ export class LogProcessor {
      * (lint 规则 @typescript-eslint/no-non-null-assertion 禁用 !)。
      */
     async getStatistics(): Promise<LogStats> {
-        const mtime = (await fs.promises.stat(this.filePath)).mtimeMs;
-        if (this.statsCache && this.statsCacheMtime === mtime) {
-            return this.statsCache;
+        const mtime = (await fs.promises.stat(this._filePath)).mtimeMs;
+        if (this._statsCache && this._statsCacheMtime === mtime) {
+            return this._statsCache;
         }
         const stats: LogStats = {
             totalLines: 0,
@@ -374,18 +428,25 @@ export class LogProcessor {
                 if (!timeRange.end || timestamp > timeRange.end) {timeRange.end = timestamp;}
             }
 
+            // 三个 Map 兜底 key 数量上限,防止 URL/版本号噪声撑爆内存
             const className = LogParser.extractClassName(content);
-            if (className) {classCounts.set(className, (classCounts.get(className) || 0) + 1);}
+            if (className && (classCounts.has(className) || classCounts.size < MAX_STATS_KEYS)) {
+                classCounts.set(className, (classCounts.get(className) || 0) + 1);
+            }
 
             const methodName = LogParser.extractMethodName(content);
-            if (methodName) {methodCounts.set(methodName, (methodCounts.get(methodName) || 0) + 1);}
+            if (methodName && (methodCounts.has(methodName) || methodCounts.size < MAX_STATS_KEYS)) {
+                methodCounts.set(methodName, (methodCounts.get(methodName) || 0) + 1);
+            }
 
             const threadName = LogParser.extractThreadName(content);
-            if (threadName) {threadCounts.set(threadName, (threadCounts.get(threadName) || 0) + 1);}
+            if (threadName && (threadCounts.has(threadName) || threadCounts.size < MAX_STATS_KEYS)) {
+                threadCounts.set(threadName, (threadCounts.get(threadName) || 0) + 1);
+            }
             return acc;
         });
-        this.statsCache = result;
-        this.statsCacheMtime = mtime;
+        this._statsCache = result;
+        this._statsCacheMtime = mtime;
         return result;
     }
 
@@ -393,7 +454,7 @@ export class LogProcessor {
      * 文件被修改后让缓存失效(删除/编辑后调用)
      */
     invalidateCaches(): void {
-        this.statsCache = null;
+        this._statsCache = null;
     }
 
     /**
@@ -438,10 +499,17 @@ export class LogProcessor {
      * 导出日志到文件(使用 pipeline 自动处理 backpressure)
      */
     async exportLogs(lines: LogLine[], outputPath: string): Promise<void> {
+        // 尊重 push() 的返回值:返回 false 时停下等下一次 _read 再继续,
+        // 否则十万行会在第一次 read() 里同步全部压进流缓冲,导出变相全量驻留内存。
+        let index = 0;
         const source = new Readable({
             read() {
-                for (const line of lines) {
-                    this.push(line.content + '\n');
+                while (index < lines.length) {
+                    const chunk = lines[index].content + '\n';
+                    index++;
+                    if (!this.push(chunk)) {
+                        return; // 背压:写入侧排空后会再调 _read
+                    }
                 }
                 this.push(null);
             }
@@ -459,12 +527,15 @@ export class LogProcessor {
      * (比如区分"读源文件失败"和"写临时文件失败")。
      */
     private async rewriteFile(shouldKeep: (line: string, n: number) => boolean): Promise<{ deleted: number; kept: number }> {
-        const tempFilePath = `${this.filePath}.tmp`;
+        const tempFilePath = `${this._filePath}.tmp`;
         let n = 0;
         let deleted = 0;
         let kept = 0;
+        // readline 会吃掉原始行终止符,按检测到的原风格补回,
+        // 避免"删几行"顺手把整个 CRLF 文件改写成 LF。
+        const eol = await this.detectEol();
         try {
-            const source = fs.createReadStream(this.filePath);
+            const source = fs.createReadStream(this._filePath);
             const rl = readline.createInterface({ input: source, crlfDelay: Infinity });
             const sink = fs.createWriteStream(tempFilePath);
             const filter = new Transform({
@@ -473,7 +544,7 @@ export class LogProcessor {
                     n++;
                     if (shouldKeep(chunk, n)) {
                         kept++;
-                        cb(null, chunk + '\n');
+                        cb(null, chunk + eol);
                     } else {
                         deleted++;
                         cb();
@@ -494,16 +565,38 @@ export class LogProcessor {
                 await fs.promises.unlink(tempFilePath).catch(() => undefined);
                 throw err;
             }
-            // 原子替换
-            await fs.promises.unlink(this.filePath);
-            await fs.promises.rename(tempFilePath, this.filePath);
-            this.totalLines = kept;
+            // 原子替换:直接 rename 覆盖。
+            // 之前是"先 unlink 原文件再 rename" — 两步之间存在原文件已删除、
+            // 新文件未就位的窗口;若 rename 失败(Windows 文件锁/杀软),外层 catch
+            // 还会把写好的 tmp 删掉,原文件与新文件双双丢失。
+            // POSIX rename 与 Windows 的 MOVEFILE_REPLACE_EXISTING 都支持直接覆盖,
+            // 失败时原文件保持完好,catch 里清理 tmp 即可。
+            await fs.promises.rename(tempFilePath, this._filePath);
+            this._totalLines = kept;
+            this._totalLinesMtime = (await fs.promises.stat(this._filePath)).mtimeMs;
             this.invalidateCaches();
             return { deleted, kept };
         } catch (err) {
-            // 兜底清理
+            // 兜底清理临时文件(此时原文件完好,删 tmp 不会丢数据)
             await fs.promises.unlink(tempFilePath).catch(() => undefined);
             throw err;
+        }
+    }
+
+    /**
+     * 检测文件换行风格:读开头 64KB 找第一个 \n,其前有 \r 则按 CRLF 补回。
+     * 找不到 \n(空文件/单行无换行)时按 LF 处理。
+     */
+    private async detectEol(): Promise<string> {
+        const fd = await fs.promises.open(this._filePath, 'r');
+        try {
+            const buf = Buffer.alloc(64 * 1024);
+            const { bytesRead } = await fd.read(buf, 0, buf.length, 0);
+            const idx = buf.subarray(0, bytesRead).indexOf(0x0a);
+            if (idx <= 0) { return '\n'; }
+            return buf[idx - 1] === 0x0d ? '\r\n' : '\n';
+        } finally {
+            await fd.close();
         }
     }
 

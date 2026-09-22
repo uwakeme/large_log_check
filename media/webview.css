@@ -280,7 +280,8 @@ button .codicon {
     }
 }
 
-.loading {
+/* 空状态提示;排除 button,避免覆盖 button.loading 的加载态样式 */
+.loading:not(button) {
     text-align: center;
     padding: 20px;
     color: var(--vscode-descriptionForeground);
@@ -1157,21 +1158,6 @@ select option {
     transform: scale(0.9);
 }
 
-/* 可点击的筛选项样式 */
-.clickable-filter {
-    transition: opacity 0.2s, transform 0.1s;
-}
-
-.clickable-filter:hover {
-    opacity: 0.85;
-    transform: scale(1.05);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.clickable-filter:active {
-    transform: scale(0.95);
-}
-
 .rule-item {
     display: flex;
     align-items: center;
@@ -1185,23 +1171,6 @@ select option {
 
 .rule-item:hover {
     background-color: var(--vscode-list-hoverBackground);
-}
-
-.color-picker-wrapper {
-    position: relative;
-    display: inline-block;
-}
-
-.color-display {
-    width: 40px;
-    height: 30px;
-    border-radius: 3px;
-    border: 2px solid var(--vscode-panel-border);
-    cursor: pointer;
-}
-
-.color-display:hover {
-    border-color: var(--vscode-textLink-foreground);
 }
 
 /* 自定义确认对话框 */
@@ -1461,52 +1430,6 @@ select:focus-visible {
 a:focus-visible {
     outline: 2px solid var(--vscode-focusBorder, #007fd4);
     outline-offset: 2px;
-}
-
-/* 骨架屏加载动画 */
-@keyframes skeleton-loading {
-    0% {
-        background-position: -200px 0;
-    }
-    100% {
-        background-position: calc(200px + 100%) 0;
-    }
-}
-
-.skeleton {
-    background: linear-gradient(
-        90deg,
-        var(--vscode-editorWidget-background) 0px,
-        rgba(255, 255, 255, 0.1) 100px,
-        var(--vscode-editorWidget-background) 200px
-    );
-    background-size: 200px 100%;
-    animation: skeleton-loading 1.5s ease-in-out infinite;
-}
-
-/* 加载中的文本占位符 */
-.skeleton-text {
-    height: 14px;
-    border-radius: 4px;
-    margin-bottom: 8px;
-}
-
-.skeleton-text:last-child {
-    width: 60%;
-}
-
-/* 脉冲动画 - 用于加载指示 */
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.5;
-    }
-}
-
-.animate-pulse {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* 触摸设备优化 */

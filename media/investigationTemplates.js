@@ -164,8 +164,10 @@ function validateInvestigationTemplate(input) {
         steps.push(result.step);
     }
 
+    // id 会拼进 onclick 与元素 id,只接受安全字符集;非法 id(如导入的恶意构造)直接重新生成
+    const rawId = (typeof input.id === 'string' && input.id) ? input.id : '';
     const template = {
-        id: (typeof input.id === 'string' && input.id) ? input.id : ('tpl_' + Date.now()),
+        id: /^[A-Za-z0-9_.:-]+$/.test(rawId) ? rawId : ('tpl_' + Date.now()),
         schemaVersion: TPL_SCHEMA_VERSION,
         name: name,
         description: String(input.description || '').trim().slice(0, 200),
@@ -189,8 +191,11 @@ function validateTplStep(raw, index) {
     }
 
     if (type === 'search') {
+        // UI 按「空格分隔」编辑关键词,存储也统一拆成单词,避免保存时被 split 静默改写
         const keywords = (Array.isArray(raw.keywords) ? raw.keywords : [])
-            .map(k => String(k || '').trim()).filter(Boolean);
+            .map(k => String(k || '').trim())
+            .flatMap(k => k.split(/\s+/))
+            .filter(Boolean);
         if (keywords.length === 0) { return { ok: false, error: `${at}: 查询至少需要一个关键词` }; }
         if (keywords.length > TPL_MAX_KEYWORDS) { return { ok: false, error: `${at}: 关键词超过 ${TPL_MAX_KEYWORDS} 个` }; }
         for (const k of keywords) {
@@ -448,19 +453,24 @@ function renderTemplateList() {
             html += `<div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px;">${escapeHtml(flow)}</div>`;
         }
         html += '</div>';
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="runInvestigationTemplate('${escapeAttr(t.id)}')" title="运行模板"><i class="codicon codicon-play"></i> 运行</button>`;
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="openTemplateEditor('${escapeAttr(t.id)}')" title="编辑模板"><i class="codicon codicon-edit"></i> 编辑</button>`;
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="tplToggleRowActions('${escapeAttr(t.id)}')" title="更多操作"><i class="codicon codicon-ellipsis"></i></button>`;
+        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="runInvestigationTemplate(${tplJsArg(t.id)})" title="运行模板"><i class="codicon codicon-play"></i> 运行</button>`;
+        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="openTemplateEditor(${tplJsArg(t.id)})" title="编辑模板"><i class="codicon codicon-edit"></i> 编辑</button>`;
+        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="tplToggleRowActions(${tplJsArg(t.id)})" title="更多操作"><i class="codicon codicon-ellipsis"></i></button>`;
         html += '</div>';
         html += `<div id="tplRowActions_${escapeAttr(t.id)}" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--vscode-panel-border); gap: 8px;">`;
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="duplicateTemplate('${escapeAttr(t.id)}')"><i class="codicon codicon-copy"></i> 复制模板</button>`;
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="exportTemplateToClipboard('${escapeAttr(t.id)}')"><i class="codicon codicon-clipboard"></i> 导出到剪贴板</button>`;
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="exportTemplateToFile('${escapeAttr(t.id)}')"><i class="codicon codicon-save"></i> 导出为文件</button>`;
-        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="removeTemplateById('${escapeAttr(t.id)}')"><i class="codicon codicon-trash"></i> 删除</button>`;
+        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="duplicateTemplate(${tplJsArg(t.id)})"><i class="codicon codicon-copy"></i> 复制模板</button>`;
+        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="exportTemplateToClipboard(${tplJsArg(t.id)})"><i class="codicon codicon-clipboard"></i> 导出到剪贴板</button>`;
+        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="exportTemplateToFile(${tplJsArg(t.id)})"><i class="codicon codicon-save"></i> 导出为文件</button>`;
+        html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="removeTemplateById(${tplJsArg(t.id)})"><i class="codicon codicon-trash"></i> 删除</button>`;
         html += '</div></div>';
     }
 
     container.innerHTML = html;
+}
+
+/** 把动态字符串安全嵌入 onclick:JSON.stringify 防 JS 断言,escapeAttr 防 HTML 属性逃逸 */
+function tplJsArg(value) {
+    return escapeAttr(JSON.stringify(String(value)));
 }
 
 function tplToggleRowActions(id) {
@@ -665,11 +675,11 @@ function renderTemplateEditor() {
 function renderTplParams() {
     const container = document.getElementById('tplEditParams');
     if (!container) { return; }
-    const params = (tplEditingTemplate && tplEditingTemplate.params) || [];
+    const params = (tplEditingTemplate && Array.isArray(tplEditingTemplate.params)) ? tplEditingTemplate.params : [];
     let html = '';
     params.forEach((p, i) => {
         html += '<span class="tpl-param-chip">';
-        html += `<code class="tpl-param-insert" title="点击插入到下方输入框光标处" onclick="tplInsertParam('${escapeAttr(p.key)}')">${escapeHtml('${' + p.key + '}')}</code>`;
+        html += `<code class="tpl-param-insert" title="点击插入到下方输入框光标处" onclick="tplInsertParam(${tplJsArg(p.key)})">${escapeHtml('${' + p.key + '}')}</code>`;
         if (p.label && p.label !== p.key) { html += `<small>${escapeHtml(p.label)}</small>`; }
         html += `<button type="button" title="删除参数" onclick="tplRemoveParam(${i})">×</button>`;
         html += '</span>';
@@ -756,7 +766,7 @@ async function tplInsertParam(key) {
 function renderTplSteps() {
     const container = document.getElementById('tplEditSteps');
     if (!container) { return; }
-    const steps = (tplEditingTemplate && tplEditingTemplate.steps) || [];
+    const steps = (tplEditingTemplate && Array.isArray(tplEditingTemplate.steps)) ? tplEditingTemplate.steps : [];
     if (steps.length === 0) {
         container.innerHTML = '<div class="tpl-empty">还没有步骤——从下面选一个动作,开始编排你的排查流程。</div>';
         return;
@@ -1064,11 +1074,17 @@ function tplSwitchEditorMode(mode) {
         tplHideEditorError();
         tplEditorMode = 'json';
     } else {
-        // JSON -> 表单: 解析成功才切换,失败留在 JSON 并标错
+        // JSON -> 表单: 解析 + 白名单校验都通过才切换,失败留在 JSON 并标错
         const text = document.getElementById('tplEditJson').value;
         try {
             const parsed = JSON.parse(text);
-            tplEditingTemplate = Object.assign({}, tplEditingTemplate, parsed);
+            const merged = Object.assign({}, tplEditingTemplate, parsed);
+            const result = validateInvestigationTemplate(merged);
+            if (!result.ok) {
+                tplShowJsonError('模板校验失败: ' + result.error);
+                return;
+            }
+            tplEditingTemplate = result.template;
             tplExpandedStep = null;
             tplParamAdding = false;
             tplEditorMode = 'visual';

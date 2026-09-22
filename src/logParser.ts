@@ -329,6 +329,16 @@ export class LogParser {
             const [, d, mo, y, h, mi, s, ms] = m;
             return new Date(+y, +mo - 1, +d, +h, +mi, +s, ms ? +ms.slice(0, 3) : 0);
         }
+        // 纯日期 YYYY-MM-DD:按本地时区解释。
+        // 原生 Date 会把纯日期字符串当 UTC 解析(2024-01-01 → 当天 00:00 UTC),
+        // 而带时间的格式上面走本地构造 — 两者混用会让「删除 2024-01-01 之后」
+        // 在东八区把边界推后 8 小时,误删/误留 16 小时的数据。
+        const dateOnly = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (dateOnly) {
+            const [, y, mo, d] = dateOnly;
+            const local = new Date(+y, +mo - 1, +d);
+            return isNaN(local.getTime()) ? undefined : local;
+        }
         // 最后的兜底:交给原生 Date
         const fallback = new Date(normalized);
         return isNaN(fallback.getTime()) ? undefined : fallback;

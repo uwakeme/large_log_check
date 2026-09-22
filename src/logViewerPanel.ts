@@ -9,6 +9,9 @@ let cachedWebviewHtml: string | null = null;
 export class LogViewerPanel {
     // 使用 Map 来管理多个面板实例，key 为文件路径
     private static _panels: Map<string, LogViewerPanel> = new Map();
+    // 最近激活过的面板:分屏多开时,破坏性命令必须跟着用户最后聚焦的那个走,
+    // 而不是 Map 插入顺序里的第一个(否则可能删错文件)。
+    private static _lastActivePanel: LogViewerPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
@@ -23,6 +26,11 @@ export class LogViewerPanel {
      */
     private _isWebviewReady = false;
     private _hasLoadedFile = false;
+    // 加载代次:刷新连点/删除后重载会并发触发 loadFile,只有最新代次的结果算数;
+    // 串行链保证同一时间只有一个全文件扫描在跑。
+    private _loadSeq = 0;
+    private _loadChain: Promise<void> = Promise.resolve();
+    private _disposed = false;
 
     public static createOrShow(extensionUri: vscode.Uri, fileUri: vscode.Uri) {
         const column = vscode.window.activeTextEditor
@@ -55,15 +63,23 @@ export class LogViewerPanel {
         return newPanel;
     }
 
-    // 获取当前活动的面板
+    // 获取当前活动的面板:最近激活 > 可见 > 最近激活(全不可见时兜底)
     public static getActivePanel(): LogViewerPanel | undefined {
-        // 返回当前可见的面板
+        const last = LogViewerPanel._lastActivePanel;
+        if (last && LogViewerPanel._panels.has(last._fileUri.fsPath) &&
+            (last._panel.active || last._panel.visible)) {
+            return last;
+        }
         for (const panel of LogViewerPanel._panels.values()) {
             if (panel._panel.visible) {
+                LogViewerPanel._lastActivePanel = panel;
                 return panel;
             }
         }
-        // 如果没有可见的面板，返回任意一个
+        // 没有可见面板时退回最近激活的那个(仍在打开状态),比 Map 首元素更贴近用户意图
+        if (last && LogViewerPanel._panels.has(last._fileUri.fsPath)) {
+            return last;
+        }
         return LogViewerPanel._panels.values().next().value;
     }
 
@@ -105,6 +121,13 @@ export class LogViewerPanel {
         // 监听面板关闭事件
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
+        // 跟踪最近激活的面板(分屏时命令要落到用户正在看的那个文件)
+        this._panel.onDidChangeViewState(e => {
+            if (e.webviewPanel.active) {
+                LogViewerPanel._lastActivePanel = this;
+            }
+        }, null, this._disposables);
+
         // 处理来自WebView的消息
         this._panel.webview.onDidReceiveMessage(
             async message => {
@@ -127,19 +150,19 @@ export class LogViewerPanel {
                         await this.loadFile(this._fileUri);
                         break;
                     case 'filterByThread':
-                        await this.filterByThreadName(message.threadName);
+                        await this.filterByThreadName(message.threadName, message.filterSeq);
                         break;
                     case 'filterByClass':
-                        await this.filterByClassName(message.className);
+                        await this.filterByClassName(message.className, message.filterSeq);
                         break;
                     case 'filterByMethod':
-                        await this.filterByMethodName(message.methodName);
+                        await this.filterByMethodName(message.methodName, message.filterSeq);
                         break;
                     case 'getStatistics':
                         await this.getStatistics();
                         break;
                     case 'sampleTimeline':
-                        await this.sampleTimeline(message.sampleCount ?? this._timelineSampleCount);
+                        await this.sampleTimeline(LogViewerPanel.clampInt(message.sampleCount, 1, 10000, this._timelineSampleCount));
                         break;
                     case 'exportLogs':
                         await this.exportCurrentView(message.lines, message.exportType);
@@ -151,23 +174,57 @@ export class LogViewerPanel {
                         await this.importTemplates();
                         break;
                     case 'deleteByTime':
+                        // 破坏性操作:宿主端自校验,不信任 webview 传参
+                        if (typeof message.timeStr !== 'string' || !message.timeStr.trim() ||
+                            (message.mode !== 'before' && message.mode !== 'after')) {
+                            vscode.window.showErrorMessage('删除参数无效,已取消操作');
+                            break;
+                        }
                         await this.deleteByTimeOptions(message.timeStr, message.mode);
                         break;
-                    case 'deleteByLine':
-                        await this.deleteByLineOptions(message.lineNumber, message.mode);
+                    case 'deleteByLine': {
+                        const lineNumber = Number(message.lineNumber);
+                        if (!Number.isInteger(lineNumber) || lineNumber < 1 ||
+                            (message.mode !== 'before' && message.mode !== 'after')) {
+                            vscode.window.showErrorMessage('删除参数无效,已取消操作');
+                            break;
+                        }
+                        await this.deleteByLineOptions(lineNumber, message.mode);
                         break;
+                    }
                     case 'keepByTimeRange':
+                        if (typeof message.startTime !== 'string' || typeof message.endTime !== 'string' ||
+                            !message.startTime.trim() || !message.endTime.trim()) {
+                            vscode.window.showErrorMessage('保留范围参数无效,已取消操作');
+                            break;
+                        }
                         await this.keepByTimeRange(message.startTime, message.endTime);
                         break;
-                    case 'keepByLineRange':
-                        await this.keepByLineRange(message.startLine, message.endLine);
+                    case 'keepByLineRange': {
+                        const startLine = Number(message.startLine);
+                        const endLine = Number(message.endLine);
+                        if (!Number.isInteger(startLine) || !Number.isInteger(endLine) ||
+                            startLine < 1 || endLine < startLine) {
+                            vscode.window.showErrorMessage('行号范围无效,已取消操作');
+                            break;
+                        }
+                        await this.keepByLineRange(startLine, endLine);
                         break;
+                    }
                     case 'jumpToTime':
-                        await this.jumpToTime(message.timeStr);
+                        if (typeof message.timeStr !== 'string' || !message.timeStr.trim()) {
+                            break;
+                        }
+                        await this.jumpToTime(message.timeStr, message.jumpSeq);
                         break;
-                    case 'jumpToLineInFullLog':
-                        await this.jumpToLineInFullLog(message.lineNumber);
+                    case 'jumpToLineInFullLog': {
+                        const target = Number(message.lineNumber);
+                        if (!Number.isInteger(target) || target < 1) {
+                            break;
+                        }
+                        await this.jumpToLineInFullLog(target, message.jumpSeq);
                         break;
+                    }
                     case 'showMessage':
                         if (message.type === 'warning') {
                             vscode.window.showWarningMessage(message.message);
@@ -188,8 +245,13 @@ export class LogViewerPanel {
                         if (message.data && typeof message.data.theme === 'string') {
                             const allowed = ['default', 'neon', 'aurora', 'holo'];
                             if (allowed.includes(message.data.theme)) {
-                                const config = vscode.workspace.getConfiguration('big-log-viewer');
-                                await config.update('theme', message.data.theme, vscode.ConfigurationTarget.Global);
+                                try {
+                                    const config = vscode.workspace.getConfiguration('big-log-viewer');
+                                    await config.update('theme', message.data.theme, vscode.ConfigurationTarget.Global);
+                                } catch (error) {
+                                    // 只读配置/Settings Sync 冲突时给出反馈,而不是抛未处理 rejection
+                                    vscode.window.showErrorMessage(`切换主题失败: ${error}`);
+                                }
                             }
                         }
                         break;
@@ -211,7 +273,43 @@ export class LogViewerPanel {
         await this.loadFile(this._fileUri);
     }
 
-    private async loadFile(fileUri: vscode.Uri) {
+    /** 命令面板「显示统计」直达宿主统计(与工具栏「统计」同一链路) */
+    public async showStatistics(): Promise<void> {
+        await this.getStatistics();
+    }
+
+    /** 命令面板「跳转到行」直达宿主流式 seek(不再经 webview 中转) */
+    public async jumpToLine(lineNumber: number): Promise<void> {
+        await this.jumpToLineInFullLog(lineNumber);
+    }
+
+    /** 整数钳制:非有限数回退默认值,再夹到 [min, max] */
+    private static clampInt(value: unknown, min: number, max: number, fallback: number): number {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            return fallback;
+        }
+        return Math.min(max, Math.max(min, Math.round(value)));
+    }
+
+    /**
+     * 加载文件(串行化 + 代次防护):
+     * - 同一时间只跑一个全文件扫描,排队中的过期任务直接跳过
+     * - 面板关闭或被更新的加载取代后,不再往 webview 发消息
+     */
+    private loadFile(fileUri: vscode.Uri): Promise<void> {
+        const seq = ++this._loadSeq;
+        this._loadChain = this._loadChain
+            .catch(() => undefined)   // 前一次失败不阻塞后续
+            .then(() => {
+                if (this._disposed || seq !== this._loadSeq) {
+                    return; // 已被更新的加载取代
+                }
+                return this.doLoadFile(fileUri, seq);
+            });
+        return this._loadChain;
+    }
+
+    private async doLoadFile(fileUri: vscode.Uri, seq: number) {
         this._fileUri = fileUri;
         // v1.3.3：在替换 _logProcessor 之前先让旧对象释放缓存。alias 变更后用户可能
         // 调到 refresh() 重新打开同一文件（不切换 filePath），旧 _logProcessor 里的
@@ -253,6 +351,9 @@ export class LogViewerPanel {
             });
 
             const totalLines = lines.length;
+            if (this._disposed || seq !== this._loadSeq) {
+                return; // 读取期间面板被关闭/被新加载取代,丢弃本次结果
+            }
 
             this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
 
@@ -283,6 +384,14 @@ export class LogViewerPanel {
             this.sampleTimeline(this._timelineSampleCount);
         } catch (error) {
             vscode.window.showErrorMessage(`加载文件失败: ${error}`);
+            if (!this._disposed && seq === this._loadSeq) {
+                // 通知 webview 收起加载遮罩 — 否则读取失败后全屏 loading-overlay
+                // 永远盖住工具栏(连刷新都点不到),只能关面板重开。
+                this._panel.webview.postMessage({
+                    command: 'fileLoadError',
+                    data: { message: `加载文件失败: ${error}` }
+                });
+            }
         }
     }
 
@@ -361,34 +470,34 @@ export class LogViewerPanel {
         }
     }
 
-    public async deleteByTimeOptions(timeStr: string, mode: string) {
+    public async deleteByTimeOptions(timeStr: string, mode: 'before' | 'after') {
         await this.confirmDestructiveAction({
             promptTitle: `如何处理${mode === 'before' ? '之前' : '之后'}的日志?`,
-            mode: mode as 'before' | 'after',
+            mode: mode,
             computeResults: () => this._logProcessor.filterByTime(timeStr, mode, true),
             deleteFromFile: () => this._logProcessor.deleteByTime(timeStr, mode)
         });
     }
 
-    public async deleteByLineOptions(lineNumber: number, mode: string) {
+    public async deleteByLineOptions(lineNumber: number, mode: 'before' | 'after') {
         await this.confirmDestructiveAction({
             promptTitle: `如何处理第 ${lineNumber} 行${mode === 'before' ? '之前' : '之后'}的日志?`,
-            mode: mode as 'before' | 'after',
+            mode: mode,
             computeResults: () => this._logProcessor.filterByLineNumber(lineNumber, mode, true),
             deleteFromFile: () => this._logProcessor.deleteByLine(lineNumber, mode)
         });
     }
 
-    private async jumpToTime(timeStr: string) {
+    private async jumpToTime(timeStr: string, seq?: number) {
         try {
             vscode.window.showInformationMessage(`正在查找时间 ${timeStr} 的日志...`);
             const result = await this._logProcessor.findLineByTime(timeStr);
 
             if (result) {
-                // 找到了，加载该行及周围的日志
-                const startLine = Math.max(0, result.lineNumber - 500);
-                const count = 1000; // 加载1000行
-                const lines = await this._logProcessor.readLines(startLine, count);
+                // 找到了，加载该行及周围的日志(闭区间 readLines:start 含、共 count 行)
+                const startLine = Math.max(1, result.lineNumber - 500);
+                const endLine = result.lineNumber + 500;
+                const lines = await this._logProcessor.readLines(startLine, endLine - startLine + 1);
 
                 this._panel.webview.postMessage({
                     command: 'jumpToTimeResult',
@@ -396,7 +505,9 @@ export class LogViewerPanel {
                         success: true,
                         targetLineNumber: result.lineNumber,
                         lines: lines,
-                        startLine: startLine
+                        startLine: startLine,
+                        // 回传请求代次:webview 用来丢弃过期响应,避免旧跳转覆盖新状态
+                        jumpSeq: seq
                     }
                 });
 
@@ -422,7 +533,7 @@ export class LogViewerPanel {
         }
     }
 
-    private async jumpToLineInFullLog(lineNumber: number) {
+    private async jumpToLineInFullLog(lineNumber: number, seq?: number) {
         try {
             vscode.window.showInformationMessage(`正在跳转到第 ${lineNumber} 行...`);
 
@@ -448,7 +559,9 @@ export class LogViewerPanel {
                     // 关键:不再声称"全部加载",让 webview 知道这只是上下文片段
                     allLoaded: false,
                     startLine: seek.startLine,
-                    targetLineNumber: lineNumber
+                    targetLineNumber: lineNumber,
+                    // 回传请求代次:webview 用来丢弃过期响应
+                    jumpSeq: seq
                 }
             });
 
@@ -462,14 +575,16 @@ export class LogViewerPanel {
         }
     }
 
-    private async filterByThreadName(threadName: string) {
+    private async filterByThreadName(threadName: string, seq?: number) {
         try {
             const results = await this._logProcessor.filterByThreadName(threadName);
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
                     threadName: threadName,
-                    results: results
+                    results: results,
+                    // 回传请求代次:webview 用来丢弃过期响应
+                    filterSeq: seq
                 }
             });
         } catch (error) {
@@ -477,14 +592,15 @@ export class LogViewerPanel {
         }
     }
 
-    private async filterByClassName(className: string) {
+    private async filterByClassName(className: string, seq?: number) {
         try {
             const results = await this._logProcessor.filterByClassName(className);
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
                     className: className,
-                    results: results
+                    results: results,
+                    filterSeq: seq
                 }
             });
         } catch (error) {
@@ -492,14 +608,15 @@ export class LogViewerPanel {
         }
     }
 
-    private async filterByMethodName(methodName: string) {
+    private async filterByMethodName(methodName: string, seq?: number) {
         try {
             const results = await this._logProcessor.filterByMethodName(methodName);
             this._panel.webview.postMessage({
                 command: 'filterResults',
                 data: {
                     methodName: methodName,
-                    results: results
+                    results: results,
+                    filterSeq: seq
                 }
             });
         } catch (error) {
@@ -566,14 +683,15 @@ export class LogViewerPanel {
         const config = vscode.workspace.getConfiguration('big-log-viewer');
 
         try {
+            // 宿主端钳制:NaN/越界值经 config.update 写入后 schema 不一定拦截
             if (typeof newSettings.searchDebounceMs === 'number') {
-                await config.update('search.debounceMs', newSettings.searchDebounceMs, vscode.ConfigurationTarget.Workspace);
+                await config.update('search.debounceMs', LogViewerPanel.clampInt(newSettings.searchDebounceMs, 0, 5000, 400), vscode.ConfigurationTarget.Workspace);
             }
             if (typeof newSettings.collapseMinRepeatCount === 'number') {
-                await config.update('collapse.minRepeatCount', newSettings.collapseMinRepeatCount, vscode.ConfigurationTarget.Workspace);
+                await config.update('collapse.minRepeatCount', LogViewerPanel.clampInt(newSettings.collapseMinRepeatCount, 2, 100, 2), vscode.ConfigurationTarget.Workspace);
             }
             if (typeof newSettings.timelineSamplePoints === 'number') {
-                await config.update('timeline.samplePoints', newSettings.timelineSamplePoints, vscode.ConfigurationTarget.Workspace);
+                await config.update('timeline.samplePoints', LogViewerPanel.clampInt(newSettings.timelineSamplePoints, 10, 10000, 200), vscode.ConfigurationTarget.Workspace);
             }
 
             vscode.window.showInformationMessage('大日志文件查看器设置已保存');
@@ -586,6 +704,9 @@ export class LogViewerPanel {
     }
 
     private async exportCurrentView(lines: LogLine[], exportType?: string) {
+        if (!Array.isArray(lines)) {
+            return; // 防御:webview 侧数据异常时不进保存对话框
+        }
         try {
             // 根据导出类型生成默认文件名
             let defaultFileName = 'exported.log';
@@ -712,6 +833,7 @@ export class LogViewerPanel {
 
         // 用占位符替换为真实路径
         return html
+            .replace(/%%CSP_SOURCE%%/g, webview.cspSource)
             .replace(/%%WEBVIEW_CSS%%/g, styleUri.toString())
             .replace(/%%THEMES_CSS%%/g, themesUri.toString())
             .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString())
@@ -721,8 +843,12 @@ export class LogViewerPanel {
     }
 
     public dispose() {
+        this._disposed = true;
         // 从面板集合中移除
         LogViewerPanel._panels.delete(this._fileUri.fsPath);
+        if (LogViewerPanel._lastActivePanel === this) {
+            LogViewerPanel._lastActivePanel = undefined;
+        }
 
         this._panel.dispose();
 

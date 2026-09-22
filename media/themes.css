@@ -81,7 +81,6 @@ body[data-theme="neon"] button:hover:not(:disabled) {
     box-shadow: 0 0 8px rgba(0,245,255,.45);
     transform: none;
 }
-body[data-theme="neon"] .toolbar > button:first-child,
 body[data-theme="neon"] #refreshBtn {
     color: #00f5ff;
     border-color: #00f5ff;

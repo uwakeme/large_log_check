@@ -134,7 +134,7 @@
             "AURORA.GLASS — 玻璃拟态(深蓝紫+极光)",
             "HOLO.PRISM — 全息棱镜(炭灰+渐变描边)"
           ],
-          "description": "日志查看器的视觉主题。也可在工具栏的「主题」按钮中临时切换。"
+          "description": "日志查看器的视觉主题。也可在查看器「设置」面板的「主题」选项中临时切换。"
         },
         "big-log-viewer.level.aliases": {
           "type": "object",

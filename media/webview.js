@@ -120,24 +120,37 @@ function applyUnifiedFilters() {
         currentSearchIsRegex = unifiedFilters.isRegex;
         currentSearchIsMultiple = unifiedFilters.isMultiple;
         
-        results = results.filter(line => {
-            const content = (line.content || '').toLowerCase();
-            
-            if (unifiedFilters.isRegex) {
-                try {
-                    const regex = new RegExp(unifiedFilters.keyword, 'i');
-                    return regex.test(line.content || '');
-                } catch (e) {
-                    console.warn('正则表达式错误:', e);
-                    return false;
-                }
-            } else if (unifiedFilters.isMultiple) {
-                // 多关键词 AND 匹配
-                const keywords = unifiedFilters.keyword.trim().split(/\s+/).map(k => k.toLowerCase());
-                return keywords.every(k => content.includes(k));
-            } else {
-                return content.includes(unifiedFilters.keyword.toLowerCase());
+        // 正则只编译一次、多关键词只拆分一次 — 之前每行都 new RegExp + toLowerCase,
+        // 百万行文件上一次按键搜索能把 UI 冻住数秒。
+        let regex = null;
+        let regexInvalid = false;
+        let multiKeywords = null;
+        if (unifiedFilters.isRegex) {
+            try {
+                regex = new RegExp(unifiedFilters.keyword, 'i');
+            } catch (e) {
+                console.warn('正则表达式错误:', e);
+                regexInvalid = true;
             }
+        } else if (unifiedFilters.isMultiple) {
+            multiKeywords = unifiedFilters.keyword.trim().split(/\s+/).map(k => k.toLowerCase());
+        }
+        const singleKeyword = (!unifiedFilters.isRegex && !unifiedFilters.isMultiple)
+            ? unifiedFilters.keyword.toLowerCase()
+            : null;
+
+        results = results.filter(line => {
+            const raw = line.content || '';
+            if (unifiedFilters.isRegex) {
+                if (regexInvalid) { return false; }
+                // 无 g 标志,test 不带 lastIndex 状态,可安全复用同一实例
+                return regex.test(raw);
+            }
+            const content = raw.toLowerCase();
+            if (multiKeywords) {
+                return multiKeywords.every(k => content.includes(k));
+            }
+            return content.includes(singleKeyword);
         });
     } else {
         currentSearchKeyword = '';
@@ -153,7 +166,8 @@ function applyUnifiedFilters() {
             console.log('🧵 线程过滤 - 数据未完全加载，发送后端请求');
             vscode.postMessage({
                 command: 'filterByThread',
-                threadName: unifiedFilters.threadName
+                threadName: unifiedFilters.threadName,
+                filterSeq: ++filterRequestSeq
             });
             showToast('正在过滤日志...');
             return; // 等待后端结果，不继续处理
@@ -178,7 +192,8 @@ function applyUnifiedFilters() {
             console.log('📦 类名过滤 - 数据未完全加载，发送后端请求');
             vscode.postMessage({
                 command: 'filterByClass',
-                className: unifiedFilters.className
+                className: unifiedFilters.className,
+                filterSeq: ++filterRequestSeq
             });
             showToast('正在过滤日志...');
             return;
@@ -199,7 +214,8 @@ function applyUnifiedFilters() {
             console.log('🔧 方法名过滤 - 数据未完全加载，发送后端请求');
             vscode.postMessage({
                 command: 'filterByMethod',
-                methodName: unifiedFilters.methodName
+                methodName: unifiedFilters.methodName,
+                filterSeq: ++filterRequestSeq
             });
             showToast('正在过滤日志...');
             return;
@@ -411,9 +427,14 @@ window.addEventListener('message', event => {
 function dispatchWebviewMessage(message) {
     if (!message) {return;}
 
+    // try/catch:一条消息抛错不能让后续消息(尤其早期消息重放)整批中断
+    try {
     switch (message.command) {
         case 'fileLoaded':
             handleFileLoaded(message.data);
+            break;
+        case 'fileLoadError':
+            handleFileLoadError(message.data);
             break;
         case 'moreLines':
             handleMoreLines(message.data);
@@ -474,6 +495,9 @@ function dispatchWebviewMessage(message) {
         case 'loadingProgress':
             updateLoadingProgress(message.data);
             break;
+    }
+    } catch (err) {
+        console.error('[webview] 消息处理失败:', message.command, err);
     }
 }
 
@@ -567,10 +591,14 @@ function handleFileLoaded(data) {
         levels: null,
         timeRange: null,
     };
+    // 级别复选框跟随复位 — 否则侧栏还勾着 ERROR,列表却已是全量数据
+    resetLevelCheckboxes();
+    // 新数据集使在途的筛选/跳转请求全部过期
+    invalidateInflightRequests();
 
     allLines = data.lines || [];
     originalLines = [...allLines];
-    
+
     // 初始化完整数据缓存（用于统一过滤）
     fullDataCache = [...allLines];
 
@@ -588,6 +616,22 @@ function handleFileLoaded(data) {
         // 重置后台加载状态，并从当前偏移量开始统一加载
         isBackgroundLoading = false;
         startBackgroundLoading();
+    }
+}
+
+/** 宿主读取失败:收起全屏加载遮罩并提示 — 否则 loading-overlay 永久盖住工具栏 */
+function handleFileLoadError(data) {
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'none';
+        loadingIndicator.style.pointerEvents = 'none';
+    }
+    setButtonLoadingById('refreshBtn', false);
+    const msg = (data && data.message) || '加载文件失败';
+    if (typeof showToast === 'function') {
+        showToast(msg, 'error');
+    } else {
+        vscode.postMessage({ command: 'showMessage', type: 'warning', message: msg });
     }
 }
 
@@ -677,6 +721,10 @@ function handleSearchResults(data) {
 }
 
 function handleFilterResults(data) {
+    // 过期响应:期间用户已取消/更换筛选或重新加载了文件
+    if (data.filterSeq !== undefined && data.filterSeq !== filterRequestSeq) {
+        return;
+    }
     allLines = data.results || [];
     console.log(' 收到过滤结果:', allLines.length, '条');
     isFiltering = true; // 设置为过滤模式
@@ -787,6 +835,10 @@ function handleTimelineData(data) {
 }
 
 async function handleJumpToLineInFullLogResult(data) {
+    // 过期响应:期间用户又发起了新跳转或重新加载了文件
+    if (data.jumpSeq !== undefined && data.jumpSeq !== jumpRequestSeq) {
+        return;
+    }
     // v1.3.3.1：撤销对 exitCollapseMode() 的调用，与快路径保持对称。
     // 折叠模式由用户偏好驱动，跳转完整日志不应取消。
     // v1.3.3.3：async + await calculateAllPagesAsync(true) —— 折叠模式 + 后端回包
@@ -864,11 +916,8 @@ async function handleJumpToLineInFullLogResult(data) {
 
 function renderLines() {
     const container = document.getElementById('logContainer');
-    const oldContent = container.innerHTML;
+    // 不要在这里读 container.innerHTML — 序列化整棵子树是纯调试开销,渲染热路径上很贵
     container.innerHTML = '';
-
-    console.log('🎨 渲染日志 - 当前 allLines 数量:', allLines.length, '，折叠模式:', isCollapseMode, '，搜索关键词:', currentSearchKeyword, '，过滤模式:', isFiltering);
-    console.log('已清空容器，旧内容长度:', oldContent.length);
 
     if (allLines.length === 0) {
         container.innerHTML = '<div class="loading">没有日志数据</div>';
@@ -1531,19 +1580,25 @@ function highlightKeywords(content, keyword) {
         if (!rule.enabled) return;
 
         try {
-            let regex;
-            if (rule.type === 'text') {
-                // 文本匹配
-                const escaped = escapeRegex(rule.pattern);
-                regex = new RegExp(escaped, 'gi');
-            } else {
-                // 正则表达式匹配
-                regex = new RegExp(rule.pattern, 'g');
+            // 编译缓存挂在规则对象上,key 覆盖 type+pattern — 编辑规则即自动失效。
+            // 之前每行×每规则都 new RegExp,百万行渲染时光正则编译就吃掉可观开销。
+            const pattern = typeof rule.pattern === 'string' ? rule.pattern : '';
+            const cacheKey = rule.type + '|' + pattern;
+            let regex = rule._regexCache && rule._regexCache.regex;
+            if (!(regex instanceof RegExp) || rule._regexCache.key !== cacheKey) {
+                regex = rule.type === 'text'
+                    ? new RegExp(escapeRegex(pattern), 'gi')   // 文本匹配
+                    : new RegExp(pattern, 'g');                // 正则表达式匹配
+                rule._regexCache = { key: cacheKey, regex: regex };
             }
+            // g 正则跨行复用:先把状态归零,防止上一行中途异常把 lastIndex 留在半截
+            regex.lastIndex = 0;
 
             let match;
             while ((match = regex.exec(content)) !== null) {
                 const matchText = match[0];
+                // 零长度匹配不步进会死循环(用户正则如 a*),跳过并手动前进
+                if (matchText.length === 0) { regex.lastIndex++; continue; }
                 const startPos = match.index;
                 const endPos = startPos + matchText.length;
                 
@@ -1561,23 +1616,22 @@ function highlightKeywords(content, keyword) {
                     style = `color: ${color}; border: 1px solid ${color}60; background-color: ${color}10; border-radius: 3px; padding: 0 4px;`;
                 }
 
+                // 动态参数一律走 jsArg(JSON+属性转义):线程/类/方法名提取自日志内容,
+                // 单引号包裹 + HTML 实体转义在属性解码后可被断言逃逸(恶意日志 XSS)
                 if (rule.name === '线程名') {
                     const threadNameMatch = matchText.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
                     const threadName = threadNameMatch ? threadNameMatch[1] : '';
                     if (!threadName) continue; // 跳过无效的线程名
-                    const safeThreadName = escapeAttr(threadName);
-                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName('${safeThreadName}')" title="点击筛选线程: ${escapeAttr(threadName)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName(${jsArg(threadName)})" title="点击筛选线程: ${escapeAttr(threadName)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '类名') {
                     const className = matchText.trim();
                     if (!className) continue; // 跳过无效的类名
-                    const safeClassName = escapeAttr(className);
-                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName('${safeClassName}')" title="点击筛选类: ${escapeAttr(className)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByClassName(${jsArg(className)})" title="点击筛选类: ${escapeAttr(className)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '方法名') {
                     const methodMatch = matchText.match(/\[([a-zA-Z_][a-zA-Z0-9_]*):\d+\]/);
                     const methodName = methodMatch ? methodMatch[1] : '';
                     if (!methodName) continue; // 跳过无效的方法名
-                    const safeMethodName = escapeAttr(methodName);
-                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName('${safeMethodName}')" title="点击筛选方法: ${escapeAttr(methodName)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
+                    html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByMethodName(${jsArg(methodName)})" title="点击筛选方法: ${escapeAttr(methodName)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else {
                     html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}</span>`;
                 }
@@ -1591,18 +1645,27 @@ function highlightKeywords(content, keyword) {
 
     // 处理搜索关键词高亮（优先级最高）
     if (keyword) {
-        const keywords = currentSearchIsMultiple ? keyword.trim().split(/\s+/) : [keyword];
-        keywords.forEach(k => {
-            if (k) {
-                const regex = new RegExp(escapeRegex(k), 'gi');
-                let match;
-                while ((match = regex.exec(content)) !== null) {
-                    const matchText = match[0];
-                    const startPos = match.index;
-                    const endPos = startPos + matchText.length;
-                    const html = `<span class="highlight">${escapeHtml(matchText)}</span>`;
-                    highlights.push({ start: startPos, end: endPos, html: html, priority: 2 });
-                }
+        // 正则模式按正则高亮(与折叠组的命中数统计口径一致),普通模式按字面量
+        const patterns = [];
+        if (currentSearchIsRegex) {
+            try {
+                patterns.push(new RegExp(keyword, 'gi'));
+            } catch (e) { /* 非法正则不高亮,搜索本身已在过滤时兜底 */ }
+        } else {
+            const keywords = currentSearchIsMultiple ? keyword.trim().split(/\s+/) : [keyword];
+            keywords.forEach(k => {
+                if (k) { patterns.push(new RegExp(escapeRegex(k), 'gi')); }
+            });
+        }
+        patterns.forEach(regex => {
+            let match;
+            while ((match = regex.exec(content)) !== null) {
+                const matchText = match[0];
+                if (matchText.length === 0) { regex.lastIndex++; continue; }
+                const startPos = match.index;
+                const endPos = startPos + matchText.length;
+                const html = `<span class="highlight">${escapeHtml(matchText)}</span>`;
+                highlights.push({ start: startPos, end: endPos, html: html, priority: 2 });
             }
         });
     }
@@ -1679,6 +1742,33 @@ function escapeAttr(text) {
 
 function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 把动态字符串安全嵌入 onclick:JSON.stringify 防 JS 断言,
+ * escapeAttr 防 HTML 属性逃逸 — 日志内容是不可信输入,单引号包裹会被实体解码后断言逃逸。
+ */
+function jsArg(value) {
+    return escapeAttr(JSON.stringify(String(value)));
+}
+
+// 宿主响应的请求代次:本地状态一变就 ++,迟到的旧响应直接丢弃,避免覆盖新状态
+let filterRequestSeq = 0;
+let jumpRequestSeq = 0;
+
+function invalidateInflightRequests() {
+    filterRequestSeq++;
+    jumpRequestSeq++;
+}
+
+/** 级别复选框复位到「全选」= 无级别过滤(与初始 HTML 状态一致) */
+function resetLevelCheckboxes() {
+    ['filterError', 'filterWarn', 'filterInfo', 'filterDebug', 'filterOther'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.checked = true; el.indeterminate = false; }
+    });
+    const all = document.getElementById('filterAll');
+    if (all) { all.checked = true; all.indeterminate = false; }
 }
 
 function search() {
@@ -1787,7 +1877,8 @@ function searchInCurrentPage(keyword, isRegex) {
 function showCurrentPageSearchStatus(keyword, count) {
     const panel = document.getElementById('filterStatusPanel');
     const statusText = document.getElementById('filterStatusText');
-    statusText.innerHTML = `当前页搜索: "${keyword}" (找到 ${count} 条)`;
+    // textContent:关键词可能来自日志内容,innerHTML 会让 <img onerror> 直接执行
+    statusText.textContent = `当前页搜索: "${keyword}" (找到 ${count} 条)`;
     panel.style.display = 'flex';
     
     // 修改清除按钮的行为
@@ -2223,10 +2314,15 @@ function showBookmarksModal() {
     } else {
         // 按行号排序（Map 的 entries 迭代顺序就是插入顺序，这里显式排一下）
         const bookmarkArray = Array.from(bookmarks.entries()).sort((a, b) => a[0] - b[0]);
+        // 先建一次行号索引 — 旧代码每条书签全量 find,复杂度 O(书签数 × 行数),
+        // 200 个书签 × 千万行会把 UI 卡死
+        const dataSource = fullDataCache.length > 0 ? fullDataCache : allLines;
+        const bookmarkLineIndex = new Map();
+        for (const l of dataSource) {
+            if (!bookmarkLineIndex.has(l.lineNumber)) { bookmarkLineIndex.set(l.lineNumber, l); }
+        }
         list.innerHTML = bookmarkArray.map(([lineNum, name]) => {
-            // 从完整数据缓存中查找，而不是从当前显示的数据中查找
-            const dataSource = fullDataCache.length > 0 ? fullDataCache : allLines;
-            const line = dataSource.find(l => l.lineNumber === lineNum);
+            const line = bookmarkLineIndex.get(lineNum);
             const content = line ? (line.content || line) : '（已不存在）';
             const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
 
@@ -2359,9 +2455,10 @@ function loadCustomRulesFromStorage() {
 // 保存自定义规则到 localStorage
 function saveCustomRulesToStorage() {
     try {
-        // 只保存非内置规则
+        // 只保存非内置规则;_regexCache 是运行期编译缓存,RegExp 序列化只会得到 {},
+        // 存进去下次加载会拿到假缓存,必须剔除
         const customRules = customHighlightRules.filter(r => !r.builtin);
-        localStorage.setItem('customHighlightRules', JSON.stringify(customRules));
+        localStorage.setItem('customHighlightRules', JSON.stringify(customRules, (key, value) => key === '_regexCache' ? undefined : value));
     } catch (e) {
         console.error('保存自定义规则失败:', e);
     }
@@ -2593,8 +2690,13 @@ function showCommentsModal() {
     } else {
         // 将Map转为数组并按行号排序
         const commentArray = Array.from(comments.entries()).sort((a, b) => a[0] - b[0]);
+        // 一次建索引,避免每条注释全量 find(O(注释数 × 行数))
+        const commentLineIndex = new Map();
+        for (const l of allLines) {
+            if (!commentLineIndex.has(l.lineNumber)) { commentLineIndex.set(l.lineNumber, l); }
+        }
         list.innerHTML = commentArray.map(([lineNum, comment]) => {
-            const line = allLines.find(l => l.lineNumber === lineNum);
+            const line = commentLineIndex.get(lineNum);
             const content = line ? (line.content || line) : '（已不存在）';
             const preview = content.substring(0, 80) + (content.length > 80 ? '...' : '');
 
@@ -3284,12 +3386,11 @@ function extractLogFields(line) {
         return { threadName: '', className: '', methodName: '', content: '' };
     }
     
-    // 如果 content 是字符串且包含 HTML 标签，需要先移除 HTML 标签
+    // 如果 content 是字符串且包含 HTML 标签,用正则剥掉 — 绝不走 innerHTML:
+    // 日志内容是不可信输入,喂给 innerHTML 会让 <img src=x onerror=...> 之类的
+    // 载荷在每次高级搜索/筛选遍历日志时执行(且每次遍历都执行一遍)
     if (typeof content === 'string' && content.includes('<')) {
-        // 创建临时 DOM 元素来提取纯文本
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = content;
-        content = tempDiv.textContent || tempDiv.innerText || content;
+        content = content.replace(/<[^>]*>/g, '');
     }
     
     // 提取线程名 [threadName] - 与后端保持一致的逻辑
@@ -3735,7 +3836,7 @@ function getVisibleLines() {
         const rect = lineEl.getBoundingClientRect();
         // 检查该行是否在可视区域内
         if (rect.bottom >= containerRect.top && rect.top <= containerRect.bottom) {
-            const lineNumber = parseInt(lineEl.dataset.lineNumber);
+            const lineNumber = parseInt(lineEl.dataset.line);
             if (lineNumber) {
                 const line = allLines.find(l => l.lineNumber === lineNumber);
                 if (line) {
@@ -3855,6 +3956,10 @@ function clearAllFiltersWithLine(restoreLine) {
         levels: null,
         timeRange: null,
     };
+    // 复选框跟随复位,避免侧栏仍勾着 ERROR 而列表已是全量数据
+    resetLevelCheckboxes();
+    // 在途的宿主筛选响应作废
+    invalidateInflightRequests();
 
     applyUnifiedFilters();
 
@@ -3940,13 +4045,13 @@ function confirmDeleteByTime() {
     const mode = document.getElementById('deleteTimeMode').value;
 
     if (!timeStr) {
-        alert('请输入时间！');
+        showToast('请输入时间！');
         return;
     }
 
     // 简单验证时间格式
     if (!/^\d{4}-\d{2}-\d{2}/.test(timeStr)) {
-        alert('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
+        showToast('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
         return;
     }
 
@@ -3985,12 +4090,12 @@ function confirmKeepByTimeRange() {
     const endTime = document.getElementById('keepEndTime').value.trim();
 
     if (!startTime || !endTime) {
-        alert('请输入开始时间和结束时间！');
+        showToast('请输入开始时间和结束时间！');
         return;
     }
 
     if (!/^\d{4}-\d{2}-\d{2}/.test(startTime) || !/^\d{4}-\d{2}-\d{2}/.test(endTime)) {
-        alert('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
+        showToast('时间格式不正确！请使用格式：2024-01-01 12:00:00 或 2024-01-01');
         return;
     }
 
@@ -4020,12 +4125,12 @@ function confirmKeepByLineRange() {
     const endLine = parseInt(document.getElementById('keepEndLine').value);
 
     if (!startLine || !endLine || startLine < 1 || endLine < 1) {
-        alert('请输入有效的行号！');
+        showToast('请输入有效的行号！');
         return;
     }
 
     if (startLine > endLine) {
-        alert('开始行号不能大于结束行号！');
+        showToast('开始行号不能大于结束行号！');
         return;
     }
 
@@ -4085,18 +4190,20 @@ function confirmJump() {
     if (mode === 'line') {
         const lineNumber = parseInt(document.getElementById('jumpLineInput').value);
         if (!lineNumber || lineNumber < 1) {
-            alert('请输入有效的行号（大于0的整数）！');
+            showToast('请输入有效的行号（大于0的整数）！');
             return;
         }
-        if (lineNumber > allLines.length) {
-            alert(`行号超出范围！当前总行数：${allLines.length}`);
+        // 按全文件行数校验,而不是当前视图行数 — 筛选/搜索/partial 窗口下
+        // allLines 只是子集,旧判断会把合法目标行号拒之门外
+        if (lineNumber > totalLinesInFile) {
+            showToast(`行号超出范围！文件总行数：${totalLinesInFile}`);
             return;
         }
         jumpToLine(lineNumber);
     } else {
         const timeInputValue = document.getElementById('jumpTimeInput').value.trim();
         if (!timeInputValue) {
-            alert('请选择或输入时间！');
+            showToast('请选择或输入时间！');
             return;
         }
 
@@ -4311,7 +4418,8 @@ async function jumpToLineInFullLog(lineNumber) {
     // 请求后端重新加载完整日志，并跳转到指定行
     vscode.postMessage({
         command: 'jumpToLineInFullLog',
-        lineNumber: lineNumber
+        lineNumber: lineNumber,
+        jumpSeq: ++jumpRequestSeq
     });
 }
 
@@ -4321,11 +4429,16 @@ function jumpToTime(timeStr) {
     // 直接请求后端查找
     vscode.postMessage({
         command: 'jumpToTime',
-        timeStr: timeStr
+        timeStr: timeStr,
+        jumpSeq: ++jumpRequestSeq
     });
 }
 
 function handleJumpToTimeResult(data) {
+    // 过期响应:期间用户又发起了新跳转/筛选或重新加载了文件
+    if (data.jumpSeq !== undefined && data.jumpSeq !== jumpRequestSeq) {
+        return;
+    }
     if (data.success) {
         console.log('找到目标时间的日志，行号:', data.targetLineNumber);
 
@@ -4342,7 +4455,8 @@ function handleJumpToTimeResult(data) {
             // 请求重新加载完整日志并跳转
             vscode.postMessage({
                 command: 'jumpToLineInFullLog',
-                lineNumber: data.targetLineNumber
+                lineNumber: data.targetLineNumber,
+                jumpSeq: ++jumpRequestSeq
             });
             return;
         }
@@ -4393,14 +4507,18 @@ function handleJumpToTimeResult(data) {
                 console.log('🔄 数据不连续，使用新数据');
                 allLines = newLines;
                 originalLines = [...newLines];
-                allDataLoaded = true;
             }
         } else {
             // 没有已加载数据，直接使用新数据
             allLines = newLines;
             originalLines = [...newLines];
-            allDataLoaded = true;
         }
+
+        // 只有窗口覆盖全文件才算完全加载(旧代码无条件置 true,导致后续筛选/
+        // 搜索在"声称完整"的 partial 数据上跑,静默漏掉大部分日志);
+        // 同步 fullDataCache,否则下一次 applyUnifiedFilters 会基于旧缓存过滤错数据
+        allDataLoaded = allLines.length >= totalLinesInFile;
+        fullDataCache = [...allLines];
 
         // 记录当前缓冲区在文件中的起始行，用于统一后台加载
         baseLineOffset = startLine;
@@ -4485,7 +4603,7 @@ function confirmDeleteByLine() {
     const mode = document.getElementById('deleteLineMode').value;
 
     if (!lineNumber || lineNumber < 1) {
-        alert('请输入有效的行号（大于0的整数）！');
+        showToast('请输入有效的行号（大于0的整数）！');
         return;
     }
 
@@ -4534,15 +4652,10 @@ function updatePagination() {
             totalPages = Math.ceil(allLines.length / pageSize);
         }
     } else {
-        // 非折叠模式，使用标准计算
-        // 如果数据未全部加载，总页数应该基于整个文件（否则用户只看到已加载部分的分页）
-        if (!allDataLoaded) {
-            totalPages = Math.ceil(totalLinesInFile / pageSize);
-            console.log(`📊 部分加载模式 - 总页数基于文件总行数: ${totalLinesInFile} 行 = ${totalPages} 页`);
-        } else {
-            // 数据从头开始加载且已全部加载，总页数基于已加载数据
-            totalPages = Math.ceil(allLines.length / pageSize);
-        }
+        // 非折叠模式:按已加载数据算总页数。
+        // 部分加载(跳转产生的上下文窗口)也只能按窗口算 — 按全文件算会显示
+        // 上万页,翻过去全是空白(loadMoreData 已废弃,不会再补数据)。
+        totalPages = Math.ceil(allLines.length / pageSize);
     }
 
     if (totalPages < 1) totalPages = 1;
@@ -4612,6 +4725,7 @@ function loadMoreData() {
 }
 
 // 请求加载全部数据(用于统一过滤)
+let reloadPollTimer = null;
 function requestAllData() {
     if (allDataLoaded) {
         // 数据已全部加载,直接应用过滤
@@ -4626,11 +4740,19 @@ function requestAllData() {
     }
 
     // 数据未完全加载(理论上不会发生 — 统一加载下始终全量)
-    // 触发完整重载,然后轮询直到 fileLoaded 事件设置 allDataLoaded=true,再应用过滤
+    // 触发完整重载,然后轮询直到 fileLoaded 事件设置 allDataLoaded=true,再应用过滤。
+    // 单例定时器:重复调用先清旧的,否则快速切换筛选会叠出 N 个轮询;
+    // 60 秒超时兜底,加载失败时不至于永久泄漏。
     requestFullReload();
-    const checkInterval = setInterval(() => {
+    if (reloadPollTimer) {
+        clearInterval(reloadPollTimer);
+    }
+    let attempts = 0;
+    reloadPollTimer = setInterval(() => {
+        attempts++;
         if (allDataLoaded || fullDataCache.length >= totalLinesInFile) {
-            clearInterval(checkInterval);
+            clearInterval(reloadPollTimer);
+            reloadPollTimer = null;
             applyUnifiedFilters();
             handleDataChange({
                 resetPage: true,
@@ -4638,6 +4760,9 @@ function requestAllData() {
                 triggerAsyncCalc: true
             });
             showToast(`找到 ${allLines.length} 条符合条件的日志`);
+        } else if (attempts >= 120) {
+            clearInterval(reloadPollTimer);
+            reloadPollTimer = null;
         }
     }, 500);
 }
@@ -4750,20 +4875,41 @@ function goToPrevPage() {
     }
 }
 
+/** 折叠模式下 pageRanges 是否还没算到数据末尾(此时「下一页/末页」按钮被特意保持可用) */
+function collapseHasMorePages() {
+    if (!isCollapseMode) { return false; }
+    if (isCalculatingPages) { return true; }
+    if (pageRanges.size === 0) { return allLines.length > 0; }
+    const last = pageRanges.get(Math.max(...pageRanges.keys()));
+    return !last || last.end < allLines.length;
+}
+
 function goToNextPage() {
-    if (currentPage < totalPages) {
-        currentPage++;
-        updatePagination();
-        renderLines();
-        drawTimeline(); // 重绘时间线以更新高亮位置
-        // 翻页后自动滚动到顶部
-        requestAnimationFrame(() => {
-            const logContainer = document.getElementById('logContainer');
-            if (logContainer) {
-                logContainer.scrollTop = 0;
-            }
-        });
+    // 折叠范围未算完时 totalPages 可能塌缩到"已算到的页",但按钮仍被强制启用 —
+    // 这里放行越过 totalPages 的前进,并像 goToPage 一样顺序补算范围,
+    // 修复「下一页亮着但点了没反应」的死锁。
+    const beyondKnown = currentPage >= totalPages;
+    if (beyondKnown && !collapseHasMorePages()) {
+        return;
     }
+    currentPage++;
+    if (beyondKnown && isCollapseMode && !pageRanges.has(currentPage)) {
+        pageRanges.clear();
+        for (let p = 1; p <= currentPage; p++) {
+            currentPage = p;
+            calculatePageRange(p);
+        }
+    }
+    updatePagination();
+    renderLines();
+    drawTimeline(); // 重绘时间线以更新高亮位置
+    // 翻页后自动滚动到顶部
+    requestAnimationFrame(() => {
+        const logContainer = document.getElementById('logContainer');
+        if (logContainer) {
+            logContainer.scrollTop = 0;
+        }
+    });
 }
 
 function goToLastPage() {
@@ -4844,10 +4990,13 @@ function initScrollToTopButton() {
 
 function changePageSize(size) {
     pageSize = parseInt(size);
-    currentPage = 1;
-    pageRanges.clear(); // 清空页面范围记录，重新计算
-    updatePagination();
-    renderLines();
+    // 走 handleDataChange 统一状态机:清 pageRanges 后必须触发折叠异步重算,
+    // 否则 totalPages 塌缩到 1-2 页而「下一页」按钮仍被强制启用,点下去无响应
+    handleDataChange({
+        resetPage: true,
+        clearPageRanges: true,
+        triggerAsyncCalc: true
+    });
     // 改变页面大小后自动滚动到顶部
     requestAnimationFrame(() => {
         const logContainer = document.getElementById('logContainer');
@@ -5226,7 +5375,8 @@ document.getElementById('timelineCanvas').addEventListener('click', function (e)
     // 请求后端查找该时间点的日志行
     vscode.postMessage({
         command: 'jumpToTime',
-        timeStr: timeStr
+        timeStr: timeStr,
+        jumpSeq: ++jumpRequestSeq
     });
 });
 
@@ -5284,7 +5434,7 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
 
         instantSearchTimer = setTimeout(() => {
             search();
-        }, userSettings.searchDebounceMs || 400); // 防抖间隔可通过设置调整
+        }, Number.isFinite(userSettings.searchDebounceMs) ? userSettings.searchDebounceMs : 400); // 设置为 0 时也要生效(旧写法 || 400 会把 0 当假值)
     });
 
     // 聚焦搜索框时弹出搜索历史
@@ -5304,6 +5454,12 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
     input.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             hideSearchHistoryDropdown();
+            // 撤掉待触发的防抖定时器,否则回车搜索后定时器又触发一次,
+            // 重复弹「找到 N 条」并把页码拽回第 1 页
+            if (instantSearchTimer) {
+                clearTimeout(instantSearchTimer);
+                instantSearchTimer = null;
+            }
             search();
         }
     });
@@ -6183,8 +6339,10 @@ function updateColorPreview() {
 
 // 键盘快捷键支持
 document.addEventListener('keydown', function (e) {
-    // 不在输入框中时才响应
-    if (e.target.tagName === 'INPUT') return;
+    // 不在可编辑控件中时才响应 — 否则会劫持注释 textarea 的光标移动、
+    // select 的选项切换等原生键盘行为
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
 
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
