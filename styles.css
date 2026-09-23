@@ -1,6 +1,7 @@
 /* ============================================================
    Big Log Viewer · 项目主页
    设计方向:terminal / man-page 文档站,工程师气质,克制
+   所有视觉均用代码绘制(mock),不用真实截图
    ============================================================ */
 
 :root {
@@ -14,8 +15,10 @@
   --accent: #1e3a8a;
   --accent-hover: #1e40af;
   --warm: #b45309;
+  --danger: #b91c1c;
   --code-bg: #1a1814;
   --code-fg: #e7e4d9;
+  --panel: #f3efe4;
 
   --font-display: ui-monospace, 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono',
                     Menlo, Monaco, Consolas, 'Courier New', monospace;
@@ -69,12 +72,7 @@ code {
   z-index: 50;
 }
 
-.topbar-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 56px;
-}
+.topbar-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; }
 
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink-1); font-weight: 600; }
 .brand:hover { color: var(--ink-1); text-decoration: none; }
@@ -103,7 +101,7 @@ code {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: 1fr 1.05fr;
+  grid-template-columns: 1fr 1.1fr;
   gap: 80px;
   align-items: center;
 }
@@ -154,35 +152,119 @@ code {
 .install-actions a { color: var(--ink-2); letter-spacing: .01em; }
 .install-actions a:hover { color: var(--accent); }
 
+/* ----- Hero 主图 mock(替代原 home.png) ----- */
 .hero-shot { margin: 0; }
+.hero-shot figcaption {
+  margin-top: 14px; font-size: .85rem; color: var(--ink-3); text-align: center;
+}
 
-.shot-frame {
-  border: 1px solid var(--border-strong); border-radius: 4px;
-  background: var(--surface); overflow: hidden;
+.hero-mock {
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #fafafa;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  overflow: hidden;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.02),
     0 14px 40px -16px rgba(26, 24, 20, 0.18);
 }
 
-.shot-titlebar {
+.hero-mock-bar {
   display: flex; align-items: center; gap: 7px;
-  padding: 10px 14px; background: #f3efe4;
+  padding: 10px 14px; background: var(--panel);
   border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono); font-size: .8rem; color: var(--ink-3);
+  font-size: .78rem; color: var(--ink-2);
 }
 
-.shot-dot { width: 10px; height: 10px; border-radius: 50%; background: #d4cebd; display: inline-block; }
-.shot-dot:nth-child(1) { background: #c9b89e; }
-.shot-dot:nth-child(2) { background: #b8a78d; }
-.shot-dot:nth-child(3) { background: #a7977d; }
+.hero-mock-dot { width: 10px; height: 10px; border-radius: 50%; background: #d4cebd; display: inline-block; }
+.hero-mock-dot:nth-child(1) { background: #c9b89e; }
+.hero-mock-dot:nth-child(2) { background: #b8a78d; }
+.hero-mock-dot:nth-child(3) { background: #a7977d; }
 
-.shot-title { margin-left: 12px; color: var(--ink-1); font-weight: 500; }
-.shot-meta { margin-left: auto; color: var(--ink-3); }
+.hero-mock-title { margin-left: 12px; color: var(--ink-1); font-weight: 500; }
+.hero-mock-meta { margin-left: auto; color: var(--ink-3); }
 
-.shot-frame img { width: 100%; height: auto; display: block; }
+.hero-mock-search {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+}
+.hero-mock-icon { color: var(--ink-3); font-size: 1rem; }
+.hero-mock-query {
+  background: rgba(30, 58, 138, 0.06);
+  padding: 4px 10px;
+  border-radius: 2px;
+  color: var(--ink-1);
+  font-weight: 500;
+}
+.hero-mock-flags { margin-left: auto; color: var(--ink-3); font-size: .72rem; font-family: var(--font-body); }
 
-.hero-shot figcaption {
-  margin-top: 14px; font-size: .85rem; color: var(--ink-3); text-align: center;
+.hero-mock-timeline {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 56px;
+  padding: 8px 14px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.hero-mock-timeline span {
+  flex: 1;
+  background: var(--accent);
+  opacity: .35;
+  height: var(--h, 50%);
+  min-height: 4px;
+}
+.hero-mock-cursor {
+  position: absolute;
+  left: 45%;
+  top: 4px; bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  flex: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  opacity: 1;
+}
+.hero-mock-cursor::before {
+  content: ''; position: absolute; top: -3px; left: -3px;
+  width: 8px; height: 8px; background: var(--accent); border-radius: 50%;
+}
+
+.hero-mock-lines { padding: 10px 14px 14px; background: white; }
+.hero-mock-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.hero-mock-error-line {
+  background: rgba(30, 58, 138, 0.06);
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  padding-right: 8px;
+}
+.hero-mock-time { color: var(--ink-3); margin-right: 10px; }
+.hero-mock-level {
+  display: inline-block; width: 50px; margin-right: 10px; font-weight: 600;
+}
+.hero-mock-info  { color: #1e40af; }
+.hero-mock-warn  { color: var(--warm); }
+.hero-mock-error { color: var(--danger); }
+.hero-mock-line em {
+  font-style: normal;
+  background: rgba(180, 83, 9, .14);
+  color: var(--ink-1);
+  padding: 1px 4px;
+  border-radius: 1px;
+  border: 1px solid rgba(180, 83, 9, .22);
 }
 
 /* ============================================================
@@ -192,19 +274,16 @@ code {
   display: flex; align-items: baseline; gap: 18px;
   padding-bottom: 28px; margin-bottom: 56px; border-bottom: 1px solid var(--border);
 }
-
 .section-num { font-family: var(--font-mono); font-size: .8rem; color: var(--ink-3); letter-spacing: .04em; }
-
 .section-head h2 {
   font-family: var(--font-mono); font-size: 1.85rem; font-weight: 500;
   letter-spacing: -.015em; color: var(--ink-1); line-height: 1.2;
 }
-
 .lede-quiet { max-width: 760px; margin-bottom: 40px; }
 .quiet { color: var(--ink-3); font-size: .94rem; }
 
 /* ============================================================
-   Why
+   Why — 对比 mock
    ============================================================ */
 .why { padding: 96px 0; border-bottom: 1px solid var(--border); }
 
@@ -215,15 +294,74 @@ code {
 .why-text p { margin-bottom: 1em; }
 .why-text p:last-child { margin-bottom: 0; }
 
-.why-shot {
-  margin: 0; border: 1px solid var(--border-strong);
-  background: var(--surface); border-radius: 4px; overflow: hidden;
+.why-mock {
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #fafafa;
+  font-family: var(--font-mono);
+  font-size: .85rem;
+  overflow: hidden;
 }
-.why-shot img { width: 100%; display: block; }
-.why-shot figcaption {
-  padding: 12px 16px; background: var(--surface);
+
+.why-mock-bar {
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-2);
+  font-size: .78rem;
+}
+.why-mock-dot { width: 9px; height: 9px; border-radius: 50%; background: #c9b89e; display: inline-block; }
+.why-mock-dot:nth-child(1) { background: #c9b89e; }
+.why-mock-dot:nth-child(2) { background: #b8a78d; }
+.why-mock-dot:nth-child(3) { background: #a7977d; }
+.why-mock-title { margin-left: 10px; color: var(--ink-1); font-weight: 500; }
+
+.why-mock-issue { padding: 16px 18px; border-bottom: 1px dashed var(--border); }
+.why-mock-solve { padding: 16px 18px; }
+
+.why-mock-issue-line,
+.why-mock-solve-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: .92rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.why-mock-issue-line:last-child,
+.why-mock-solve-line:last-child { margin-bottom: 0; }
+
+.why-mock-x {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  background: rgba(185, 28, 28, .12);
+  color: var(--danger);
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  font-size: .82rem;
+}
+.why-mock-check {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  background: rgba(30, 58, 138, .12);
+  color: var(--accent);
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  font-size: .82rem;
+}
+
+.why-mock-arrow {
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 1.2rem;
+  padding: 6px 0;
+  background: var(--panel);
   border-top: 1px solid var(--border);
-  font-size: .82rem; color: var(--ink-3); font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border);
 }
 
 /* ============================================================
@@ -265,25 +403,102 @@ code {
   margin: 0; border: 1px solid var(--border-strong);
   border-radius: 4px; overflow: hidden; background: var(--surface);
 }
-.feat-shot img { width: 100%; display: block; }
 
-/* ----- 02 SEARCH mock(替代复用错图) ----- */
-.fm-search {
+/* ============================================================
+   01 · I/O — 加载进度 + 虚拟滚动
+   ============================================================ */
+.fm-io { font-family: var(--font-mono); background: #fafafa; }
+
+.fm-io-progress {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
   font-family: var(--font-mono);
   font-size: .78rem;
-  background: #fafafa;
-  display: flex;
-  flex-direction: column;
 }
+
+.fm-io-progress-label {
+  font-weight: 500;
+  color: var(--ink-1);
+}
+
+.fm-io-bar {
+  flex: 1;
+  height: 8px;
+  background: white;
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.fm-io-bar-fill {
+  width: 87%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #3b5fc7);
+  background-size: 200% 100%;
+  background-position: 0% 0%;
+}
+
+.fm-io-progress-pct {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 1rem;
+  min-width: 56px;
+  text-align: right;
+}
+.fm-io-progress-pct small { font-size: .65em; opacity: .65; margin-left: 1px; }
+
+.fm-io-progress-meta {
+  color: var(--ink-3);
+  font-family: var(--font-body);
+  font-size: .78rem;
+}
+
+.fm-io-lines { padding: 14px 16px; }
+
+.fm-io-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+  margin-bottom: 6px;
+  font-size: .82rem;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+
+.fm-io-line-bookmarked {
+  background: rgba(180, 83, 9, .08);
+  border-left: 3px solid var(--warm);
+  padding: 2px 10px 2px 12px;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding-right: 12px;
+}
+
+.fm-io-line-num { color: var(--ink-3); min-width: 78px; }
+.fm-io-time { color: var(--ink-3); min-width: 70px; }
+.fm-io-level { display: inline-block; width: 50px; font-weight: 600; }
+.fm-io-info { color: #1e40af; }
+.fm-io-warn { color: var(--warm); }
+.fm-io-error { color: var(--danger); }
+.fm-io-debug { color: var(--ink-3); }
+.fm-io-msg { color: var(--ink-2); }
+
+/* ============================================================
+   02 · SEARCH — 多关键词命中
+   ============================================================ */
+.fm-search { font-family: var(--font-mono); background: #fafafa; display: flex; flex-direction: column; }
 
 .fm-search-bar {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px;
-  background: #f3efe4;
+  padding: 12px 14px;
+  background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
 
-.fm-search-icon { color: var(--ink-3); font-size: 1rem; }
+.fm-search-icon { color: var(--ink-3); font-size: 1.05rem; }
 
 .fm-search-text {
   flex: 1;
@@ -292,23 +507,16 @@ code {
   padding: 5px 12px;
   border-radius: 2px;
   color: var(--ink-1);
-  font-size: .85rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: .92rem;
 }
 
 .fm-search-flags {
   color: var(--ink-3);
-  font-size: .72rem;
+  font-size: .78rem;
   font-family: var(--font-body);
-  white-space: nowrap;
 }
 
-.fm-search-results {
-  padding: 14px 14px 12px;
-  flex: 1;
-}
+.fm-search-results { padding: 14px 16px; flex: 1; }
 
 .fm-r-line {
   white-space: nowrap;
@@ -317,6 +525,7 @@ code {
   margin-bottom: 6px;
   color: var(--ink-2);
   line-height: 1.7;
+  font-size: .82rem;
 }
 
 .fm-r-line em {
@@ -330,26 +539,344 @@ code {
 
 .fm-r-time { color: var(--ink-3); margin-right: 10px; }
 .fm-r-level {
-  display: inline-block;
-  width: 46px;
-  margin-right: 10px;
-  font-weight: 600;
-  text-align: left;
+  display: inline-block; width: 50px; margin-right: 10px; font-weight: 600;
 }
-.fm-r-error { color: #b91c1c; }
-.fm-r-warn  { color: #b45309; }
+.fm-r-error { color: var(--danger); }
+.fm-r-warn  { color: var(--warm); }
 .fm-r-info  { color: #1e40af; }
 .fm-r-debug { color: var(--ink-3); }
 
 .fm-search-summary {
-  padding: 8px 14px;
-  background: #f3efe4;
+  padding: 10px 14px;
+  background: var(--panel);
   border-top: 1px solid var(--border);
   color: var(--ink-3);
-  font-size: .72rem;
+  font-size: .78rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-family: var(--font-body);
+}
+
+/* ============================================================
+   03 · NAVIGATE — 时间线
+   ============================================================ */
+.fm-timeline { font-family: var(--font-mono); background: #fafafa; }
+
+.fm-timeline-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: .78rem;
+  color: var(--ink-2);
+}
+.fm-timeline-head-label { font-weight: 500; color: var(--ink-1); }
+.fm-timeline-head-meta { color: var(--ink-3); font-family: var(--font-body); }
+
+.fm-timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 18px 8px;
+  color: var(--ink-3);
+  font-size: .72rem;
+  font-family: var(--font-body);
+}
+
+.fm-timeline-track {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 110px;
+  padding: 0 18px 8px;
+  position: relative;
+}
+
+.fm-timeline-track span {
+  flex: 1;
+  background: var(--accent);
+  opacity: .35;
+  height: var(--h, 50%);
+  min-height: 4px;
+  border-radius: 1px 1px 0 0;
+  transition: opacity .2s;
+}
+.fm-timeline-track span:hover { opacity: .65; }
+
+.fm-timeline-cursor {
+  position: absolute;
+  left: 45%;
+  top: -8px;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  flex: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+.fm-timeline-cursor::before {
+  content: '';
+  position: absolute;
+  top: -3px; left: -4px;
+  width: 10px; height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(30, 58, 138, .15);
+}
+
+.fm-timeline-current {
+  margin: 8px 16px 16px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border-radius: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  font-size: .82rem;
+}
+
+.fm-timeline-current-label {
+  font-family: var(--font-body);
+  color: var(--ink-3);
+  font-size: .78rem;
+}
+
+.fm-timeline-current-time {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: -.01em;
+}
+
+.fm-timeline-current-line {
+  margin-left: auto;
+  font-family: var(--font-body);
+  font-size: .82rem;
+  color: var(--ink-2);
+}
+
+/* ============================================================
+   04 · TEMPLATE — 排查模板动作序列
+   ============================================================ */
+.fm-template { background: #fafafa; }
+
+.fm-template-header {
+  padding: 16px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fm-template-name {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--ink-1);
+}
+
+.fm-template-meta {
+  font-family: var(--font-body);
+  font-size: .78rem;
+  color: var(--ink-3);
+}
+.fm-template-meta code {
+  background: rgba(30, 58, 138, 0.08);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: .82em;
+}
+
+.fm-template-steps {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fm-step {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 18px;
+  row-gap: 6px;
+  align-items: center;
+}
+
+.fm-step-num {
+  font-family: var(--font-mono);
+  font-size: .85rem;
+  color: var(--ink-3);
+  font-weight: 500;
+  grid-row: 1 / span 2;
+}
+
+.fm-step-type {
+  font-weight: 500;
+  color: var(--accent);
+  font-size: .95rem;
+  font-family: var(--font-mono);
+}
+
+.fm-step-body {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: .85rem;
+  color: var(--ink-2);
+  grid-column: 2;
+}
+
+.fm-step-label {
+  color: var(--ink-3);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  min-width: 50px;
+}
+
+.fm-step-body code.fm-step-value {
+  background: rgba(30, 58, 138, 0.06);
+  padding: 2px 8px;
+  border-radius: 2px;
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: .88rem;
+}
+
+.fm-step-policy {
+  grid-column: 2;
+  font-family: var(--font-body);
+  font-size: .8rem;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.fm-step-policy em {
+  font-style: normal;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.fm-step-arrow {
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 1rem;
+  line-height: .5;
+  padding: 4px 0;
+}
+
+/* ============================================================
+   05 · ANNOTATE — 书签行 + 注释列表
+   ============================================================ */
+.fm-annotate {
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.fm-annotate-lines {
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+}
+
+.fm-a-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.fm-a-line-bookmarked {
+  background: rgba(180, 83, 9, .08);
+  border-left: 3px solid var(--warm);
+  padding-left: 12px;
+  margin-left: -10px;
+  margin-right: -10px;
+  padding-right: 10px;
+}
+
+.fm-a-num { color: var(--ink-3); min-width: 78px; }
+.fm-a-time { color: var(--ink-3); min-width: 70px; }
+.fm-a-level { display: inline-block; width: 50px; font-weight: 600; }
+.fm-a-info  { color: #1e40af; }
+.fm-a-warn  { color: var(--warm); }
+.fm-a-error { color: var(--danger); }
+.fm-a-debug { color: var(--ink-3); }
+.fm-a-msg {
+  flex: 1;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fm-a-tag {
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  font-size: .78rem;
+  color: var(--warm);
+  white-space: nowrap;
+  padding: 2px 10px;
+  background: rgba(180, 83, 9, .08);
+  border-radius: 2px;
+}
+
+.fm-annotate-comments {
+  padding: 14px 16px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+
+.fm-c-title {
+  font-family: var(--font-body);
+  font-size: .82rem;
+  color: var(--ink-3);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.fm-c-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: .85rem;
+}
+.fm-c-item:last-child { margin-bottom: 0; }
+
+.fm-c-line {
+  flex-shrink: 0;
+  color: var(--accent);
+  background: white;
+  border: 1px solid var(--border-strong);
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: .76rem;
+  min-width: 80px;
+  text-align: center;
+}
+
+.fm-c-text {
+  color: var(--ink-1);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================================================
@@ -366,7 +893,7 @@ code {
 .format-table th, .format-table td { padding: 14px 24px; text-align: left; border-bottom: 1px solid var(--border); }
 
 .format-table thead th {
-  background: #f3efe4; font-family: var(--font-mono); font-size: .78rem; font-weight: 500;
+  background: var(--panel); font-family: var(--font-mono); font-size: .78rem; font-weight: 500;
   letter-spacing: .04em; color: var(--ink-2); text-transform: uppercase;
 }
 
@@ -385,7 +912,7 @@ code {
 .note code { background: rgba(30, 58, 138, 0.06); }
 
 /* ============================================================
-   Themes
+   Themes — 真实主题渲染
    ============================================================ */
 .themes { padding: 96px 0; border-bottom: 1px solid var(--border); }
 
@@ -440,7 +967,6 @@ code {
   margin-right: 8px;
   font-weight: 600;
 }
-.mock-tag { opacity: .65; margin-right: 6px; }
 
 .theme figcaption {
   padding: 18px 22px;
@@ -461,8 +987,8 @@ code {
 .mock-default .mock-dot:nth-child(2) { background: #b8a78d; }
 .mock-default .mock-dot:nth-child(3) { background: #a7977d; }
 .mock-default .mock-level-info { color: #1e40af; }
-.mock-default .mock-level-warn { color: #b45309; }
-.mock-default .mock-level-error { color: #b91c1c; }
+.mock-default .mock-level-warn { color: var(--warm); }
+.mock-default .mock-level-error { color: var(--danger); }
 .mock-default .mock-level-debug { color: #6e7681; }
 
 /* —— NEON.CYBER —— */
@@ -651,6 +1177,7 @@ code {
   .theme-grid { grid-template-columns: 1fr; }
   .display { font-size: 2rem; }
   .section-head h2 { font-size: 1.5rem; }
+  .fm-template-meta { font-size: .72rem; }
 }
 
 @media (max-width: 640px) {
@@ -659,4 +1186,8 @@ code {
   .topnav a:not(.ext) { display: none; }
   .features, .why, .formats, .themes, .commands, .install { padding: 64px 0; }
   .display { font-size: 1.65rem; }
+  .fm-step { grid-template-columns: 1fr; }
+  .fm-step-num { grid-row: auto; }
+  .fm-step-body { grid-column: 1; }
+  .fm-step-policy { grid-column: 1; }
 }

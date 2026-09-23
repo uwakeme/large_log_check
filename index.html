@@ -63,15 +63,38 @@
         </div>
 
         <figure class="hero-shot">
-          <div class="shot-frame">
-            <div class="shot-titlebar">
-              <span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span>
-              <span class="shot-title">server.log</span>
-              <span class="shot-meta">1.2 GB · 9,432,108 行</span>
+          <div class="hero-mock">
+            <div class="hero-mock-bar">
+              <span class="hero-mock-dot"></span><span class="hero-mock-dot"></span><span class="hero-mock-dot"></span>
+              <span class="hero-mock-title">server.log</span>
+              <span class="hero-mock-meta">1.20 GB · 9,432,108 行</span>
             </div>
-            <img src="images/examples/home.png" alt="Big Log Viewer 主界面截图" />
+            <div class="hero-mock-search">
+              <span class="hero-mock-icon">⌕</span>
+              <span class="hero-mock-query">error timeout</span>
+              <span class="hero-mock-flags">正则 · 当前页</span>
+            </div>
+            <div class="hero-mock-timeline">
+              <span style="--h:14%"></span><span style="--h:22%"></span><span style="--h:31%"></span>
+              <span style="--h:28%"></span><span style="--h:35%"></span><span style="--h:45%"></span>
+              <span style="--h:52%"></span><span style="--h:60%"></span><span style="--h:58%"></span>
+              <span style="--h:65%"></span><span style="--h:72%"></span><span style="--h:80%"></span>
+              <span style="--h:88%"></span><span style="--h:95%"></span><span style="--h:90%"></span>
+              <span style="--h:50%"></span><span style="--h:55%"></span><span style="--h:60%"></span>
+              <span style="--h:65%"></span><span style="--h:70%"></span><span style="--h:78%"></span>
+              <span style="--h:85%"></span><span style="--h:92%"></span><span style="--h:88%"></span>
+              <span style="--h:80%"></span><span style="--h:70%"></span><span style="--h:60%"></span>
+              <span style="--h:55%"></span><span style="--h:48%"></span><span style="--h:45%"></span>
+              <span class="hero-mock-cursor"></span>
+            </div>
+            <div class="hero-mock-lines">
+              <div class="hero-mock-line"><span class="hero-mock-time">12:34:56</span><span class="hero-mock-level hero-mock-info">INFO</span>Cache hit ratio: 0.94</div>
+              <div class="hero-mock-line hero-mock-error-line"><span class="hero-mock-time">12:34:57</span><span class="hero-mock-level hero-mock-error">ERROR</span>Database <em>connection timeout</em></div>
+              <div class="hero-mock-line"><span class="hero-mock-time">12:34:58</span><span class="hero-mock-level hero-mock-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="hero-mock-line"><span class="hero-mock-time">12:34:59</span><span class="hero-mock-level hero-mock-warn">WARN</span>Slow query: 1.2s</div>
+            </div>
           </div>
-          <figcaption>主界面 · 时间线、级别过滤、搜索栏在同一屏</figcaption>
+          <figcaption>主界面 · 时间线 + 搜索栏 + 书签行,真实样貌</figcaption>
         </figure>
       </div>
     </div>
@@ -98,10 +121,49 @@
             标注数据存在用户级存储,排查模板分享走剪贴板或 JSON,全程不依赖工作区。
           </p>
         </div>
-        <figure class="why-shot">
-          <img src="images/examples/bookmark.png" alt="书签与导出" />
-          <figcaption>书签管理与导出 · 双击行加书签,右键命名,列表集中管理</figcaption>
-        </figure>
+        <div class="why-mock">
+          <div class="why-mock-bar">
+            <span class="why-mock-dot"></span><span class="why-mock-dot"></span><span class="why-mock-dot"></span>
+            <span class="why-mock-title">vscode 默认打开大文件</span>
+          </div>
+          <div class="why-mock-issue">
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>1 GB 文件直接卡死或拒绝打开</span>
+            </div>
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>全量读入内存,占用几个 GB</span>
+            </div>
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>搜索全文件要几分钟</span>
+            </div>
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>无法分页,无法快速跳转</span>
+            </div>
+          </div>
+          <div class="why-mock-arrow">↓</div>
+          <div class="why-mock-solve">
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>流式读取,内存只保留当前可见范围</span>
+            </div>
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>GB 级文件秒开,虚拟滚动边滚边加载</span>
+            </div>
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>多关键词搜索 / 正则 / 高级查询</span>
+            </div>
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>时间线、书签、排查模板一键到位</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -113,7 +175,7 @@
         <h2>核心能力</h2>
       </header>
 
-      <!-- 01 · I/O -->
+      <!-- 01 · I/O — 加载进度 + 虚拟滚动 -->
       <article class="feat">
         <div class="feat-text">
           <div class="feat-tag">01 · I/O</div>
@@ -129,11 +191,24 @@
           </ul>
         </div>
         <figure class="feat-shot">
-          <img src="images/examples/home.png" alt="虚拟滚动与加载进度" />
+          <div class="fm-io" role="img" aria-label="加载进度 87%,书签行高亮,虚拟滚动示意">
+            <div class="fm-io-progress">
+              <span class="fm-io-progress-label">加载中</span>
+              <div class="fm-io-bar"><div class="fm-io-bar-fill"></div></div>
+              <span class="fm-io-progress-pct">87<small>%</small></span>
+              <span class="fm-io-progress-meta">8,234,108 / 9,432,108 行</span>
+            </div>
+            <div class="fm-io-lines">
+              <div class="fm-io-line"><span class="fm-io-line-num">8,234,106</span><span class="fm-io-time">12:34:55</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Cache hit ratio: 0.94</span></div>
+              <div class="fm-io-line fm-io-line-bookmarked"><span class="fm-io-line-num">8,234,107</span><span class="fm-io-time">12:34:56</span><span class="fm-io-level fm-io-error">ERROR</span><span class="fm-io-msg">Database connection refused</span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">8,234,108</span><span class="fm-io-time">12:34:57</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Retry attempt 1 of 3</span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">8,234,109</span><span class="fm-io-time">12:34:58</span><span class="fm-io-level fm-io-warn">WARN</span><span class="fm-io-msg">Slow query: 1.2s on /users/123</span></div>
+            </div>
+          </div>
         </figure>
       </article>
 
-      <!-- 02 · SEARCH — mock 替代错图 -->
+      <!-- 02 · SEARCH — 多关键词 AND 命中 -->
       <article class="feat feat-reverse">
         <div class="feat-text">
           <div class="feat-tag">02 · SEARCH</div>
@@ -164,12 +239,15 @@
               <div class="fm-r-line"><span class="fm-r-time">12:00:05</span><span class="fm-r-level fm-r-error">ERROR</span>Retry: <em>timeout</em> after 30s</div>
               <div class="fm-r-line"><span class="fm-r-time">12:00:08</span><span class="fm-r-level fm-r-error">ERROR</span>Upstream <em>timeout</em>, checkout <em>error</em></div>
             </div>
-            <div class="fm-search-summary">3 条命中 · 第 1 / 1 页 · 多关键词 AND</div>
+            <div class="fm-search-summary">
+              <span>3 条命中</span>
+              <span>多关键词 AND · 第 1 / 1 页</span>
+            </div>
           </div>
         </figure>
       </article>
 
-      <!-- 03 · NAVIGATE -->
+      <!-- 03 · NAVIGATE — 时间线 -->
       <article class="feat">
         <div class="feat-text">
           <div class="feat-tag">03 · NAVIGATE</div>
@@ -184,11 +262,37 @@
           </ul>
         </div>
         <figure class="feat-shot">
-          <img src="images/examples/home.png" alt="时间线导航" />
+          <div class="fm-timeline" role="img" aria-label="时间线分布图 + 当前浏览位置 15:42:31">
+            <div class="fm-timeline-head">
+              <span class="fm-timeline-head-label">时间线 · 30 个采样点</span>
+              <span class="fm-timeline-head-meta">总跨度 4h00m · 步进 8m</span>
+            </div>
+            <div class="fm-timeline-labels">
+              <span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span>
+            </div>
+            <div class="fm-timeline-track">
+              <span style="--h:14%"></span><span style="--h:22%"></span><span style="--h:31%"></span>
+              <span style="--h:28%"></span><span style="--h:35%"></span><span style="--h:45%"></span>
+              <span style="--h:52%"></span><span style="--h:60%"></span><span style="--h:58%"></span>
+              <span style="--h:65%"></span><span style="--h:72%"></span><span style="--h:80%"></span>
+              <span style="--h:88%"></span><span style="--h:95%"></span><span style="--h:90%"></span>
+              <span style="--h:50%"></span><span style="--h:55%"></span><span style="--h:60%"></span>
+              <span style="--h:65%"></span><span style="--h:70%"></span><span style="--h:78%"></span>
+              <span style="--h:85%"></span><span style="--h:92%"></span><span style="--h:88%"></span>
+              <span style="--h:80%"></span><span style="--h:70%"></span><span style="--h:60%"></span>
+              <span style="--h:55%"></span><span style="--h:48%"></span><span style="--h:45%"></span>
+              <span class="fm-timeline-cursor"></span>
+            </div>
+            <div class="fm-timeline-current">
+              <span class="fm-timeline-current-label">当前位置</span>
+              <span class="fm-timeline-current-time">15:42:31</span>
+              <span class="fm-timeline-current-line">第 5,234,108 行 · ERROR</span>
+            </div>
+          </div>
         </figure>
       </article>
 
-      <!-- 04 · TEMPLATE -->
+      <!-- 04 · TEMPLATE — 排查模板动作序列 -->
       <article class="feat feat-reverse">
         <div class="feat-text">
           <div class="feat-tag">04 · TEMPLATE</div>
@@ -205,11 +309,42 @@
           </ul>
         </div>
         <figure class="feat-shot">
-          <img src="images/examples/index_template.png" alt="排查模板编辑器" />
+          <div class="fm-template" role="img" aria-label="排查模板:支付回调失败排查,4 步动作序列">
+            <div class="fm-template-header">
+              <span class="fm-template-name">支付回调失败排查</span>
+              <span class="fm-template-meta">4 步 · 参数 <code>orderNo</code></span>
+            </div>
+            <div class="fm-template-steps">
+              <div class="fm-step">
+                <div class="fm-step-num">01</div>
+                <div class="fm-step-type">查询日志</div>
+                <div class="fm-step-body"> <span class="fm-step-label">关键词</span> <code class="fm-step-value">"payment failed ${orderNo}"</code> </div>
+                <div class="fm-step-policy">命中多条 → <em>让我选择</em></div>
+              </div>
+              <div class="fm-step-arrow">↓</div>
+              <div class="fm-step">
+                <div class="fm-step-num">02</div>
+                <div class="fm-step-type">筛 选</div>
+                <div class="fm-step-body"> <span class="fm-step-label">线程名</span> <code class="fm-step-value">lastHit</code> </div>
+              </div>
+              <div class="fm-step-arrow">↓</div>
+              <div class="fm-step">
+                <div class="fm-step-num">03</div>
+                <div class="fm-step-type">打书签</div>
+                <div class="fm-step-body"> <span class="fm-step-label">命 名</span> <code class="fm-step-value">"${orderNo} 失败点"</code> </div>
+              </div>
+              <div class="fm-step-arrow">↓</div>
+              <div class="fm-step">
+                <div class="fm-step-num">04</div>
+                <div class="fm-step-type">加注释</div>
+                <div class="fm-step-body"> <span class="fm-step-label">内 容</span> <code class="fm-step-value">"${orderNo} 失败于 step3"</code> </div>
+              </div>
+            </div>
+          </div>
         </figure>
       </article>
 
-      <!-- 05 · ANNOTATE -->
+      <!-- 05 · ANNOTATE — 书签行 + 注释列表 -->
       <article class="feat">
         <div class="feat-text">
           <div class="feat-tag">05 · ANNOTATE</div>
@@ -224,7 +359,47 @@
           </ul>
         </div>
         <figure class="feat-shot">
-          <img src="images/examples/remarks.png" alt="注释管理" />
+          <div class="fm-annotate" role="img" aria-label="书签行 + 注释列表示意">
+            <div class="fm-annotate-lines">
+              <div class="fm-a-line fm-a-line-bookmarked">
+                <span class="fm-a-num">8,234,107</span>
+                <span class="fm-a-time">12:34:56</span>
+                <span class="fm-a-level fm-a-error">ERROR</span>
+                <span class="fm-a-msg">Database connection refused</span>
+                <span class="fm-a-tag">📌 第一次失败</span>
+              </div>
+              <div class="fm-a-line">
+                <span class="fm-a-num">8,234,108</span>
+                <span class="fm-a-time">12:34:57</span>
+                <span class="fm-a-level fm-a-info">INFO</span>
+                <span class="fm-a-msg">Retry attempt 1 of 3</span>
+              </div>
+              <div class="fm-a-line fm-a-line-bookmarked">
+                <span class="fm-a-num">8,234,205</span>
+                <span class="fm-a-time">12:35:01</span>
+                <span class="fm-a-level fm-a-error">ERROR</span>
+                <span class="fm-a-msg">Failed to acquire connection</span>
+                <span class="fm-a-tag">📌 重试后仍失败</span>
+              </div>
+              <div class="fm-a-line">
+                <span class="fm-a-num">8,234,206</span>
+                <span class="fm-a-time">12:35:02</span>
+                <span class="fm-a-level fm-a-info">INFO</span>
+                <span class="fm-a-msg">Cache invalidated, size 0</span>
+              </div>
+            </div>
+            <div class="fm-annotate-comments">
+              <div class="fm-c-title">注释 · 2 条</div>
+              <div class="fm-c-item">
+                <span class="fm-c-line">8,234,107</span>
+                <span class="fm-c-text">"首次失败 — 怀疑 redis 集群脑裂,需要看 cluster log"</span>
+              </div>
+              <div class="fm-c-item">
+                <span class="fm-c-line">8,234,205</span>
+                <span class="fm-c-text">"重试仍失败 — 上游连接池耗尽"</span>
+              </div>
+            </div>
+          </div>
         </figure>
       </article>
     </div>
