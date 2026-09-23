@@ -79,10 +79,7 @@ code {
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink-1); font-weight: 600; }
 .brand:hover { color: var(--ink-1); text-decoration: none; }
 
-.brand-mark {
-  width: 10px; height: 10px; background: var(--ink-1); border-radius: 1px; display: inline-block;
-}
-
+.brand-mark { width: 10px; height: 10px; background: var(--ink-1); border-radius: 1px; display: inline-block; }
 .brand-name { font-family: var(--font-mono); font-size: .95rem; letter-spacing: -.01em; }
 .brand-ver {
   font-family: var(--font-mono); font-size: .72rem; color: var(--ink-3);
@@ -270,6 +267,91 @@ code {
 }
 .feat-shot img { width: 100%; display: block; }
 
+/* ----- 02 SEARCH mock(替代复用错图) ----- */
+.fm-search {
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.fm-search-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: #f3efe4;
+  border-bottom: 1px solid var(--border);
+}
+
+.fm-search-icon { color: var(--ink-3); font-size: 1rem; }
+
+.fm-search-text {
+  flex: 1;
+  background: white;
+  border: 1px solid var(--border-strong);
+  padding: 5px 12px;
+  border-radius: 2px;
+  color: var(--ink-1);
+  font-size: .85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-search-flags {
+  color: var(--ink-3);
+  font-size: .72rem;
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+
+.fm-search-results {
+  padding: 14px 14px 12px;
+  flex: 1;
+}
+
+.fm-r-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+
+.fm-r-line em {
+  font-style: normal;
+  background: rgba(180, 83, 9, .14);
+  color: var(--ink-1);
+  padding: 1px 4px;
+  border-radius: 1px;
+  border: 1px solid rgba(180, 83, 9, .22);
+}
+
+.fm-r-time { color: var(--ink-3); margin-right: 10px; }
+.fm-r-level {
+  display: inline-block;
+  width: 46px;
+  margin-right: 10px;
+  font-weight: 600;
+  text-align: left;
+}
+.fm-r-error { color: #b91c1c; }
+.fm-r-warn  { color: #b45309; }
+.fm-r-info  { color: #1e40af; }
+.fm-r-debug { color: var(--ink-3); }
+
+.fm-search-summary {
+  padding: 8px 14px;
+  background: #f3efe4;
+  border-top: 1px solid var(--border);
+  color: var(--ink-3);
+  font-size: .72rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 /* ============================================================
    Formats
    ============================================================ */
@@ -303,7 +385,7 @@ code {
 .note code { background: rgba(30, 58, 138, 0.06); }
 
 /* ============================================================
-   Themes — 真实主题 mock(不再是 hue-rotate 染色)
+   Themes
    ============================================================ */
 .themes { padding: 96px 0; border-bottom: 1px solid var(--border); }
 
@@ -396,7 +478,6 @@ code {
   );
 }
 .mock-neon::before {
-  /* CRT 暗角 */
   content: '';
   position: absolute; inset: 0;
   background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%);
@@ -422,7 +503,6 @@ code {
   position: relative;
 }
 .mock-aurora::before {
-  /* 极光动效光晕 */
   content: '';
   position: absolute;
   top: -20%; left: -10%; right: -10%; bottom: -20%;
@@ -457,7 +537,6 @@ code {
   position: relative;
 }
 .mock-holo::before {
-  /* 全息渐变描边 */
   content: '';
   position: absolute; inset: 0;
   border-radius: 0;

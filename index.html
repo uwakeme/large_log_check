@@ -113,6 +113,7 @@
         <h2>核心能力</h2>
       </header>
 
+      <!-- 01 · I/O -->
       <article class="feat">
         <div class="feat-text">
           <div class="feat-tag">01 · I/O</div>
@@ -132,6 +133,7 @@
         </figure>
       </article>
 
+      <!-- 02 · SEARCH — mock 替代错图 -->
       <article class="feat feat-reverse">
         <div class="feat-text">
           <div class="feat-tag">02 · SEARCH</div>
@@ -151,10 +153,23 @@
           </ul>
         </div>
         <figure class="feat-shot">
-          <img src="images/examples/highlight.png" alt="高级搜索与高亮规则" />
+          <div class="fm-search" role="img" aria-label="多关键词搜索示意:输入 error timeout,3 条命中,关键词高亮">
+            <div class="fm-search-bar">
+              <span class="fm-search-icon">⌕</span>
+              <span class="fm-search-text">error timeout</span>
+              <span class="fm-search-flags">正则 · 当前页</span>
+            </div>
+            <div class="fm-search-results">
+              <div class="fm-r-line"><span class="fm-r-time">12:00:03</span><span class="fm-r-level fm-r-error">ERROR</span>Connection <em>timeout</em> to redis-01</div>
+              <div class="fm-r-line"><span class="fm-r-time">12:00:05</span><span class="fm-r-level fm-r-error">ERROR</span>Retry: <em>timeout</em> after 30s</div>
+              <div class="fm-r-line"><span class="fm-r-time">12:00:08</span><span class="fm-r-level fm-r-error">ERROR</span>Upstream <em>timeout</em>, checkout <em>error</em></div>
+            </div>
+            <div class="fm-search-summary">3 条命中 · 第 1 / 1 页 · 多关键词 AND</div>
+          </div>
         </figure>
       </article>
 
+      <!-- 03 · NAVIGATE -->
       <article class="feat">
         <div class="feat-text">
           <div class="feat-tag">03 · NAVIGATE</div>
@@ -173,6 +188,7 @@
         </figure>
       </article>
 
+      <!-- 04 · TEMPLATE -->
       <article class="feat feat-reverse">
         <div class="feat-text">
           <div class="feat-tag">04 · TEMPLATE</div>
@@ -193,6 +209,7 @@
         </figure>
       </article>
 
+      <!-- 05 · ANNOTATE -->
       <article class="feat">
         <div class="feat-text">
           <div class="feat-tag">05 · ANNOTATE</div>
@@ -260,7 +277,6 @@
     </div>
   </section>
 
-  <!-- ===================== Themes — 真实主题 mock ===================== -->
   <section class="themes" id="themes">
     <div class="wrap">
       <header class="section-head">
@@ -273,8 +289,6 @@
       </p>
 
       <div class="theme-grid">
-
-        <!-- 默认主题 -->
         <figure class="theme">
           <div class="theme-mock mock-default">
             <div class="mock-bar">
@@ -292,12 +306,11 @@
             </div>
           </div>
           <figcaption>
-              <div class="theme-name">默认</div>
-              <div class="theme-desc">跟随 VSCode 当前编辑器主题</div>
-            </figcaption>
+            <div class="theme-name">默认</div>
+            <div class="theme-desc">跟随 VSCode 当前编辑器主题</div>
+          </figcaption>
         </figure>
 
-        <!-- NEON.CYBER -->
         <figure class="theme">
           <div class="theme-mock mock-neon">
             <div class="mock-bar">
@@ -315,12 +328,11 @@
             </div>
           </div>
           <figcaption>
-              <div class="theme-name">NEON.CYBER</div>
-              <div class="theme-desc">纯黑底 + 霓虹青 / 品红 / 琥珀 + 扫描线</div>
-            </figcaption>
+            <div class="theme-name">NEON.CYBER</div>
+            <div class="theme-desc">纯黑底 + 霓虹青 / 品红 / 琥珀 + 扫描线</div>
+          </figcaption>
         </figure>
 
-        <!-- AURORA.GLASS -->
         <figure class="theme">
           <div class="theme-mock mock-aurora">
             <div class="mock-bar">
@@ -338,12 +350,11 @@
             </div>
           </div>
           <figcaption>
-              <div class="theme-name">AURORA.GLASS</div>
-              <div class="theme-desc">深蓝紫渐变 + 毛玻璃 + 极光动效</div>
-            </figcaption>
+            <div class="theme-name">AURORA.GLASS</div>
+            <div class="theme-desc">深蓝紫渐变 + 毛玻璃 + 极光动效</div>
+          </figcaption>
         </figure>
 
-        <!-- HOLO.PRISM -->
         <figure class="theme">
           <div class="theme-mock mock-holo">
             <div class="mock-bar">
@@ -361,11 +372,10 @@
             </div>
           </div>
           <figcaption>
-              <div class="theme-name">HOLO.PRISM</div>
-              <div class="theme-desc">炭灰底 + 全息渐变描边 + 仪表盘质感</div>
-            </figcaption>
+            <div class="theme-name">HOLO.PRISM</div>
+            <div class="theme-desc">炭灰底 + 全息渐变描边 + 仪表盘质感</div>
+          </figcaption>
         </figure>
-
       </div>
     </div>
   </section>
