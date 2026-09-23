@@ -14,7 +14,6 @@
 </head>
 <body>
 
-  <!-- ===================== Top bar ===================== -->
   <header class="topbar">
     <div class="wrap topbar-inner">
       <a href="#top" class="brand">
@@ -36,7 +35,6 @@
     </div>
   </header>
 
-  <!-- ===================== Hero ===================== -->
   <section class="hero" id="top">
     <div class="wrap">
       <div class="hero-grid">
@@ -45,22 +43,16 @@
             <span class="dot"></span>
             VSCode Extension · MIT · v1.3.3
           </div>
-
-          <h1 class="display">
-            <span>大日志文件查看器</span>
-          </h1>
-
+          <h1 class="display"><span>大日志文件查看器</span></h1>
           <p class="lede">
             VSCode 扩展。把几 GB 的服务器日志从「打不开」变成「可排查」 —
             流式读取、虚拟滚动,关键词 / 线程 / 类 / 级别叠加过滤,
             时间线导航,书签注释,可一键重跑的排查模板。
           </p>
-
           <div class="install">
             <div class="install-prompt">
               <span class="prompt-sigil">$</span>
               <code>code --install-extension wake.big-log-viewer</code>
-
             </div>
             <div class="install-actions">
               <a href="https://marketplace.visualstudio.com/items?itemName=wake.big-log-viewer" target="_blank" rel="noopener">Marketplace →</a>
@@ -85,14 +77,12 @@
     </div>
   </section>
 
-  <!-- ===================== Why ===================== -->
   <section class="why" id="why">
     <div class="wrap">
       <header class="section-head">
         <span class="section-num">01</span>
         <h2>为什么需要它</h2>
       </header>
-
       <div class="why-grid">
         <div class="why-text">
           <p>
@@ -116,10 +106,8 @@
     </div>
   </section>
 
-  <!-- ===================== Features (交错) ===================== -->
   <section class="features" id="features">
     <div class="wrap">
-
       <header class="section-head">
         <span class="section-num">02</span>
         <h2>核心能力</h2>
@@ -225,7 +213,6 @@
     </div>
   </section>
 
-  <!-- ===================== Formats ===================== -->
   <section class="formats" id="formats">
     <div class="wrap">
       <header class="section-head">
@@ -273,7 +260,7 @@
     </div>
   </section>
 
-  <!-- ===================== Themes ===================== -->
+  <!-- ===================== Themes — 真实主题 mock ===================== -->
   <section class="themes" id="themes">
     <div class="wrap">
       <header class="section-head">
@@ -286,50 +273,103 @@
       </p>
 
       <div class="theme-grid">
+
+        <!-- 默认主题 -->
         <figure class="theme">
-          <div class="theme-shot">
-            <img src="images/examples/home.png" alt="默认主题" />
+          <div class="theme-mock mock-default">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">1.2 GB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
           </div>
           <figcaption>
-            <div class="theme-name">默认</div>
-            <div class="theme-desc">跟随 VSCode 当前编辑器主题</div>
-          </figcaption>
+              <div class="theme-name">默认</div>
+              <div class="theme-desc">跟随 VSCode 当前编辑器主题</div>
+            </figcaption>
         </figure>
 
+        <!-- NEON.CYBER -->
         <figure class="theme">
-          <div class="theme-shot theme-neon">
-            <img src="images/examples/highlight.png" alt="NEON.CYBER 主题" />
+          <div class="theme-mock mock-neon">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">1.2 GB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
           </div>
           <figcaption>
-            <div class="theme-name">NEON.CYBER</div>
-            <div class="theme-desc">纯黑底 + 霓虹青 / 品红 / 琥珀 + 扫描线</div>
-          </figcaption>
+              <div class="theme-name">NEON.CYBER</div>
+              <div class="theme-desc">纯黑底 + 霓虹青 / 品红 / 琥珀 + 扫描线</div>
+            </figcaption>
         </figure>
 
+        <!-- AURORA.GLASS -->
         <figure class="theme">
-          <div class="theme-shot theme-aurora">
-            <img src="images/examples/bookmark.png" alt="AURORA.GLASS 主题" />
+          <div class="theme-mock mock-aurora">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">1.2 GB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
           </div>
           <figcaption>
-            <div class="theme-name">AURORA.GLASS</div>
-            <div class="theme-desc">深蓝紫渐变 + 毛玻璃 + 极光动效</div>
-          </figcaption>
+              <div class="theme-name">AURORA.GLASS</div>
+              <div class="theme-desc">深蓝紫渐变 + 毛玻璃 + 极光动效</div>
+            </figcaption>
         </figure>
 
+        <!-- HOLO.PRISM -->
         <figure class="theme">
-          <div class="theme-shot theme-holo">
-            <img src="images/examples/index_template.png" alt="HOLO.PRISM 主题" />
+          <div class="theme-mock mock-holo">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">1.2 GB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
           </div>
           <figcaption>
-            <div class="theme-name">HOLO.PRISM</div>
-            <div class="theme-desc">炭灰底 + 全息渐变描边 + 仪表盘质感</div>
-          </figcaption>
+              <div class="theme-name">HOLO.PRISM</div>
+              <div class="theme-desc">炭灰底 + 全息渐变描边 + 仪表盘质感</div>
+            </figcaption>
         </figure>
+
       </div>
     </div>
   </section>
 
-  <!-- ===================== Commands ===================== -->
   <section class="commands" id="commands">
     <div class="wrap">
       <header class="section-head">
@@ -339,51 +379,20 @@
       <p class="lede lede-quiet">所有功能都可从 VSCode 命令面板(<code>Ctrl+Shift+P</code>)调用。</p>
 
       <dl class="cmd-list">
-        <div class="cmd-row">
-          <dt><code>日志查看器: 打开大日志文件</code></dt>
-          <dd>选择一个日志文件在查看器中打开</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 高级搜索</code></dt>
-          <dd>打开查询构建器</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 排查模板</code></dt>
-          <dd>打开排查模板管理</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 书签管理</code></dt>
-          <dd>查看 / 编辑 / 导出书签</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 注释管理</code></dt>
-          <dd>查看 / 编辑 / 删除注释</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 跳转到行号</code></dt>
-          <dd>输入行号直接跳转</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 显示日志统计</code></dt>
-          <dd>总行数、级别分布、时间范围</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 刷新日志文件</code></dt>
-          <dd>文件被外部更新后重新读取</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 按时间删除日志</code></dt>
-          <dd>直接修改原文件,慎用</dd>
-        </div>
-        <div class="cmd-row">
-          <dt><code>日志查看器: 按行数删除日志</code></dt>
-          <dd>直接修改原文件,慎用</dd>
-        </div>
+        <div class="cmd-row"><dt><code>日志查看器: 打开大日志文件</code></dt><dd>选择一个日志文件在查看器中打开</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 高级搜索</code></dt><dd>打开查询构建器</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 排查模板</code></dt><dd>打开排查模板管理</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 书签管理</code></dt><dd>查看 / 编辑 / 导出书签</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 注释管理</code></dt><dd>查看 / 编辑 / 删除注释</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 跳转到行号</code></dt><dd>输入行号直接跳转</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 显示日志统计</code></dt><dd>总行数、级别分布、时间范围</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 刷新日志文件</code></dt><dd>文件被外部更新后重新读取</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 按时间删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
+        <div class="cmd-row"><dt><code>日志查看器: 按行数删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
       </dl>
     </div>
   </section>
 
-  <!-- ===================== Install ===================== -->
   <section class="install" id="install">
     <div class="wrap">
       <header class="section-head">
@@ -423,7 +432,6 @@ $ npm run package</code></pre>
     </div>
   </section>
 
-  <!-- ===================== Footer ===================== -->
   <footer class="foot">
     <div class="wrap foot-inner">
       <div class="foot-brand">
@@ -441,7 +449,6 @@ $ npm run package</code></pre>
   </footer>
 
   <script>
-    // 复制按钮(简化为原生选择 — 不另起交互)
     document.querySelectorAll('.install-cmd').forEach(function (box) {
       box.addEventListener('click', function () {
         var code = box.querySelector('code');
