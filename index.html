@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Big Log Viewer — GB 级日志文件,在 VSCode 里秒开、可搜、可一键排查</title>
+  <meta name="description" content="Big Log Viewer (大日志文件查看器) 是一款 VSCode 扩展,支持 GB 级日志秒开、虚拟滚动、多关键词搜索、级别/线程/时间过滤、时间线导航、书签注释、可重跑的排查模板。线上问题排查的工具,这里都齐了。" />
+  <meta name="keywords" content="VSCode, 日志查看器, 大日志, log viewer, 大文件, 日志分析, 虚拟滚动, 排查模板, Big Log Viewer" />
+  <meta property="og:title" content="Big Log Viewer — GB 级日志文件,在 VSCode 里秒开" />
+  <meta property="og:description" content="流式读取 + 虚拟滚动,几 GB 的服务器日志也能秒开。多关键词搜索、时间线导航、书签/注释、可重跑的排查模板。" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="images/logo_banner.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 顶部导航 -->
+  <header class="navbar">
+    <div class="container nav-container">
+      <a class="brand" href="#top">
+        <span class="logo-dot"></span>
+        <span class="brand-name">Big Log Viewer</span>
+        <span class="brand-version">v1.3.3</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#pain">为什么用</a>
+        <a href="#features">功能</a>
+        <a href="#workflow">界面</a>
+        <a href="#formats">格式</a>
+        <a href="#commands">命令</a>
+        <a href="#themes">主题</a>
+        <a href="#install">安装</a>
+        <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener" class="nav-github">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero 区 -->
+  <section class="hero" id="top">
+    <div class="hero-bg"></div>
+    <div class="container">
+      <div class="hero-grid">
+        <div class="hero-text">
+          <div class="badges">
+            <span class="badge badge-pub">VSCode Extension</span>
+            <span class="badge badge-mit">MIT License</span>
+            <span class="badge badge-status">活跃维护</span>
+          </div>
+          <h1 class="hero-title">
+            GB 级日志文件<br />
+            <span class="gradient-text">在 VSCode 里秒开、可搜、可一键排查</span>
+          </h1>
+          <p class="hero-subtitle">
+            流式读取 + 虚拟滚动,几 GB 的服务器日志也能秒开;多关键词搜索、时间线导航、书签/注释、可重跑的排查模板——线上问题排查需要的工具,这里都齐了。
+          </p>
+
+          <div class="install-command">
+            <span class="prompt">$</span>
+            <code>code --install-extension wake.big-log-viewer</code>
+            <button class="copy-btn" data-copy="code --install-extension wake.big-log-viewer" aria-label="复制安装命令">复制</button>
+          </div>
+
+          <div class="hero-buttons">
+            <a href="https://marketplace.visualstudio.com/items?itemName=wake.big-log-viewer" target="_blank" rel="noopener" class="btn btn-primary">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M14.5 1.5h-13l6.5 7.5-6.5 7.5h13L8.5 9z"/></svg>
+              安装扩展
+            </a>
+            <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener" class="btn btn-secondary">
+              ⭐ 源码仓库
+            </a>
+            <a href="#install" class="btn btn-ghost">查看安装方式 →</a>
+          </div>
+
+          <div class="hero-stats">
+            <div class="stat">
+              <div class="stat-value">GB+</div>
+              <div class="stat-label">单文件秒开</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">10M+</div>
+              <div class="stat-label">日志行数</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">4</div>
+              <div class="stat-label">视觉主题</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">10+</div>
+              <div class="stat-label">日志组件适配</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-image">
+          <div class="hero-image-frame">
+            <div class="window-bar">
+              <span class="dot dot-r"></span>
+              <span class="dot dot-y"></span>
+              <span class="dot dot-g"></span>
+              <span class="window-title">server.log · Big Log Viewer</span>
+            </div>
+            <img src="images/logo_banner.png" alt="Big Log Viewer 横幅" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 痛点对比 -->
+  <section class="section section-pain" id="pain">
+    <div class="container">
+      <h2 class="section-title">线上问题排查,日志是必经之路</h2>
+      <p class="section-subtitle">但当日志文件达到几百 MB 甚至几 GB 时,VSCode 默认的文本编辑器就不堪重负了</p>
+      <div class="pain-grid">
+        <div class="pain-card pain-bad">
+          <div class="pain-header">
+            <span class="pain-icon">😩</span>
+            <h3>VSCode 默认打开</h3>
+          </div>
+          <ul class="pain-list">
+            <li>打开 1GB 文件直接卡死或拒绝</li>
+            <li>全量读入内存,占用几个 GB</li>
+            <li>搜索全文件需要几分钟</li>
+            <li>无法分页,无法快速跳转</li>
+            <li>无时间线、级别过滤、书签</li>
+          </ul>
+        </div>
+        <div class="pain-card pain-good">
+          <div class="pain-header">
+            <span class="pain-icon">✨</span>
+            <h3>Big Log Viewer</h3>
+          </div>
+          <ul class="pain-list">
+            <li>流式读取,内存只保留当前可见范围</li>
+            <li>GB 级文件秒开,虚拟滚动边滚边加载</li>
+            <li>多关键词搜索 / 正则 / 高级查询</li>
+            <li>时间线、书签、排查模板一键到位</li>
+            <li>按文件隔离,多日志同时开不串台</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 核心功能 -->
+  <section class="section" id="features">
+    <div class="container">
+      <h2 class="section-title">核心功能特性</h2>
+      <p class="section-subtitle">为线上日志排查量身打造,而不是简单的文本编辑器</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>GB 级文件秒开</h3>
+          <p>文件读取全程流式,不把整个文件读进内存,多 GB 也不会撑爆扩展进程;虚拟滚动只渲染屏幕内的行,加载进度真实可见,不是转圈假动画。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3>多维度搜索</h3>
+          <p>多关键词空格分隔即 AND 匹配;正则模式;高级搜索是查询构建器,关键词 / 线程名 / 类名 / 方法名 / 级别 / 时间范围,条件行之间灵活切换「且/或」。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📑</div>
+          <h3>书签 / 注释</h3>
+          <p>双击行加书签,右键加注释;支持命名书签、批量导出书签日志;书签行整行高亮,列表集中管理,方便团队协作分析。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📈</div>
+          <h3>时间线导航</h3>
+          <p>把全文件按时间采样画成分布图,点击时间块直接跳转;翻页、跳转时高亮跟着走,采样密度可调(20–1000)。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎯</div>
+          <h3>排查模板</h3>
+          <p>把固定排查流程存成模板,自动重跑;查询 / 筛选 / 打书签 / 加注释四种动作,<code>${参数}</code> 占位复用,可视化与 JSON 双形式编辑。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎨</div>
+          <h3>四套主题</h3>
+          <p>默认(随 VSCode)、NEON.CYBER 赛博朋克、AURORA.GLASS 玻璃拟态、HOLO.PRISM 全息棱镜,切换立即生效,不丢搜索状态和滚动位置。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔁</div>
+          <h3>折叠重复日志</h3>
+          <p>连续重复的行合并成一组(忽略时间戳差异),折叠徽标显示当前搜索的命中数;点击展开明细,排查刷屏更省眼。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">✂️</div>
+          <h3>日志裁剪</h3>
+          <p>按时间或行号删除 / 保留指定范围的日志,直接修改原文件。操作前请备份重要日志。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 界面预览 -->
+  <section class="section section-dark" id="workflow">
+    <div class="container">
+      <h2 class="section-title">界面预览</h2>
+      <p class="section-subtitle">主界面、书签 / 注释、排查模板编辑器</p>
+      <div class="screenshots">
+        <figure class="screenshot screenshot-full">
+          <img src="images/examples/home.png" alt="主界面 — 时间线导航、级别过滤、搜索栏和书签行高亮在同一屏" />
+          <figcaption>主界面:时间线导航、级别过滤、搜索栏和书签行高亮在同一屏</figcaption>
+        </figure>
+        <div class="screenshot-row">
+          <figure class="screenshot screenshot-half">
+            <img src="images/examples/bookmark.png" alt="书签管理与导出" />
+            <figcaption>书签管理与导出</figcaption>
+          </figure>
+          <figure class="screenshot screenshot-half">
+            <img src="images/examples/remarks.png" alt="注释管理" />
+            <figcaption>注释管理</figcaption>
+          </figure>
+        </div>
+        <div class="screenshot-row">
+          <figure class="screenshot screenshot-half">
+            <img src="images/examples/highlight.png" alt="自定义高亮规则" />
+            <figcaption>自定义高亮规则</figcaption>
+          </figure>
+          <figure class="screenshot screenshot-half">
+            <img src="images/examples/index_template.png" alt="排查模板编辑器" />
+            <figcaption>排查模板编辑器</figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 支持的日志格式 -->
+  <section class="section" id="formats">
+    <div class="container">
+      <h2 class="section-title">支持的日志格式</h2>
+      <p class="section-subtitle">查看器本身是通用文本查看器,任何 .log / .txt 都能打开、搜索、加书签</p>
+      <div class="format-table-wrap">
+        <table class="format-table">
+          <thead>
+            <tr>
+              <th>日志组件</th>
+              <th class="col-flag">时间戳</th>
+              <th class="col-flag">级别</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Logback / Log4j / Log4j2 / SLF4J、Spring Boot 默认格式</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+            <tr><td>log4net / NLog(.NET)</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+            <tr><td>Python logging(<code>%(asctime)s</code> 格式)、Gunicorn</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+            <tr><td>logrus、zap 控制台格式(Go)</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+            <tr><td>Rails、Laravel / Monolog、winston 文本格式</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+            <tr><td>Go 标准库 log、IIS W3C、syslog RFC5424</td><td class="ok">✓</td><td>—</td></tr>
+            <tr><td>Docker json-file、bunyan(JSON 内含 ISO 时间字段)</td><td class="ok">✓</td><td>—</td></tr>
+            <tr><td>Tomcat catalina(JUL)、JBoss / WildFly 默认 pattern</td><td>—</td><td class="ok">✓</td></tr>
+            <tr><td>Serilog Console 默认、Apache error log</td><td>—</td><td class="ok">✓</td></tr>
+            <tr><td>Python logging 默认格式、uvicorn(<code>INFO:</code> 前缀)</td><td>—</td><td class="ok">✓</td></tr>
+            <tr><td>nginx / Apache access log(<code>01/Jan/2024</code> 英文月份日期)</td><td>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        识别不到时间戳只影响<strong>时间范围过滤、时间线导航、按时间裁剪</strong>三类功能,打开、搜索、级别过滤、书签、注释全部照常可用。
+      </p>
+    </div>
+  </section>
+
+  <!-- 命令面板 -->
+  <section class="section" id="commands">
+    <div class="container">
+      <h2 class="section-title">命令面板</h2>
+      <p class="section-subtitle">所有功能都可从 VSCode 命令面板(<code>Ctrl+Shift+P</code>)调用</p>
+      <div class="command-list">
+        <div class="command-item">
+          <code>日志查看器: 打开大日志文件</code>
+          <span>选择一个日志文件在查看器中打开</span>
+        </div>
+        <div class="command-item">
+          <code>日志查看器: 高级搜索</code>
+          <span>打开查询构建器</span>
+        </div>
+        <div class="command-item">
+          <code>日志查看器: 排查模板</code>
+          <span>打开排查模板管理</span>
+        </div>
+        <div class="command-item">
+          <code>日志查看器: 书签管理</code>
+          <span>查看 / 编辑 / 导出书签</span>
+        </div>
+        <div class="command-item">
+          <code>日志查看器: 注释管理</code>
+          <span>查看 / 编辑 / 删除注释</span>
+        </div>
+        <div class="command-item">
+          <code>日志查看器: 跳转到行号</code>
+          <span>输入行号直接跳转</span>
+        </div>
+        <div class="command-item">
+          <code>日志查看器: 显示日志统计</code>
+          <span>总行数、级别分布、时间范围</span>
+        </div>
+        <div class="command-item">
+          <code>日志查看器: 刷新日志文件</code>
+          <span>文件被外部更新后重新读取</span>
+        </div>
+        <div class="command-item command-warn">
+          <code>日志查看器: 按时间删除日志</code>
+          <span>直接修改原文件,慎用</span>
+        </div>
+        <div class="command-item command-warn">
+          <code>日志查看器: 按行数删除日志</code>
+          <span>直接修改原文件,慎用</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 主题 -->
+  <section class="section section-dark" id="themes">
+    <div class="container">
+      <h2 class="section-title">四套主题,任你切换</h2>
+      <p class="section-subtitle">在「⋯ 更多 → 设置」面板里切换,立即生效,选择会写入 VSCode 用户配置</p>
+      <div class="themes-grid">
+        <div class="theme-card">
+          <div class="theme-preview theme-default">
+            <div class="theme-line"><span class="theme-time">12:00:00</span> <span class="theme-level">INFO</span> Default theme</div>
+            <div class="theme-line"><span class="theme-time">12:00:01</span> <span class="theme-level theme-warn">WARN</span> 跟随 VSCode</div>
+            <div class="theme-line"><span class="theme-time">12:00:02</span> <span class="theme-level theme-error">ERROR</span> 适合日常使用</div>
+          </div>
+          <h3>默认</h3>
+          <p>跟随当前 VSCode 编辑器主题,适合日常使用</p>
+        </div>
+        <div class="theme-card">
+          <div class="theme-preview theme-neon">
+            <div class="theme-line"><span class="theme-time">12:00:00</span> <span class="theme-level">INFO</span> NEON.CYBER</div>
+            <div class="theme-line"><span class="theme-time">12:00:01</span> <span class="theme-level theme-warn">WARN</span> 纯黑+霓虹</div>
+            <div class="theme-line"><span class="theme-time">12:00:02</span> <span class="theme-level theme-error">ERROR</span> 夜间值守很搭</div>
+          </div>
+          <h3>NEON.CYBER</h3>
+          <p>纯黑底、霓虹青 / 品红 / 琥珀,扫描线与 CRT 暗角</p>
+        </div>
+        <div class="theme-card">
+          <div class="theme-preview theme-aurora">
+            <div class="theme-line"><span class="theme-time">12:00:00</span> <span class="theme-level">INFO</span> AURORA.GLASS</div>
+            <div class="theme-line"><span class="theme-time">12:00:01</span> <span class="theme-level theme-warn">WARN</span> 深蓝紫渐变</div>
+            <div class="theme-line"><span class="theme-time">12:00:02</span> <span class="theme-level theme-error">ERROR</span> 投屏演示很赞</div>
+          </div>
+          <h3>AURORA.GLASS</h3>
+          <p>深蓝紫渐变、极光动效、毛玻璃质感</p>
+        </div>
+        <div class="theme-card">
+          <div class="theme-preview theme-holo">
+            <div class="theme-line"><span class="theme-time">12:00:00</span> <span class="theme-level">INFO</span> HOLO.PRISM</div>
+            <div class="theme-line"><span class="theme-time">12:00:01</span> <span class="theme-level theme-warn">WARN</span> 炭灰+全息</div>
+            <div class="theme-line"><span class="theme-time">12:00:02</span> <span class="theme-level theme-error">ERROR</span> 仪表盘质感</div>
+          </div>
+          <h3>HOLO.PRISM</h3>
+          <p>炭灰底、全息渐变描边,仪表盘质感</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装 -->
+  <section class="section" id="install">
+    <div class="container">
+      <h2 class="section-title">快速开始</h2>
+      <p class="section-subtitle">两种安装方式:从 VSCode 扩展市场装,或者从源码打包</p>
+      <div class="install-methods">
+        <div class="install-method">
+          <h3>方式 1:VSCode 扩展市场(推荐)</h3>
+          <p>在扩展面板搜索「Big Log Viewer」或「大日志文件查看器」安装,或直接执行:</p>
+          <div class="install-command">
+            <span class="prompt">$</span>
+            <code>code --install-extension wake.big-log-viewer</code>
+            <button class="copy-btn" data-copy="code --install-extension wake.big-log-viewer" aria-label="复制安装命令">复制</button>
+          </div>
+          <p class="install-extra">要求:VSCode 1.75 或更高版本</p>
+        </div>
+        <div class="install-method">
+          <h3>方式 2:从源码打包</h3>
+          <pre class="code-block"><code>git clone https://github.com/uwakeme/large_log_check.git
+cd large_log_check
+npm install
+npm run package</code></pre>
+          <p>打包会在项目根目录生成 <code>.vsix</code> 文件,在 VSCode 扩展面板「⋯ → 从 VSIX 安装」里选择它即可。</p>
+        </div>
+        <div class="install-method">
+          <h3>第一次使用</h3>
+          <p>在资源管理器里右键任意 <code>.log</code> / <code>.txt</code> 文件,选择「打开大日志文件」。进度条走完就是完整日志,可以直接搜了。</p>
+          <p>每个文件在独立面板中打开,书签、注释、搜索状态都按面板隔离,关闭面板即释放资源。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 贡献 / 结尾 -->
+  <section class="section section-cta">
+    <div class="container">
+      <h2 class="section-title">让线上日志排查不再痛苦</h2>
+      <p class="section-subtitle">欢迎提 Issue 和 PR · MIT 协议开源 · 仓库约定:新功能的 PR 要在同一个提交里更新 README 和 CHANGELOG</p>
+      <div class="cta-buttons">
+        <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener" class="btn btn-primary">⭐ Star on GitHub</a>
+        <a href="https://github.com/uwakeme/large_log_check/issues" target="_blank" rel="noopener" class="btn btn-secondary">🐛 反馈 Bug / 提建议</a>
+        <a href="https://marketplace.visualstudio.com/items?itemName=wake.big-log-viewer" target="_blank" rel="noopener" class="btn btn-ghost">📦 VSCode Marketplace</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <span class="logo-dot"></span>
+            <span class="brand-name">Big Log Viewer</span>
+          </div>
+          <p class="footer-desc">GB 级日志文件,在 VSCode 里秒开、可搜、可标注、可一键排查</p>
+          <p class="footer-meta">MIT License · <a href="https://github.com/uwakeme" target="_blank" rel="noopener">@uwakeme</a></p>
+        </div>
+        <div>
+          <h4>项目</h4>
+          <ul>
+            <li><a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener">GitHub 仓库</a></li>
+            <li><a href="https://github.com/uwakeme/large_log_check/issues" target="_blank" rel="noopener">问题反馈</a></li>
+            <li><a href="https://github.com/uwakeme/large_log_check/blob/main/CHANGELOG.md" target="_blank" rel="noopener">更新日志</a></li>
+            <li><a href="https://github.com/uwakeme/large_log_check/blob/main/README.md" target="_blank" rel="noopener">完整文档</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>资源</h4>
+          <ul>
+            <li><a href="https://marketplace.visualstudio.com/items?itemName=wake.big-log-viewer" target="_blank" rel="noopener">VSCode 市场</a></li>
+            <li><a href="#features">功能特性</a></li>
+            <li><a href="#install">安装方式</a></li>
+            <li><a href="#commands">命令面板</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>Big Log Viewer · 让服务器日志排查从「痛苦」变「可控」</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // 复制按钮
+    document.querySelectorAll('.copy-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.dataset.copy;
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { flashCopied(btn); });
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); flashCopied(btn); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      });
+    });
+    function flashCopied(btn) {
+      var original = btn.textContent;
+      btn.textContent = '已复制 ✓';
+      btn.classList.add('copied');
+      setTimeout(function () {
+        btn.textContent = original;
+        btn.classList.remove('copied');
+      }, 1500);
+    }
+
+    // 滚动时给导航加阴影
+    var nav = document.querySelector('.navbar');
+    window.addEventListener('scroll', function () {
+      if (window.scrollY > 8) nav.classList.add('navbar-scrolled');
+      else nav.classList.remove('navbar-scrolled');
+    }, { passive: true });
+  </script>
+</body>
+</html>
