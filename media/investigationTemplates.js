@@ -22,6 +22,7 @@ const TPL_MAX_KEYWORDS = 10;      // 单个查询动作关键词数上限
 const TPL_MAX_KEYWORD_LEN = 200;  // 单个关键词长度上限
 const TPL_HIT_LIST_MAX = 200;     // 命中选择列表最多渲染条数
 const TPL_PREVIEW_LEN = 120;      // 命中内容预览截断长度
+const TPL_MAX_GROUP_LEN = 50;     // 分组名长度上限
 
 // 动作类型白名单: type -> 中文名。
 // jump(跳转)已整体移除:可复用模板里写死行号/时间没有意义,定位到命中行
@@ -62,6 +63,7 @@ let tplRunningTemplate = null;   // 当前正在执行的模板
 let tplHitResolver = null;       // 命中选择弹窗的 Promise resolve
 let tplCurrentHits = null;       // 命中选择弹窗当前展示的命中数组
 let tplLastParamTarget = null;   // 编辑器里最后聚焦的动作输入框(参数芯片点击插入的目标)
+let tplListGroupFilter = 'all';  // 模板列表的分组过滤: 'all'=全部, ''=未分组, 其他=分组名
 
 // ---------- 小工具 ----------
 
@@ -171,6 +173,7 @@ function validateInvestigationTemplate(input) {
         schemaVersion: TPL_SCHEMA_VERSION,
         name: name,
         description: String(input.description || '').trim().slice(0, 200),
+        group: String(input.group || '').trim().slice(0, TPL_MAX_GROUP_LEN),
         params: params,
         steps: steps,
         createdAt: Number(input.createdAt) || Date.now(),
@@ -269,8 +272,8 @@ function tplExportPayload(templates) {
 
 /**
  * 把一段 JSON 文本导入模板库。
- * 接受格式: 模板数组 / { templates: [...] } / { template: {...} } / 单个模板对象。
- * 按 id 去重覆盖;非法条目跳过并计数。
+ * 只接受本扩展导出的格式: { schemaVersion, exportedAt, templates: [...] },
+ * 其余形状(裸数组/单个对象/旧松散格式)一律拒绝。按 id 去重覆盖;非法条目跳过并计数。
  */
 function importTemplatesFromText(text) {
     let parsed;
@@ -280,15 +283,12 @@ function importTemplatesFromText(text) {
         showToast('导入失败: 内容不是合法的 JSON', 'error');
         return;
     }
-    let list = null;
-    if (Array.isArray(parsed)) { list = parsed; }
-    else if (parsed && Array.isArray(parsed.templates)) { list = parsed.templates; }
-    else if (parsed && parsed.template && typeof parsed.template === 'object') { list = [parsed.template]; }
-    else if (parsed && typeof parsed === 'object' && (parsed.name || parsed.steps)) { list = [parsed]; }
-    if (!list) {
-        showToast('导入失败: 未识别的模板格式', 'error');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        !Array.isArray(parsed.templates) || parsed.schemaVersion !== TPL_SCHEMA_VERSION) {
+        showToast('导入失败: 只支持本扩展导出的模板 JSON 格式', 'error');
         return;
     }
+    const list = parsed.templates;
 
     const store = loadInvestigationTemplates();
     let added = 0;
@@ -434,12 +434,50 @@ function renderTemplateList() {
         html += '<div style="text-align: center; color: var(--vscode-descriptionForeground); padding: 30px 0;">';
         html += '还没有排查模板。<br>点击「新建模板」创建第一个,把你的固定排查流程保存下来。';
         html += '</div>';
+        container.innerHTML = html;
+        return;
     }
 
+    // 分组由模板派生(按首次出现顺序),不单独管理;空组随最后一个成员离开自动消失
+    const groups = [];
     for (const t of list) {
+        if (t.group && groups.indexOf(t.group) < 0) { groups.push(t.group); }
+    }
+    const ungroupedCount = list.reduce((n, t) => n + (t.group ? 0 : 1), 0);
+
+    // 过滤状态失效(组被删光/未分组清空)时回落到「全部」,不展示空视图
+    if (tplListGroupFilter !== 'all' && tplListGroupFilter !== '' &&
+        groups.indexOf(tplListGroupFilter) < 0) {
+        tplListGroupFilter = 'all';
+    }
+    if (tplListGroupFilter === '' && ungroupedCount === 0) { tplListGroupFilter = 'all'; }
+
+    const shown = tplListGroupFilter === 'all'
+        ? list
+        : list.filter(t => (t.group || '') === tplListGroupFilter);
+
+    html += '<div class="tplg-wrap">';
+    html += '<div class="tplg-rail">';
+    html += tplRenderRailItem('all', '全部', list.length, 'codicon-list-flat');
+    for (const g of groups) {
+        const cnt = list.reduce((n, t) => n + (t.group === g ? 1 : 0), 0);
+        html += tplRenderRailItem(g, g, cnt, 'codicon-folder');
+    }
+    if (ungroupedCount > 0) {
+        html += tplRenderRailItem('', '未分组', ungroupedCount, 'codicon-circle-large-outline');
+    }
+    html += '</div>';
+    html += '<div class="tplg-list">';
+    if (tplListGroupFilter !== 'all') {
+        const label = tplListGroupFilter === '' ? '未分组' : tplListGroupFilter;
+        html += `<div class="tplg-list-title">${escapeHtml(label)} · ${shown.length} 个模板</div>`;
+    }
+    for (const t of shown) {
         const meta = [];
         if (t.params.length > 0) { meta.push(`参数 ${t.params.length} 个`); }
         meta.push(`${t.steps.length} 个动作`);
+        // 「全部」视图下卡片标注所属分组,避免混在一起认不出服务
+        if (tplListGroupFilter === 'all' && t.group) { meta.push(`分组: ${t.group}`); }
         const flow = (t.steps || []).map(s => TPL_ACTION_TYPES[s.type] || s.type).join(' → ');
         html += '<div style="border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 10px; margin-bottom: 8px;">';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
@@ -464,8 +502,23 @@ function renderTemplateList() {
         html += `<button style="${TPL_SMALL_BTN_STYLE}" onclick="removeTemplateById(${tplJsArg(t.id)})"><i class="codicon codicon-trash"></i> 删除</button>`;
         html += '</div></div>';
     }
+    html += '</div></div>';
 
     container.innerHTML = html;
+}
+
+/** 左侧分组导航的单个条目;key: 'all'=全部 / ''=未分组 / 分组名 */
+function tplRenderRailItem(key, label, count, icon) {
+    const active = tplListGroupFilter === key ? ' tplg-item-active' : '';
+    return `<div class="tplg-item${active}" onclick="tplSetGroupFilter(${tplJsArg(key)})" title="${escapeAttr(label)}">` +
+        `<i class="codicon ${icon}"></i>` +
+        `<span class="tplg-name">${escapeHtml(label)}</span>` +
+        `<span class="tplg-cnt">${count}</span></div>`;
+}
+
+function tplSetGroupFilter(key) {
+    tplListGroupFilter = key;
+    renderTemplateList();
 }
 
 /** 把动态字符串安全嵌入 onclick:JSON.stringify 防 JS 断言,escapeAttr 防 HTML 属性逃逸 */
@@ -548,6 +601,7 @@ function openTemplateEditor(id) {
             createdAt: Date.now(),
             name: '',
             description: '',
+            group: (tplListGroupFilter !== 'all' && tplListGroupFilter !== '') ? tplListGroupFilter : '',
             params: [],
             steps: [{ type: 'search', keywords: [''], hitPolicy: 'ask', onEmpty: 'stop', afterLastHit: false, sameThread: false }]
         };
@@ -637,6 +691,15 @@ function renderTemplateEditor() {
     html += '<div class="tpl-sec-label">模板信息</div>';
     html += `<div class="tpl-field"><label for="tplEditName">名称</label>`;
     html += `<input id="tplEditName" placeholder="例如: 支付回调失败排查" value="${escapeAttr(t.name || '')}" style="${TPL_INPUT_STYLE}"></div>`;
+    html += `<div class="tpl-field"><label for="tplEditGroup">分组 <span style="color: var(--vscode-descriptionForeground); font-weight: normal;">(可选,留空 = 未分组)</span></label>`;
+    html += `<input id="tplEditGroup" list="tplGroupSuggestions" placeholder="例如: 支付服务" value="${escapeAttr(t.group || '')}" style="${TPL_INPUT_STYLE}">`;
+    html += `<datalist id="tplGroupSuggestions">`;
+    const seenGroups = [];
+    for (const t2 of loadInvestigationTemplates()) {
+        if (t2.group && t2.group !== t.group && seenGroups.indexOf(t2.group) < 0) { seenGroups.push(t2.group); }
+    }
+    for (const g of seenGroups) { html += `<option value="${escapeAttr(g)}"></option>`; }
+    html += `</datalist></div>`;
     html += `<div class="tpl-field"><label for="tplEditDesc">描述 <span style="color: var(--vscode-descriptionForeground); font-weight: normal;">(可选)</span></label>`;
     html += `<input id="tplEditDesc" placeholder="这个模板用来排查什么问题" value="${escapeAttr(t.description || '')}" style="${TPL_INPUT_STYLE}"></div>`;
     html += `<div class="tpl-field"><label>运行参数 <span style="color: var(--vscode-descriptionForeground); font-weight: normal;">(可选)</span> <button type="button" onclick="tplBeginAddParam()" style="background: transparent; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; padding: 0;">＋ 添加参数</button></label>`;
@@ -1004,11 +1067,13 @@ function collectVisualTemplate() {
     const t = tplEditingTemplate || { id: 'tpl_' + Date.now(), createdAt: Date.now() };
     const nameEl = document.getElementById('tplEditName');
     const descEl = document.getElementById('tplEditDesc');
+    const groupEl = document.getElementById('tplEditGroup');
     return {
         id: t.id,
         createdAt: t.createdAt,
         name: nameEl ? nameEl.value : (t.name || ''),
         description: descEl ? descEl.value : (t.description || ''),
+        group: groupEl ? groupEl.value : (t.group || ''),
         params: (t.params || []).map(p => ({ key: p.key, label: p.label })),
         steps: JSON.parse(JSON.stringify(t.steps || []))
     };
@@ -1069,7 +1134,7 @@ function tplSwitchEditorMode(mode) {
         // 表单 -> JSON: 序列化当前状态(收集失败也允许,让用户在 JSON 里修)
         const raw = collectVisualTemplate();
         document.getElementById('tplEditJson').value = JSON.stringify({
-            name: raw.name, description: raw.description, params: raw.params, steps: raw.steps
+            name: raw.name, description: raw.description, group: raw.group, params: raw.params, steps: raw.steps
         }, null, 2);
         tplHideEditorError();
         tplEditorMode = 'json';
@@ -1143,6 +1208,7 @@ function saveTemplateFromEditor() {
         createdAt: tplEditingTemplate.createdAt,
         name: raw.name,
         description: raw.description,
+        group: raw.group,
         params: raw.params,
         steps: raw.steps
     });

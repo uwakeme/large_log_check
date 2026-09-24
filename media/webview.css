@@ -1742,6 +1742,61 @@ a:focus-visible {
     text-align: center;
 }
 
+/* ===== 排查模板分组导航(列表弹窗双栏) ===== */
+.tplg-wrap {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+.tplg-rail {
+    width: 150px;
+    flex-shrink: 0;
+}
+.tplg-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-bottom: 1px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+.tplg-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+.tplg-item-active,
+.tplg-item-active:hover {
+    background-color: var(--vscode-list-activeSelectionBackground);
+}
+.tplg-item .codicon {
+    font-size: 13px;
+    color: var(--vscode-descriptionForeground);
+    flex-shrink: 0;
+}
+.tplg-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tplg-cnt {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    flex-shrink: 0;
+}
+.tplg-list {
+    flex: 1;
+    min-width: 0;
+}
+.tplg-list-title {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin: 0 0 8px 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .tpl-step,
     .tpl-step-tools {
