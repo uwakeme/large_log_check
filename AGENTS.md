@@ -100,6 +100,31 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 - 不在脚本/批量动作里夹带 `git commit` 或 `git push`（`vscode:prepublish` 钩子只跑 lint / compile / test，不提交任何东西）
 - 不在网络异常、命令失败后自动重试 push / publish（先回报用户）
 
+## Project homepage (GitHub Pages)
+
+项目主页 URL：**https://uwakeme.github.io/large_log_check/**（已设置到 repo 的 Website 字段）
+
+### 站点内容只放 `gh-pages` 分支,`main` 不要有 `site/` / `docs/` 站点目录
+
+- `gh-pages` 分支根目录直接是站点:`index.html`、`styles.css`、`images/`（README 配图等）
+- 主分支工作流:`main` 上生成/重写 `site/` 临时目录 → 用 `git worktree add -B gh-pages <tmp> origin/gh-pages` 隔离 worktree → worktree 内 `git rm -rf .` + `git clean -fdx` 清空 → `Copy-Item site\*` 复制进去 → commit → `git push -u origin gh-pages` → `git worktree remove <tmp> --force`
+- 推送后**删掉** `main` 根下的 `site/`(走 `rm -- site/`,mavis-trash 可恢复)
+- 不要把 `site/` commit 到 `main` —— 会污染源码仓库
+
+### GitHub Pages 操作约束
+
+- **Save 按钮灰 = 当前设置已是已保存状态**,不是出错;改任意下拉(Source / Branch)才会激活 Save
+- **Custom domain 不要填 `hexo.blog.uwakeme.tech`**(本机 DNS 没配 A/CNAME,填了站点能 "live" 但访问 404);留空用默认 GitHub 子域
+- **unpublish 后无法用 Save 重新启用** —— 改下拉也未必生效。最稳的方法:推空 commit 到 `gh-pages`,GitHub 自动恢复部署:
+  ```bash
+  git worktree add -B gh-pages <tmp> origin/gh-pages
+  cd <tmp>
+  git commit --allow-empty -m "chore: trigger GitHub Pages redeploy after unpublish"
+  git push origin gh-pages
+  git worktree remove <tmp> --force
+  ```
+- 主页后续如需自动部署,加 GitHub Action workflow(push main 时同步更新 `gh-pages`);本机 `git credential` 不易导出 PAT,GitHub API 调用(设置 repo homepage 等)需要用户提供 PAT
+
 ## Release process (every version)
 
 1. Bump `version` in `package.json`
