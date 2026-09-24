@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.3.4] - 2026-09-24
 ### Added
 - **排查模板支持按服务分组** — 编辑模板时填一个分组名，列表左侧就能按组切换查看，不同服务的模板不再混在一起
 - **排查模板参数芯片可点击插入** — 编辑动作时点一下参数芯片，`${参数}` 就插入到输入框光标处，不用再手敲
