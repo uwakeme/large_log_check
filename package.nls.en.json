@@ -1,6 +1,6 @@
 {
   "ext.displayName": "Open Log Viewer",
-  "ext.description": "Open GB-scale log files in VS Code without freezing. Streamed reads, virtual scrolling, regex and multi-keyword search, level/thread/time filters, repeated-line folding, bookmarks, comments, timeline, and reusable investigation templates.",
+  "ext.description": "View large log files smoothly in VS Code: loading shows real progress, search/filter/paging respond instantly, and line/time jumps stream straight to the target. Regex and multi-keyword search, level/thread/time filters, repeated-line folding, bookmarks, comments, timeline, and reusable investigation templates.",
   "config.title": "Open Log Viewer",
   "config.search.debounceMs.description": "Debounce delay in milliseconds before the search runs automatically as you type in the search box.",
   "config.collapse.minRepeatCount.description": "Minimum number of consecutive repetitions before repeated log lines get folded.",

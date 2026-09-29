@@ -1,6 +1,6 @@
 {
   "ext.displayName": "Open Log Viewer",
-  "ext.description": "在 VSCode 里秒开 GB 级日志：流式读取 + 虚拟滚动,多 GB 也不卡。支持正则与多关键词搜索、级别/线程/时间过滤、重复日志折叠、书签注释与时间线,排查流程可存成模板一键重跑。",
+  "ext.description": "在 VSCode 里流畅查看大日志文件：载入带真实进度,搜索、过滤、翻页即时响应,跳转到行/时间走流式定位。支持正则与多关键词搜索、级别/线程/时间过滤、重复日志折叠、书签注释与时间线,排查流程可存成模板一键重跑。",
   "config.title": "Open Log Viewer",
   "config.search.debounceMs.description": "搜索框输入后自动触发搜索的防抖时间（毫秒）。",
   "config.collapse.minRepeatCount.description": "折叠重复日志时，至少重复多少次才会被折叠。",
