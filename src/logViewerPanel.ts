@@ -49,7 +49,7 @@ export class LogViewerPanel {
         // 否则，创建新面板
         const panel = vscode.window.createWebviewPanel(
             'logViewer',
-            `日志查看器 - ${path.basename(filePath)}`,
+            `Open Log Viewer - ${path.basename(filePath)}`,
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -355,7 +355,7 @@ export class LogViewerPanel {
                 return; // 读取期间面板被关闭/被新加载取代,丢弃本次结果
             }
 
-            this._panel.title = `日志查看器 - ${path.basename(fileUri.fsPath)}`;
+            this._panel.title = `Open Log Viewer - ${path.basename(fileUri.fsPath)}`;
 
             // 发送最终进度,随即发送 fileLoaded — 不再人为加 300ms 假延迟。
             this._panel.webview.postMessage({
@@ -694,7 +694,7 @@ export class LogViewerPanel {
                 await config.update('timeline.samplePoints', LogViewerPanel.clampInt(newSettings.timelineSamplePoints, 10, 10000, 200), vscode.ConfigurationTarget.Workspace);
             }
 
-            vscode.window.showInformationMessage('大日志文件查看器设置已保存');
+            vscode.window.showInformationMessage('Open Log Viewer 设置已保存');
 
             // 保存后重新同步配置到 WebView
             this.sendConfigToWebview();

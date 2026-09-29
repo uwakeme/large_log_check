@@ -6,7 +6,7 @@
     <!-- 防纵深:即便某处把日志内容拼进了 innerHTML,CSP 也会拦住外联脚本/请求。
          script/style 保留 'unsafe-inline' — 页面大量使用内联 onclick 与 style 属性。 -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src %%CSP_SOURCE%% 'unsafe-inline'; style-src %%CSP_SOURCE%% 'unsafe-inline'; font-src %%CSP_SOURCE%%; img-src %%CSP_SOURCE%% data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
-    <title>日志查看器</title>
+    <title>Open Log Viewer</title>
     <!-- 样式从扩展侧注入真实路径，这里使用占位符 -->
     <link rel="stylesheet" href="%%WEBVIEW_CSS%%">
     <link rel="stylesheet" href="%%THEMES_CSS%%">
@@ -43,7 +43,7 @@
     </script>
 </head>
 <body>
-    <header class="toolbar" role="toolbar" aria-label="日志查看器工具栏">
+    <header class="toolbar" role="toolbar" aria-label="Open Log Viewer 工具栏">
         <div class="file-info" role="region" aria-label="文件信息">
             <div><strong>文件:</strong> <span id="fileName" aria-live="polite">未加载</span></div>
             <div class="stats">
@@ -651,9 +651,9 @@
         </div>
     </div>
 
-    <!-- 排查模板:模板列表 -->
+    <!-- 排查模板:模板列表(与编辑器弹窗同宽,左侧分组导航需要横向空间) -->
     <div id="templatesModal" class="modal">
-        <div class="modal-content" style="max-width: 640px;">
+        <div class="modal-content" style="max-width: 780px;">
             <div class="modal-header">
                 <h3><i class="codicon codicon-checklist"></i> 排查模板</h3>
                 <span class="modal-close" onclick="closeTemplatesModal()">&times;</span>

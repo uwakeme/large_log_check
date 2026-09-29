@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**big-log-viewer** (大日志文件查看器) — a VSCode extension (publisher `wake`, current version `1.2.6`) for viewing and processing very large log files (multi-GB, tens of millions of lines). The user-facing value is virtual scrolling, multi-keyword/regex search, time/level/thread filtering, fold-repeating-lines, bookmarks, comments, and a timeline view. Features are documented for end-users in `README.md`; release history lives in `CHANGELOG.md` (Keep-a-Changelog format, `## [Unreleased]` at the top).
+**big-log-viewer** (Open Log Viewer) — a VSCode extension (publisher `wake`) for viewing and processing very large log files (multi-GB, tens of millions of lines). The user-facing value is virtual scrolling, multi-keyword/regex search, time/level/thread filtering, fold-repeating-lines, bookmarks, comments, and a timeline view. Features are documented for end-users in `README.md`; release history lives in `CHANGELOG.md` (Keep-a-Changelog format, `## [Unreleased]` at the top).
 
 ## Common commands
 

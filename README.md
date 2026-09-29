@@ -3,7 +3,7 @@
 <!-- 项目横幅与徽章 -->
 <div align="center">
 
-<img src="images/logo_banner.png" alt="Big Log Viewer 大日志文件查看器" width="100%" />
+<img src="images/logo_banner.png" alt="Open Log Viewer" width="100%" />
 
 **GB 级日志文件，在 VSCode 里秒开、可搜、可标注、可一键排查**
 
@@ -141,7 +141,7 @@
 
 ### 安装
 
-在扩展面板搜索「Big Log Viewer」或「大日志文件查看器」安装，也可以直接执行：
+在扩展面板搜索「Open Log Viewer」安装，也可以直接执行：
 
 ```bash
 code --install-extension wake.big-log-viewer
@@ -172,7 +172,7 @@ npm run package
 
 1. 资源管理器中右键 `.log` / `.txt` 文件，选「打开大日志文件」
 2. 打开文件后，点编辑器右上角的查看器图标
-3. 命令面板（`Ctrl+Shift+P`）执行「日志查看器: 打开大日志文件」
+3. 命令面板（`Ctrl+Shift+P`）执行「Open Log Viewer: 打开大日志文件」
 
 每个文件在独立面板中打开，标题栏显示文件名；书签、注释、高亮规则、搜索状态都按面板隔离，关闭面板即释放资源。
 
@@ -297,16 +297,16 @@ npm run package
 
 | 命令 | 说明 |
 | --- | --- |
-| `日志查看器: 打开大日志文件` | 选择一个日志文件在查看器中打开 |
-| `日志查看器: 高级搜索` | 打开查询构建器 |
-| `日志查看器: 排查模板` | 打开排查模板管理 |
-| `日志查看器: 书签管理` | 打开书签列表 |
-| `日志查看器: 注释管理` | 打开注释列表 |
-| `日志查看器: 跳转到行号` | 输入行号直接跳转 |
-| `日志查看器: 显示日志统计` | 查看总行数、级别分布、时间范围 |
-| `日志查看器: 刷新日志文件` | 重新读取文件（文件被外部更新后用） |
-| `日志查看器: 按时间删除日志` | 直接修改原文件，慎用 |
-| `日志查看器: 按行数删除日志` | 直接修改原文件，慎用 |
+| `Open Log Viewer: 打开大日志文件` | 选择一个日志文件在查看器中打开 |
+| `Open Log Viewer: 高级搜索` | 打开查询构建器 |
+| `Open Log Viewer: 排查模板` | 打开排查模板管理 |
+| `Open Log Viewer: 书签管理` | 打开书签列表 |
+| `Open Log Viewer: 注释管理` | 打开注释列表 |
+| `Open Log Viewer: 跳转到行号` | 输入行号直接跳转 |
+| `Open Log Viewer: 显示日志统计` | 查看总行数、级别分布、时间范围 |
+| `Open Log Viewer: 刷新日志文件` | 重新读取文件（文件被外部更新后用） |
+| `Open Log Viewer: 按时间删除日志` | 直接修改原文件，慎用 |
+| `Open Log Viewer: 按行数删除日志` | 直接修改原文件，慎用 |
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 

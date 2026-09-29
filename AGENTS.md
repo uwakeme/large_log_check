@@ -66,7 +66,7 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 正例（用户视角）：
 
 > - **折叠模式下搜索/筛选后页数不刷新、出现空白页** — 折叠浏览到第 N 页后搜索或筛选，**总页数仍显示 N 页**，翻到后面几页会完全空白
-> - **支持自定义日志级别缩写** — 像 `I` / `E` / `W` 这种简写现在能识别为 INFO / ERROR / WARN，在「设置 → 扩展 → 大日志文件查看器 → Level Aliases」里调整
+> - **支持自定义日志级别缩写** — 像 `I` / `E` / `W` 这种简写现在能识别为 INFO / ERROR / WARN，在「设置 → 扩展 → Open Log Viewer → Level Aliases」里调整
 
 反例（开发视角，不要这么写）：
 
@@ -133,7 +133,7 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 4. Commit as `<old> -> <new>` (e.g. `1.3.1 -> 1.3.2`), then create an annotated tag `v<x.y.z>` on that commit
 5. Push `main` and the tag together — every release MUST be tagged, because the README version badge reads the latest tag
 6. Generate the GitHub Release page content for the tag and hand it to the user; they create the release and upload the `.vsix` themselves (to GitHub and to the Marketplace — never run `vsce publish`):
-   - Title: `大日志文件查看器 v<x.y.z>`
+   - Title: `Open Log Viewer v<x.y.z>`
    - Notes: condensed from the release's CHANGELOG section — one short bullet per entry under `### Added / Changed / Fixed`
    - **No install instructions in the notes** — "how to install" lives only in `README.md`; the release body carries just the changelog summary, and the `.vsix` goes in as the attached binary
    - Label: Latest
