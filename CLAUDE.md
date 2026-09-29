@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**big-log-viewer** (Open Log Viewer) — a VSCode extension (publisher `wake`) for viewing and processing very large log files (multi-GB, tens of millions of lines). The user-facing value is virtual scrolling, multi-keyword/regex search, time/level/thread filtering, fold-repeating-lines, bookmarks, comments, and a timeline view. Features are documented for end-users in `README.md`; release history lives in `CHANGELOG.md` (Keep-a-Changelog format, `## [Unreleased]` at the top).
+**big-log-viewer** (Open Log Viewer) — a VSCode extension (publisher `wake`) for viewing and processing large log files (one auto-rotated chunk at a time, typically up to a few hundred MB). The user-facing value is paged rendering, multi-keyword/regex search, time/level/thread filtering, fold-repeating-lines, bookmarks, comments, and a timeline view. Opening a file loads ALL lines into memory (host + WebView); line/time jumps stream only a ±500-line window. Features are documented for end-users in `README.md`; release history lives in `CHANGELOG.md` (Keep-a-Changelog format, `## [Unreleased]` at the top).
 
 ## Common commands
 
@@ -58,7 +58,7 @@ The extension has three runtime layers and four source files. Knowing which laye
 
 - **Per-file panel singleton.** `LogViewerPanel._panels: Map<filePath, LogViewerPanel>` (`src/logViewerPanel.ts:8`). Opening the same file twice reveals the existing panel; opening a different file creates a new one. `LogViewerPanel.getActivePanel()` walks the map to find a visible panel — this is what every command in `extension.ts` dispatches into.
 - **State location matters.** Bookmarks, comments, highlight rules, and the in-memory paged view live in the **WebView** (`media/webview.js`). Total-line counts, file reads, and destructive operations (time/line delete) live in the **extension host** (`LogProcessor`). Commands that need to mutate the host state round-trip through `postMessage` (e.g. `getStatistics`, `toggleBookmarks`, `jumpToLineInFullLog`).
-- **Streams everywhere.** `LogProcessor` (`src/logProcessor.ts`) uses `fs.createReadStream` + `readline.createInterface({ crlfDelay: Infinity })` for every file operation, wrapping the stream in `new Promise(...)`. This is non-negotiable — loading the file whole would break GB-scale support.
+- **Streams everywhere (disk I/O).** `LogProcessor` (`src/logProcessor.ts`) uses `fs.createReadStream` + `readline.createInterface({ crlfDelay: Infinity })` for every file operation, wrapping the stream in `new Promise(...)`. This is non-negotiable. In-memory model is the opposite: `readAllLines` materializes the full file into `LogLine[]` and posts it to the WebView — the accepted per-chunk design (target: single files of a few hundred MB).
 - **Progress reporting.** `getTotalLines` accepts a `progressCallback` and fires every 10,000 lines. The panel surfaces this as the loading progress bar.
 - **Log parsing is regex-based, not parser-based.** Time-format detection iterates over five patterns (`timePatterns` in `logProcessor.ts:35`), and level detection iterates over `logLevelPatterns` in priority order. New formats are added by appending a regex, not by writing a parser.
 

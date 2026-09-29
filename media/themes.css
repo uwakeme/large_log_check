@@ -148,7 +148,6 @@ body[data-theme="neon"] .pagination .page-info { color: #4a6b78; }
 body[data-theme="neon"] .modal-content,
 body[data-theme="neon"] .confirm-dialog,
 body[data-theme="neon"] .dropdown-content,
-body[data-theme="neon"] .background-loading-indicator,
 body[data-theme="neon"] .loading-content {
     background: #0a1419;
     border: 1px solid #00f5ff;
@@ -389,7 +388,6 @@ body[data-theme="aurora"] .pagination .page-info strong { color: #67e8f9; }
 body[data-theme="aurora"] .modal-content,
 body[data-theme="aurora"] .confirm-dialog,
 body[data-theme="aurora"] .dropdown-content,
-body[data-theme="aurora"] .background-loading-indicator,
 body[data-theme="aurora"] .loading-content {
     background: rgba(11,15,31,.85);
     backdrop-filter: blur(24px) saturate(180%);
@@ -648,7 +646,6 @@ body[data-theme="holo"] .pagination .page-info strong { color: #22d3ee; }
 body[data-theme="holo"] .modal-content,
 body[data-theme="holo"] .confirm-dialog,
 body[data-theme="holo"] .dropdown-content,
-body[data-theme="holo"] .background-loading-indicator,
 body[data-theme="holo"] .loading-content {
     background: #181b22;
     border: 1px solid rgba(255,255,255,.08);

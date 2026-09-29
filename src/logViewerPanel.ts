@@ -395,12 +395,6 @@ export class LogViewerPanel {
         }
     }
 
-    private async loadMoreLines(_startLine: number, _count: number) {
-        // 已废弃:webview 在新协议下不再发送 loadMore 命令(改用 refresh 全量重载)。
-        // 保留为空实现仅为防御性兼容,避免遗漏的调用点触发未定义行为。
-        return;
-    }
-
     /**
      * 危险操作三选一通用助手:仅隐藏 / 导出到新文件 / 修改原文件。
      *

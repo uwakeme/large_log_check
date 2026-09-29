@@ -252,34 +252,6 @@ button .codicon {
     width: 90%;
 }
 
-/* 右下角后台加载进度提示 */
-.background-loading-indicator {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background-color: var(--vscode-editorWidget-background);
-    border: 1px solid var(--vscode-panel-border);
-    border-radius: 8px;
-    padding: 12px 16px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
-    min-width: 280px;
-    max-width: 360px;
-    animation: slideInFromRight 0.3s ease-out;
-    backdrop-filter: blur(8px);
-}
-
-@keyframes slideInFromRight {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
 /* 空状态提示;排除 button,避免覆盖 button.loading 的加载态样式 */
 .loading:not(button) {
     text-align: center;
@@ -1393,8 +1365,7 @@ select option {
         transition-duration: 0.01ms !important;
     }
     
-    .loading-overlay,
-    .background-loading-indicator {
+    .loading-overlay {
         animation: none;
     }
 }

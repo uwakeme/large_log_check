@@ -172,24 +172,7 @@
     <button id="scrollToTopBtn" onclick="scrollToTop()" aria-label="回到顶部" title="回到顶部">
         <i class="codicon codicon-arrow-up"></i>
     </button>
-    
-    <!-- 右下角后台加载进度提示 -->
-    <div class="background-loading-indicator" id="backgroundLoadingIndicator" style="display: none;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="flex: 1;">
-                <div style="background-color: var(--vscode-editorWidget-background); height: 6px; border-radius: 3px; overflow: hidden; border: 1px solid var(--vscode-panel-border); margin-bottom: 5px;">
-                    <div id="backgroundProgressBar" style="height: 100%; background: linear-gradient(90deg, #0e7490 0%, #06b6d4 100%); width: 0%; transition: width 0.3s ease;"></div>
-                </div>
-                <div id="backgroundProgressText" style="font-size: 11px; color: var(--vscode-descriptionForeground); text-align: center;">
-                    0%
-                </div>
-            </div>
-            <button onclick="cancelBackgroundLoading()" style="padding: 4px 8px; font-size: 11px; background: transparent; border: 1px solid var(--vscode-button-border); color: var(--vscode-button-foreground); cursor: pointer; border-radius: 3px;" title="停止后台加载">
-                <i class="codicon codicon-debug-pause"></i>
-            </button>
-        </div>
-    </div>
-    
+
     <!-- 分页控件 -->
     <nav class="pagination" id="pagination" style="display: none;" role="navigation" aria-label="日志分页导航">
         <button onclick="goToFirstPage()" id="firstPageBtn" aria-label="跳转到第一页"><i class="codicon codicon-chevron-left"></i><i class="codicon codicon-chevron-left"></i> 首页</button>

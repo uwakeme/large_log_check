@@ -412,8 +412,6 @@ let totalPages = 1;
 // 数据加载状态
 let totalLinesInFile = 0;
 let allDataLoaded = false;
-let isBackgroundLoading = false; // 是否正在后台加载
-let backgroundLoadChunkSize = 5000; // 每次后台加载的行数
 
 window.addEventListener('message', event => {
     dispatchWebviewMessage(event.data);
@@ -435,9 +433,6 @@ function dispatchWebviewMessage(message) {
             break;
         case 'fileLoadError':
             handleFileLoadError(message.data);
-            break;
-        case 'moreLines':
-            handleMoreLines(message.data);
             break;
         case 'searchResults':
             handleSearchResults(message.data);
@@ -610,13 +605,6 @@ function handleFileLoaded(data) {
         command: 'sampleTimeline',
         sampleCount: userSettings.timelineSamplePoints || 200  // 采样点数可配置
     });
-
-    // 如果数据未全部加载，启动后台加载
-    if (!allDataLoaded && allLines.length < totalLinesInFile) {
-        // 重置后台加载状态，并从当前偏移量开始统一加载
-        isBackgroundLoading = false;
-        startBackgroundLoading();
-    }
 }
 
 /** 宿主读取失败:收起全屏加载遮罩并提示 — 否则 loading-overlay 永久盖住工具栏 */
@@ -635,55 +623,10 @@ function handleFileLoadError(data) {
     }
 }
 
-function handleMoreLines(data) {
-    // 统一加载策略下,host 端 loadMoreLines 已返回全量数据而非增量片段。
-    // 但为了兼容旧版 host 或边缘场景,保留"小心的合并"逻辑:
-    // 1) 不重置页码 — 用户在浏览,不要破坏当前视图
-    // 2) 不清空已计算的页面范围 — 已渲染的页面不重算
-    // 3) 重新应用统一过滤 — 保持过滤态一致
-    const newLines = data.lines || [];
-    const startLine = typeof data.startLine === 'number' ? data.startLine : 0;
-
-    // 如果 host 实际返回的就是全量数据(新协议),直接整批替换
-    if (startLine === 0 && newLines.length > 0) {
-        baseLineOffset = 0;
-        fullDataCache = newLines.slice();
-        allLines = [...fullDataCache];
-        originalLines = [...fullDataCache];
-    } else {
-        // 旧协议:增量追加,做连续性检查
-        const expectedStart = baseLineOffset + fullDataCache.length;
-        if (startLine !== expectedStart) {
-            // 出现不连续,重置缓冲区为新数据
-            baseLineOffset = startLine;
-            fullDataCache = newLines.slice();
-            allLines = [...fullDataCache];
-            originalLines = [...fullDataCache];
-        } else {
-            fullDataCache = fullDataCache.concat(newLines);
-        }
-    }
-
-    // 重新应用统一过滤(如果有)
-    if (hasAnyFilter()) {
-        applyUnifiedFilters();
-    } else {
-        allLines = [...fullDataCache];
-        originalLines = [...fullDataCache];
-    }
-
-    // 不重置页码,不重置页面缓存,只触发异步计算新页面
-    handleDataChange({
-        resetPage: false,
-        clearPageRanges: false,
-        triggerAsyncCalc: true
-    });
-}
-
 /**
- * 统一的完整重载入口。所有需要重新获取数据的场景(滚动到底、
- * 点击"加载更多"、过滤前需要全量数据等)都走这里,触发 host 端
- * readAllLines 一次性加载整个文件,不再有分块/后台/增量加载。
+ * 统一的完整重载入口。所有需要重新获取数据的场景(跳转后只持有部分
+ * 窗口、过滤前需要全量数据等)都走这里,触发 host 端 readAllLines
+ * 一次性加载整个文件,不再有分块/后台/增量加载。
  */
 function requestFullReload() {
     vscode.postMessage({ command: 'refresh' });
@@ -777,49 +720,6 @@ function handleStatisticsResults(data) {
     console.log('📊 保存文件统计信息:', fileStats);
 
     showStatsModal(data);
-}
-
-// 使用新加载的行增量更新统计信息（仅更新基础数量与时间范围）
-function updateStatsWithNewLines(newLines) {
-    if (!fileStats || !Array.isArray(newLines) || newLines.length === 0) {
-        return;
-    }
-
-    fileStats.totalLines += newLines.length;
-
-    newLines.forEach(line => {
-        const level = (line.level || '').toUpperCase();
-        if (level === 'ERROR') {
-            fileStats.errorCount++;
-        } else if (level === 'WARN') {
-            fileStats.warnCount++;
-        } else if (level === 'INFO') {
-            fileStats.infoCount++;
-        } else if (level === 'DEBUG') {
-            fileStats.debugCount++;
-        } else {
-            fileStats.otherCount++;
-        }
-
-        if (line.timestamp) {
-            const ts = new Date(line.timestamp);
-            if (!fileStats.timeRange) {
-                fileStats.timeRange = { start: ts, end: ts };
-            } else {
-                const currentStart = fileStats.timeRange.start ? new Date(fileStats.timeRange.start) : null;
-                const currentEnd = fileStats.timeRange.end ? new Date(fileStats.timeRange.end) : null;
-
-                if (!currentStart || ts < currentStart) {
-                    fileStats.timeRange.start = ts;
-                }
-                if (!currentEnd || ts > currentEnd) {
-                    fileStats.timeRange.end = ts;
-                }
-            }
-        }
-    });
-
-    console.log('📊 统计信息已增量更新:', fileStats);
 }
 
 function handleTimelineData(data) {
@@ -3530,294 +3430,6 @@ function matchCondition(line, condition) {
 }
 
 
-// ========== 时间线功能 ==========
-function toggleTimeline() {
-    isTimelineExpanded = !isTimelineExpanded;
-    const content = document.getElementById('timelineContent');
-    const icon = document.getElementById('timelineToggleIcon');
-
-    if (isTimelineExpanded) {
-        content.style.display = 'block';
-        icon.textContent = '▼';
-    } else {
-        content.style.display = 'none';
-        icon.textContent = '▶';
-    }
-}
-
-function generateTimeline() {
-    // 提取所有带时间戳的日志
-    const logsWithTime = allLines.filter(line => line.timestamp);
-
-    if (logsWithTime.length === 0) {
-        document.getElementById('timelinePanel').style.display = 'none';
-        return;
-    }
-
-    // 显示时间线面板
-    document.getElementById('timelinePanel').style.display = 'block';
-
-    // 获取时间范围
-    const timestamps = logsWithTime.map(line => new Date(line.timestamp).getTime());
-    const minTime = Math.min(...timestamps);
-    const maxTime = Math.max(...timestamps);
-    const timeRange = maxTime - minTime;
-
-    // 分成20个时间段
-    const bucketCount = 20;
-    const bucketSize = timeRange / bucketCount;
-    const buckets = new Array(bucketCount).fill(0).map(() => ({
-        count: 0,
-        error: 0,
-        warn: 0,
-        info: 0,
-        debug: 0,
-        lines: []
-    }));
-
-    // 统计每个时间段的日志数量
-    logsWithTime.forEach(line => {
-        const time = new Date(line.timestamp).getTime();
-        const bucketIndex = Math.min(Math.floor((time - minTime) / bucketSize), bucketCount - 1);
-
-        buckets[bucketIndex].count++;
-        buckets[bucketIndex].lines.push(line);
-
-        const level = (line.level || 'OTHER').toUpperCase();
-        if (level === 'ERROR') buckets[bucketIndex].error++;
-        else if (level === 'WARN') buckets[bucketIndex].warn++;
-        else if (level === 'INFO') buckets[bucketIndex].info++;
-        else if (level === 'DEBUG') buckets[bucketIndex].debug++;
-    });
-
-    timelineData = {
-        buckets,
-        minTime,
-        maxTime,
-        bucketSize
-    };
-
-    // 绘制时间线
-    drawTimeline();
-
-    // 显示时间范围
-    const startDate = new Date(minTime);
-    const endDate = new Date(maxTime);
-    const info = document.getElementById('timelineInfo');
-    info.innerHTML = `<span>时间范围: ${formatDate(startDate)} 至 ${formatDate(endDate)}</span> <span style="margin-left: 20px;">总计: ${logsWithTime.length} 条日志</span>`;
-}
-
-function drawTimeline() {
-    if (!timelineData) return;
-
-    const canvas = document.getElementById('timelineCanvas');
-    const ctx = canvas.getContext('2d');
-
-    // 设置画布大小
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = 80;
-
-    // 清空画布
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const { buckets } = timelineData;
-    const maxCount = Math.max(...buckets.map(b => b.count));
-
-    const barWidth = canvas.width / buckets.length;
-    const maxHeight = canvas.height - 20;
-
-    // 绘制柱状图
-    buckets.forEach((bucket, i) => {
-        const x = i * barWidth;
-        const heightRatio = bucket.count / maxCount;
-
-        // 绘制分层柱状图（按级别）
-        let currentY = canvas.height - 20;
-
-        // ERROR (红色)
-        if (bucket.error > 0) {
-            const h = (bucket.error / bucket.count) * heightRatio * maxHeight;
-            ctx.fillStyle = '#f14c4c';
-            ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
-            currentY -= h;
-        }
-
-        // WARN (橙色)
-        if (bucket.warn > 0) {
-            const h = (bucket.warn / bucket.count) * heightRatio * maxHeight;
-            ctx.fillStyle = '#cca700';
-            ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
-            currentY -= h;
-        }
-
-        // INFO (蓝色)
-        if (bucket.info > 0) {
-            const h = (bucket.info / bucket.count) * heightRatio * maxHeight;
-            ctx.fillStyle = '#4fc1ff';
-            ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
-            currentY -= h;
-        }
-
-        // DEBUG (紫色)
-        if (bucket.debug > 0) {
-            const h = (bucket.debug / bucket.count) * heightRatio * maxHeight;
-            ctx.fillStyle = '#b267e6';
-            ctx.fillRect(x + 1, currentY - h, barWidth - 2, h);
-        }
-    });
-
-    // 绘制当前浏览位置指示器
-    drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth);
-
-    // 添加点击事件
-    canvas.onclick = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const bucketIndex = Math.floor(x / barWidth);
-
-        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-            const bucket = buckets[bucketIndex];
-            if (bucket.lines.length > 0) {
-                // 跳转到该时间段的第一条日志
-                const targetLine = bucket.lines[0];
-                jumpToLine(targetLine.lineNumber);
-            }
-        }
-    };
-
-    // 添加鼠标悬停提示
-    canvas.onmousemove = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const bucketIndex = Math.floor(x / barWidth);
-
-        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-            const bucket = buckets[bucketIndex];
-            const startTime = new Date(timelineData.minTime + bucketIndex * timelineData.bucketSize);
-            canvas.title = `${formatTime(startTime)}\n总计: ${bucket.count} 条\nERROR: ${bucket.error} | WARN: ${bucket.warn} | INFO: ${bucket.info} | DEBUG: ${bucket.debug}`;
-        }
-    };
-}
-
-function formatDate(date) {
-    return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-function formatTime(date) {
-    return date.toLocaleString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
-
-// 绘制当前浏览位置指示器
-function drawCurrentPositionIndicator(ctx, canvas, buckets, barWidth) {
-    if (!timelineData || buckets.length === 0) {
-        console.log('指示器：没有时间线数据');
-        return;
-    }
-
-    // 获取当前可见区域中间的行号
-    const visibleLines = getVisibleLines();
-    console.log(' 可见行数量:', visibleLines.length);
-
-    if (visibleLines.length === 0) {
-        console.log('指示器：没有可见行');
-        return;
-    }
-
-    // 取可见区域中间的日志行
-    const middleIndex = Math.floor(visibleLines.length / 2);
-    const currentLine = visibleLines[middleIndex];
-    console.log('📍 当前中间行:', currentLine);
-
-    if (!currentLine || !currentLine.lineNumber) {
-        console.log('指示器：当前行无效');
-        return;
-    }
-
-    // 在所有bucket中查找这条日志对应的时间戳
-    let currentTime = null;
-
-    for (let i = 0; i < buckets.length; i++) {
-        const bucket = buckets[i];
-        if (bucket.lines && bucket.lines.length > 0) {
-            const foundLine = bucket.lines.find(l => l.lineNumber === currentLine.lineNumber);
-            if (foundLine && foundLine.timestamp) {
-                currentTime = new Date(foundLine.timestamp).getTime();
-                console.log('找到精确时间戳:', new Date(currentTime).toLocaleString());
-                break;
-            }
-        }
-    }
-
-    // 如果没找到精确匹配，根据行号比例估算位置
-    if (!currentTime) {
-        // 计算当前行在整个文件中的相对位置
-        const totalLines = totalLinesInFile || allLines.length;
-        if (totalLines === 0) {
-            console.log('指示器：总行数为0');
-            return;
-        }
-
-        const relativePosition = currentLine.lineNumber / totalLines;
-        const timeRange = timelineData.maxTime - timelineData.minTime;
-        currentTime = timelineData.minTime + relativePosition * timeRange;
-        console.log('📊 估算时间戳（行号比例）:', new Date(currentTime).toLocaleString(), '比例:', relativePosition);
-    }
-
-    // 计算指示器在时间线上的位置
-    const timeRange = timelineData.maxTime - timelineData.minTime;
-    if (timeRange <= 0) {
-        console.log('指示器：时间范围无效');
-        return;
-    }
-
-    const relativePosition = (currentTime - timelineData.minTime) / timeRange;
-    const indicatorX = Math.max(0, Math.min(canvas.width, relativePosition * canvas.width));
-    console.log('指示器X位置:', indicatorX, '画布宽度:', canvas.width, '相对位置:', relativePosition);
-
-    // 绘制指示器（一条垂直的红线）
-    ctx.save();
-    ctx.strokeStyle = '#ff3333';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([]);
-
-    // 绘制垂直线
-    ctx.beginPath();
-    ctx.moveTo(indicatorX, 0);
-    ctx.lineTo(indicatorX, canvas.height - 20);
-    ctx.stroke();
-
-    // 绘制顶部三角形标记
-    ctx.fillStyle = '#ff3333';
-    ctx.beginPath();
-    ctx.moveTo(indicatorX, 0);
-    ctx.lineTo(indicatorX - 6, 10);
-    ctx.lineTo(indicatorX + 6, 10);
-    ctx.closePath();
-    ctx.fill();
-
-    // 绘制底部三角形标记
-    ctx.beginPath();
-    ctx.moveTo(indicatorX, canvas.height - 20);
-    ctx.lineTo(indicatorX - 6, canvas.height - 30);
-    ctx.lineTo(indicatorX + 6, canvas.height - 30);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-    console.log('指示器绘制完成');
-}
-
 // 获取当前可见的日志行
 function getVisibleLines() {
     const container = document.getElementById('logContainer');
@@ -4654,7 +4266,7 @@ function updatePagination() {
     } else {
         // 非折叠模式:按已加载数据算总页数。
         // 部分加载(跳转产生的上下文窗口)也只能按窗口算 — 按全文件算会显示
-        // 上万页,翻过去全是空白(loadMoreData 已废弃,不会再补数据)。
+        // 上万页,翻过去全是空白。
         totalPages = Math.ceil(allLines.length / pageSize);
     }
 
@@ -4694,34 +4306,6 @@ function updatePagination() {
         document.getElementById('nextPageBtn').disabled = currentPage === totalPages;
         document.getElementById('lastPageBtn').disabled = currentPage === totalPages;
     }
-
-    // 检查是否需要加载更多数据
-    checkAndLoadMore();
-}
-
-function checkAndLoadMore() {
-    // 如果已加载全部数据，不再加载
-    if (allDataLoaded) return;
-
-    // 如果处于过滤模式或搜索模式，不自动加载更多数据
-    if (isFiltering || currentSearchKeyword) {
-        console.log('🚫 处于过滤/搜索模式，不加载更多数据');
-        return;
-    }
-
-    // 如果当前页接近已加载数据的末尾，自动加载更多
-    const loadedLines = allLines.length;
-    const currentMaxLine = currentPage * pageSize;
-
-    if (currentMaxLine >= loadedLines - 500 && loadedLines < totalLinesInFile) {
-        loadMoreData();
-    }
-}
-
-function loadMoreData() {
-    // 已废弃:统一加载策略下数据已一次性全量加载,此函数无操作。
-    // 触发条件(loadedLines < totalLinesInFile)在 allDataLoaded=true 时永远不成立。
-    // 保留为 no-op 仅为防止遗漏的调用点触发未定义行为。
 }
 
 // 请求加载全部数据(用于统一过滤)
@@ -4739,7 +4323,7 @@ function requestAllData() {
         return;
     }
 
-    // 数据未完全加载(理论上不会发生 — 统一加载下始终全量)
+    // 数据未完全加载 — 发生在「跳转到行」后只持有 ±500 行上下文窗口的时候。
     // 触发完整重载,然后轮询直到 fileLoaded 事件设置 allDataLoaded=true,再应用过滤。
     // 单例定时器:重复调用先清旧的,否则快速切换筛选会叠出 N 个轮询;
     // 60 秒超时兜底,加载失败时不至于永久泄漏。
@@ -4765,91 +4349,6 @@ function requestAllData() {
             reloadPollTimer = null;
         }
     }, 500);
-}
-
-// 后台逐步加载数据 — 已废弃,统一改为单次 readAllLines。
-// 保留为纯 no-op:不触发任何 reload,不破坏用户当前视图。
-function startBackgroundLoading() {
-    if (isBackgroundLoading || allDataLoaded) {
-        return;
-    }
-    // 不做任何事 — 统一加载下数据已全量,无需后台补齐
-}
-
-// 加载下一批数据 — 已废弃,保留为 no-op。
-function loadNextChunk() {
-    if (allDataLoaded || !isBackgroundLoading) {
-        isBackgroundLoading = false;
-        return;
-    }
-    isBackgroundLoading = false;
-}
-
-function updateLoadingStatus() {
-    const loadedLines = document.getElementById('loadedLines');
-    if (loadedLines) {
-        if (isBackgroundLoading) {
-            const percent = Math.floor((allLines.length / totalLinesInFile) * 100);
-            loadedLines.textContent = `${allLines.length} (${percent}% 后台加载中...)`;
-        } else if (allDataLoaded) {
-            loadedLines.textContent = allLines.length + ' ✓';
-        } else {
-            loadedLines.textContent = allLines.length;
-        }
-    }
-}
-
-// 显示右下角后台加载进度提示
-function showBackgroundLoadingIndicator() {
-    const indicator = document.getElementById('backgroundLoadingIndicator');
-    if (indicator) {
-        indicator.style.display = 'block';
-        updateBackgroundLoadingProgress();
-    }
-}
-
-// 隐藏右下角后台加载进度提示
-function hideBackgroundLoadingIndicator() {
-    const indicator = document.getElementById('backgroundLoadingIndicator');
-    if (indicator) {
-        // 添加淡出动画
-        indicator.style.opacity = '0';
-        indicator.style.transition = 'opacity 0.3s ease-out';
-        setTimeout(() => {
-            indicator.style.display = 'none';
-            indicator.style.opacity = '1';
-        }, 300);
-    }
-}
-
-// 更新右下角后台加载进度
-function updateBackgroundLoadingProgress() {
-    const progressBar = document.getElementById('backgroundProgressBar');
-    const progressText = document.getElementById('backgroundProgressText');
-    
-    if (progressBar && progressText) {
-        const loaded = fullDataCache.length;
-        const total = totalLinesInFile;
-        const percent = Math.min(100, Math.floor((loaded / total) * 100));
-        
-        progressBar.style.width = percent + '%';
-        
-        if (percent >= 100) {
-            progressText.textContent = `加载完成！(${total.toLocaleString()} 行)`;
-        } else {
-            progressText.textContent = `${percent}% (${loaded.toLocaleString()} / ${total.toLocaleString()} 行)`;
-        }
-    }
-}
-
-// 取消后台加载
-function cancelBackgroundLoading() {
-    if (isBackgroundLoading) {
-        isBackgroundLoading = false;
-        hideBackgroundLoadingIndicator();
-        updateLoadingStatus();
-        showToast('已暂停后台加载');
-    }
 }
 
 function goToFirstPage() {
@@ -5090,97 +4589,6 @@ function generateTimelineFromSamples(sampledData) {
     `;
 
     // 延迟绘制
-    setTimeout(() => {
-        drawTimeline();
-    }, 100);
-}
-
-function generateTimeline() {
-    console.log('📊 开始生成时间线，allLines 数量:', allLines.length);
-
-    // 从allLines中提取时间戳
-    const timestamps = [];
-    const levelCounts = { ERROR: [], WARN: [], INFO: [], DEBUG: [], OTHER: [] };
-
-    for (let line of allLines) {
-        if (line.timestamp) {
-            timestamps.push(new Date(line.timestamp));
-        }
-    }
-
-    console.log('📊 提取到的时间戳数量:', timestamps.length);
-
-    // 如果没有时间戳，隐藏时间线
-    if (timestamps.length === 0) {
-        console.log('没有找到时间戳，隐藏时间线');
-        document.getElementById('timelinePanel').style.display = 'none';
-        return;
-    }
-
-    // 找出时间范围
-    timestamps.sort((a, b) => a - b);
-    const startTime = timestamps[0];
-    const endTime = timestamps[timestamps.length - 1];
-    const timeRange = endTime - startTime;
-
-    console.log('📊 时间范围:', startTime.toLocaleString(), '-', endTime.toLocaleString(), '，范围:', timeRange, 'ms');
-
-    // 如果时间范围太小（比如都是同一秒），不显示时间线
-    if (timeRange < 1000) { // 小于1秒
-        console.log('时间范围太小，隐藏时间线');
-        document.getElementById('timelinePanel').style.display = 'none';
-        return;
-    }
-
-    // 将时间分成若干个桶（bucket）
-    const bucketCount = 50; // 时间线分成50段
-    const bucketSize = timeRange / bucketCount;
-    const buckets = new Array(bucketCount).fill(0);
-    const bucketLevels = new Array(bucketCount).fill(null).map(() => ({ ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0, OTHER: 0 }));
-
-    // 统计每个桶的日志数量和级别分布
-    for (let line of allLines) {
-        if (line.timestamp) {
-            const time = new Date(line.timestamp);
-            const bucketIndex = Math.min(Math.floor((time - startTime) / bucketSize), bucketCount - 1);
-            buckets[bucketIndex]++;
-
-            const level = (line.level || 'OTHER').toUpperCase();
-            if (bucketLevels[bucketIndex][level] !== undefined) {
-                bucketLevels[bucketIndex][level]++;
-            } else {
-                bucketLevels[bucketIndex]['OTHER']++;
-            }
-        }
-    }
-
-    // 保存时间线数据
-    timelineData = {
-        startTime,
-        endTime,
-        timeRange,
-        buckets,
-        bucketLevels,
-        bucketSize,
-        bucketCount
-    };
-
-    console.log('时间线数据生成完成，准备绘制');
-
-    // 显示时间线面板
-    document.getElementById('timelinePanel').style.display = 'block';
-
-    // 更新时间信息（主信息 + 悬停附加信息占位）
-    const info = document.getElementById('timelineInfo');
-    info.innerHTML = `
-        <span id="timelineMainInfo">
-            📅 ${startTime.toLocaleString()} — ${endTime.toLocaleString()}
-            <span style="margin-left: 15px;">📊 共 ${timestamps.length} 条有时间戳的日志</span>
-        </span>
-        <span id="timelineHoverExtra" style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);"></span>
-    `;
-
-    // 延迟绘制，确保Canvas元素已经渲染好
     setTimeout(() => {
         drawTimeline();
     }, 100);

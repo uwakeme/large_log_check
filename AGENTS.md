@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Professional VSCode extension for viewing and processing very large log files (multi-GB, tens of millions of lines) — virtual scrolling, multi-keyword/regex search, time/level/thread filtering, fold-repeating-lines, bookmarks, comments, timeline view, and 4 selectable themes. File I/O is stream-based; the whole file is never loaded into memory.
+Professional VSCode extension for viewing and processing large log files (one auto-rotated chunk at a time, typically up to a few hundred MB) — paged rendering, multi-keyword/regex search, time/level/thread filtering, fold-repeating-lines, bookmarks, comments, timeline view, and 4 selectable themes. Disk reads are stream-based (`fs.createReadStream` + readline) with real byte progress; after loading, ALL lines live in memory (extension host + WebView copies) — a deliberate per-chunk design, NOT a multi-GB-file design. Line/time jumps use streaming window reads (±500 lines) and never reload the whole file.
 
 ## Setup commands
 
@@ -150,5 +150,5 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 
 - Never commit secrets — `.env` is in `.gitignore`
 - Destructive operations (`deleteByTime`, `deleteByLine`, file trim) modify the original file — the README warns to back up first; mirror that warning in any new destructive feature and in the WebView confirmation UI
-- Stream-based reads are mandatory; loading a whole multi-GB file would OOM the extension host
+- Stream-based disk reads are mandatory. Note the load model: `readAllLines` materializes every line in memory (host + WebView), so the design target is per-chunk files of a few hundred MB; do not add features that assume multi-GB single files
 - User-controllable regex in search runs inside the WebView's sandboxed VM, but be mindful of ReDoS in any new pattern — keep alternations bounded and avoid nested quantifiers
