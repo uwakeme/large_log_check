@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Big Log Viewer — VSCode 扩展,用于打开和排查大日志文件</title>
-  <meta name="description" content="Big Log Viewer 是 VSCode 扩展,把 GB 级服务器日志变成可打开、可搜索、可标注、可排查的工具。流式读取、虚拟滚动、多关键词搜索、时间线导航、书签注释、可重跑的排查模板。" />
-  <meta name="keywords" content="VSCode, 日志查看器, 大日志, log viewer, 大文件, 虚拟滚动, 排查模板" />
-  <meta property="og:title" content="Big Log Viewer — VSCode 扩展,用于打开和排查大日志文件" />
+  <title>Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件</title>
+  <meta name="description" content="Open Log Viewer 是 VSCode 扩展,把 GB 级服务器日志变成可打开、可搜索、可标注、可排查的工具。流式读取、虚拟滚动、多关键词搜索、时间线导航、书签注释、可重跑的排查模板。" />
+  <meta name="keywords" content="VSCode, Open Log Viewer, 大日志, log viewer, 大文件, 虚拟滚动, 排查模板" />
+  <meta property="og:title" content="Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件" />
   <meta property="og:description" content="把 GB 级服务器日志变成可打开、可搜索、可标注、可排查的工具。" />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="images/logo_banner.png" />
+  <link rel="icon" href="images/icon.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -18,8 +18,8 @@
     <div class="wrap topbar-inner">
       <a href="#top" class="brand">
         <span class="brand-mark"></span>
-        <span class="brand-name">Big Log Viewer</span>
-        <span class="brand-ver">v1.3.3</span>
+        <span class="brand-name">Open Log Viewer</span>
+        <span class="brand-ver">v1.3.5</span>
       </a>
       <nav class="topnav">
         <a href="#why">为什么</a>
@@ -41,9 +41,9 @@
         <div class="hero-text">
           <div class="eyebrow">
             <span class="dot"></span>
-            VSCode Extension · MIT · v1.3.3
+            VSCode Extension · MIT · v1.3.5
           </div>
-          <h1 class="display"><span>大日志文件查看器</span></h1>
+          <h1 class="display"><span>Open Log Viewer</span></h1>
           <p class="lede">
             VSCode 扩展。把几 GB 的服务器日志从「打不开」变成「可排查」 —
             流式读取、虚拟滚动,关键词 / 线程 / 类 / 级别叠加过滤,
@@ -113,7 +113,7 @@
             VSCode 默认打开 1 GB 以上的文件就废 — 全量读入内存,打开慢、滚动卡顿、搜索要等几分钟,跳不到想去的行。
           </p>
           <p>
-            Big Log Viewer 接管这件事:文件按流式读取,内存里只保留当前需要的数据,
+            Open Log Viewer 接管这件事:文件按流式读取,内存里只保留当前需要的数据,
             配合虚拟滚动把 GB 级文件压到秒开,边滚边加载,搜索 / 过滤 / 跳转都跟着节点来。
             排查要用的工具它也配齐了 — 多关键词搜索、级别 / 线程 / 时间过滤、时间线、书签 / 注释,还有把固定流程存成一键重跑的排查模板。
           </p>
@@ -564,16 +564,16 @@
       <p class="lede lede-quiet">所有功能都可从 VSCode 命令面板(<code>Ctrl+Shift+P</code>)调用。</p>
 
       <dl class="cmd-list">
-        <div class="cmd-row"><dt><code>日志查看器: 打开大日志文件</code></dt><dd>选择一个日志文件在查看器中打开</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 高级搜索</code></dt><dd>打开查询构建器</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 排查模板</code></dt><dd>打开排查模板管理</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 书签管理</code></dt><dd>查看 / 编辑 / 导出书签</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 注释管理</code></dt><dd>查看 / 编辑 / 删除注释</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 跳转到行号</code></dt><dd>输入行号直接跳转</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 显示日志统计</code></dt><dd>总行数、级别分布、时间范围</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 刷新日志文件</code></dt><dd>文件被外部更新后重新读取</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 按时间删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
-        <div class="cmd-row"><dt><code>日志查看器: 按行数删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 打开大日志文件</code></dt><dd>选择一个日志文件在查看器中打开</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 高级搜索</code></dt><dd>打开查询构建器</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 排查模板</code></dt><dd>打开排查模板管理</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 书签管理</code></dt><dd>查看 / 编辑 / 导出书签</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 注释管理</code></dt><dd>查看 / 编辑 / 删除注释</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 跳转到行号</code></dt><dd>输入行号直接跳转</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 显示日志统计</code></dt><dd>总行数、级别分布、时间范围</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 刷新日志文件</code></dt><dd>文件被外部更新后重新读取</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 按时间删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 按行数删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
       </dl>
     </div>
   </section>
@@ -590,7 +590,7 @@
       <div class="install-grid">
         <div class="install-block">
           <div class="install-label">方式 A · 扩展市场(推荐)</div>
-          <p>在扩展面板搜索「Big Log Viewer」或「大日志文件查看器」,或直接执行:</p>
+          <p>在扩展面板搜索「Open Log Viewer」或「Open Log Viewer」,或直接执行:</p>
           <div class="install-cmd">
             <span class="prompt-sigil">$</span>
             <code>code --install-extension wake.big-log-viewer</code>
@@ -621,8 +621,8 @@ $ npm run package</code></pre>
     <div class="wrap foot-inner">
       <div class="foot-brand">
         <span class="brand-mark"></span>
-        <span class="brand-name">Big Log Viewer</span>
-        <span class="foot-meta">v1.3.3 · MIT · © <a href="https://github.com/uwakeme" target="_blank" rel="noopener">@uwakeme</a></span>
+        <span class="brand-name">Open Log Viewer</span>
+        <span class="foot-meta">v1.3.5 · MIT · © <a href="https://github.com/uwakeme" target="_blank" rel="noopener">@uwakeme</a></span>
       </div>
       <nav class="foot-links">
         <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener">仓库</a>
