@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件</title>
-  <meta name="description" content="Open Log Viewer 是 VSCode 扩展,把 GB 级服务器日志变成可打开、可搜索、可标注、可排查的工具。流式读取、虚拟滚动、多关键词搜索、时间线导航、书签注释、可重跑的排查模板。" />
-  <meta name="keywords" content="VSCode, Open Log Viewer, 大日志, log viewer, 大文件, 虚拟滚动, 排查模板" />
+  <meta name="description" content="Open Log Viewer 是 VSCode 扩展,把服务器日志块变成可打开、可搜索、可标注、可排查的工具。整块载入带真实进度、多关键词搜索、时间线导航、书签注释、可重跑的排查模板。" />
+  <meta name="keywords" content="VSCode, Open Log Viewer, 大日志, log viewer, 大文件, 日志分块, 排查模板" />
   <meta property="og:title" content="Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件" />
-  <meta property="og:description" content="把 GB 级服务器日志变成可打开、可搜索、可标注、可排查的工具。" />
+  <meta property="og:description" content="把服务器日志块变成可打开、可搜索、可标注、可排查的工具。" />
   <meta property="og:type" content="website" />
   <link rel="icon" href="images/icon.png" />
   <link rel="stylesheet" href="styles.css" />
@@ -45,8 +45,8 @@
           </div>
           <h1 class="display"><span>Open Log Viewer</span></h1>
           <p class="lede">
-            VSCode 扩展。把几 GB 的服务器日志从「打不开」变成「可排查」 —
-            流式读取、虚拟滚动,关键词 / 线程 / 类 / 级别叠加过滤,
+            VSCode 扩展。把服务器日志块从「打不开」变成「可排查」 —
+            整块载入带真实进度,关键词 / 线程 / 类 / 级别叠加过滤即时响应,
             时间线导航,书签注释,可一键重跑的排查模板。
           </p>
           <div class="install">
@@ -67,7 +67,7 @@
             <div class="hero-mock-bar">
               <span class="hero-mock-dot"></span><span class="hero-mock-dot"></span><span class="hero-mock-dot"></span>
               <span class="hero-mock-title">server.log</span>
-              <span class="hero-mock-meta">1.20 GB · 9,432,108 行</span>
+              <span class="hero-mock-meta">486 MB · 3,712,540 行</span>
             </div>
             <div class="hero-mock-search">
               <span class="hero-mock-icon">⌕</span>
@@ -109,12 +109,13 @@
       <div class="why-grid">
         <div class="why-text">
           <p>
-            线上问题排查要翻的服务器日志,经常几百 MB 起步,几个 GB 不稀奇。
-            VSCode 默认打开 1 GB 以上的文件就废 — 全量读入内存,打开慢、滚动卡顿、搜索要等几分钟,跳不到想去的行。
+            线上问题排查要翻的服务器日志,经常几百 MB 起步,而且通常按大小或日期自动分块。
+            VSCode 直接打开这类文件就废 — 打开慢、滚动卡顿、搜索要等几分钟,跳不到想去的行。
           </p>
           <p>
-            Open Log Viewer 接管这件事:文件按流式读取,内存里只保留当前需要的数据,
-            配合虚拟滚动把 GB 级文件压到秒开,边滚边加载,搜索 / 过滤 / 跳转都跟着节点来。
+            Open Log Viewer 接管这件事:按「单块日志」设计,一块一块看正好是排查的自然节奏。
+            打开时整块载入并显示真实进度,载入完成后搜索 / 过滤 / 翻页都在内存里即时完成;
+            跳转到行 / 时间走流式定位,只读目标行附近的上下文,不用重新载入。
             排查要用的工具它也配齐了 — 多关键词搜索、级别 / 线程 / 时间过滤、时间线、书签 / 注释,还有把固定流程存成一键重跑的排查模板。
           </p>
           <p class="quiet">
@@ -129,15 +130,15 @@
           <div class="why-mock-issue">
             <div class="why-mock-issue-line">
               <span class="why-mock-x">×</span>
-              <span>1 GB 文件直接卡死或拒绝打开</span>
+              <span>几百 MB 的文件打开就卡,更大直接拒绝</span>
             </div>
             <div class="why-mock-issue-line">
               <span class="why-mock-x">×</span>
-              <span>全量读入内存,占用几个 GB</span>
+              <span>全量渲染,内存占用高、界面易无响应</span>
             </div>
             <div class="why-mock-issue-line">
               <span class="why-mock-x">×</span>
-              <span>搜索全文件要几分钟</span>
+              <span>全文件搜索要等几分钟</span>
             </div>
             <div class="why-mock-issue-line">
               <span class="why-mock-x">×</span>
@@ -148,11 +149,11 @@
           <div class="why-mock-solve">
             <div class="why-mock-solve-line">
               <span class="why-mock-check">✓</span>
-              <span>流式读取,内存只保留当前可见范围</span>
+              <span>打开带真实进度,载入后搜索 / 翻页即时响应</span>
             </div>
             <div class="why-mock-solve-line">
               <span class="why-mock-check">✓</span>
-              <span>GB 级文件秒开,虚拟滚动边滚边加载</span>
+              <span>跳转到行 / 时间流式定位,只读附近上下文</span>
             </div>
             <div class="why-mock-solve-line">
               <span class="why-mock-check">✓</span>
@@ -175,15 +176,15 @@
         <h2>核心能力</h2>
       </header>
 
-      <!-- 01 · I/O — 加载进度 + 虚拟滚动 -->
+      <!-- 01 · I/O — 整块载入 + 分页浏览 -->
       <article class="feat">
         <div class="feat-text">
           <div class="feat-tag">01 · I/O</div>
-          <h3>GB 级文件秒开</h3>
+          <h3>整块载入与分页浏览</h3>
           <p>
-            文件读取全程流式,不把整个文件读进内存,多 GB 也不会撑爆扩展进程。
-            虚拟滚动只渲染屏幕内的行,加载有真实进度(百分比、已读行数、当前阶段),不是转圈假动画。
-            每页显示行数 50 到 1000 行可调。
+            打开时整块载入,磁盘读取全程流式,进度按真实字节推进(百分比、已读行数),不是转圈假动画。
+            载入后分页浏览,每页只渲染当前页的行(50 到 1000 行可调),百万行日志翻页也不卡;
+            跳转到行 / 时间走流式定位,只读取目标行附近 ±500 行上下文。
           </p>
           <ul class="feat-bullets">
             <li>多文件同时打开,各占独立面板,状态互不干扰</li>
@@ -191,18 +192,18 @@
           </ul>
         </div>
         <figure class="feat-shot">
-          <div class="fm-io" role="img" aria-label="加载进度 87%,书签行高亮,虚拟滚动示意">
+          <div class="fm-io" role="img" aria-label="加载进度 87%,书签行高亮,分页浏览示意">
             <div class="fm-io-progress">
               <span class="fm-io-progress-label">加载中</span>
               <div class="fm-io-bar"><div class="fm-io-bar-fill"></div></div>
               <span class="fm-io-progress-pct">87<small>%</small></span>
-              <span class="fm-io-progress-meta">8,234,108 / 9,432,108 行</span>
+              <span class="fm-io-progress-meta">3,246,802 / 3,712,540 行</span>
             </div>
             <div class="fm-io-lines">
-              <div class="fm-io-line"><span class="fm-io-line-num">8,234,106</span><span class="fm-io-time">12:34:55</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Cache hit ratio: 0.94</span></div>
-              <div class="fm-io-line fm-io-line-bookmarked"><span class="fm-io-line-num">8,234,107</span><span class="fm-io-time">12:34:56</span><span class="fm-io-level fm-io-error">ERROR</span><span class="fm-io-msg">Database connection refused</span></div>
-              <div class="fm-io-line"><span class="fm-io-line-num">8,234,108</span><span class="fm-io-time">12:34:57</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Retry attempt 1 of 3</span></div>
-              <div class="fm-io-line"><span class="fm-io-line-num">8,234,109</span><span class="fm-io-time">12:34:58</span><span class="fm-io-level fm-io-warn">WARN</span><span class="fm-io-msg">Slow query: 1.2s on /users/123</span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,827</span><span class="fm-io-time">12:34:55</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Cache hit ratio: 0.94</span></div>
+              <div class="fm-io-line fm-io-line-bookmarked"><span class="fm-io-line-num">3,246,828</span><span class="fm-io-time">12:34:56</span><span class="fm-io-level fm-io-error">ERROR</span><span class="fm-io-msg">Database connection refused</span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,829</span><span class="fm-io-time">12:34:57</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Retry attempt 1 of 3</span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,830</span><span class="fm-io-time">12:34:58</span><span class="fm-io-level fm-io-warn">WARN</span><span class="fm-io-msg">Slow query: 1.2s on /users/123</span></div>
             </div>
           </div>
         </figure>
@@ -286,7 +287,7 @@
             <div class="fm-timeline-current">
               <span class="fm-timeline-current-label">当前位置</span>
               <span class="fm-timeline-current-time">15:42:31</span>
-              <span class="fm-timeline-current-line">第 5,234,108 行 · ERROR</span>
+              <span class="fm-timeline-current-line">第 2,418,663 行 · ERROR</span>
             </div>
           </div>
         </figure>
@@ -362,27 +363,27 @@
           <div class="fm-annotate" role="img" aria-label="书签行 + 注释列表示意">
             <div class="fm-annotate-lines">
               <div class="fm-a-line fm-a-line-bookmarked">
-                <span class="fm-a-num">8,234,107</span>
+                <span class="fm-a-num">3,246,828</span>
                 <span class="fm-a-time">12:34:56</span>
                 <span class="fm-a-level fm-a-error">ERROR</span>
                 <span class="fm-a-msg">Database connection refused</span>
                 <span class="fm-a-tag">📌 第一次失败</span>
               </div>
               <div class="fm-a-line">
-                <span class="fm-a-num">8,234,108</span>
+                <span class="fm-a-num">3,246,829</span>
                 <span class="fm-a-time">12:34:57</span>
                 <span class="fm-a-level fm-a-info">INFO</span>
                 <span class="fm-a-msg">Retry attempt 1 of 3</span>
               </div>
               <div class="fm-a-line fm-a-line-bookmarked">
-                <span class="fm-a-num">8,234,205</span>
+                <span class="fm-a-num">3,246,926</span>
                 <span class="fm-a-time">12:35:01</span>
                 <span class="fm-a-level fm-a-error">ERROR</span>
                 <span class="fm-a-msg">Failed to acquire connection</span>
                 <span class="fm-a-tag">📌 重试后仍失败</span>
               </div>
               <div class="fm-a-line">
-                <span class="fm-a-num">8,234,206</span>
+                <span class="fm-a-num">3,246,927</span>
                 <span class="fm-a-time">12:35:02</span>
                 <span class="fm-a-level fm-a-info">INFO</span>
                 <span class="fm-a-msg">Cache invalidated, size 0</span>
@@ -391,11 +392,11 @@
             <div class="fm-annotate-comments">
               <div class="fm-c-title">注释 · 2 条</div>
               <div class="fm-c-item">
-                <span class="fm-c-line">8,234,107</span>
+                <span class="fm-c-line">3,246,828</span>
                 <span class="fm-c-text">"首次失败 — 怀疑 redis 集群脑裂,需要看 cluster log"</span>
               </div>
               <div class="fm-c-item">
-                <span class="fm-c-line">8,234,205</span>
+                <span class="fm-c-line">3,246,926</span>
                 <span class="fm-c-text">"重试仍失败 — 上游连接池耗尽"</span>
               </div>
             </div>
@@ -469,7 +470,7 @@
             <div class="mock-bar">
               <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
               <span class="mock-title">server.log</span>
-              <span class="mock-meta">1.2 GB</span>
+              <span class="mock-meta">486 MB</span>
             </div>
             <div class="mock-search">⌕ query timeout</div>
             <div class="mock-lines">
@@ -491,7 +492,7 @@
             <div class="mock-bar">
               <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
               <span class="mock-title">server.log</span>
-              <span class="mock-meta">1.2 GB</span>
+              <span class="mock-meta">486 MB</span>
             </div>
             <div class="mock-search">⌕ query timeout</div>
             <div class="mock-lines">
@@ -513,7 +514,7 @@
             <div class="mock-bar">
               <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
               <span class="mock-title">server.log</span>
-              <span class="mock-meta">1.2 GB</span>
+              <span class="mock-meta">486 MB</span>
             </div>
             <div class="mock-search">⌕ query timeout</div>
             <div class="mock-lines">
@@ -535,7 +536,7 @@
             <div class="mock-bar">
               <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
               <span class="mock-title">server.log</span>
-              <span class="mock-meta">1.2 GB</span>
+              <span class="mock-meta">486 MB</span>
             </div>
             <div class="mock-search">⌕ query timeout</div>
             <div class="mock-lines">
