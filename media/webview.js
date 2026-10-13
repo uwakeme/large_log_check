@@ -1700,6 +1700,35 @@ function search() {
 }
 
 /**
+ * 清空搜索框内容(输入框右侧 × 按钮)
+ * 当前页搜索进行中→退出当前页搜索;全局关键词过滤生效中→清除关键词过滤;否则仅清空输入
+ */
+function clearSearchInput() {
+    const input = document.getElementById('searchInput');
+    if (!input) { return; }
+    input.value = '';
+    updateSearchClearBtnVisibility();
+
+    if (window._currentPageSearchBackup) {
+        // 当前页搜索进行中:走它自己的恢复逻辑(还原数据集、页码与状态面板按钮)
+        clearCurrentPageSearch();
+    } else if (unifiedFilters.keyword) {
+        clearFilter('keyword');
+    }
+
+    // 焦点留在输入框,方便直接输入下一个关键词(焦点监听会照常弹出搜索历史)
+    input.focus();
+}
+
+/** 根据输入框是否有内容切换清空按钮显隐 */
+function updateSearchClearBtnVisibility() {
+    const input = document.getElementById('searchInput');
+    const btn = document.getElementById('searchClearBtn');
+    if (!input || !btn) { return; }
+    btn.classList.toggle('show', input.value.length > 0);
+}
+
+/**
  * 在当前页搜索
  */
 function searchInCurrentPage(keyword, isRegex) {
@@ -1941,6 +1970,7 @@ function selectSearchHistoryItem(index) {
     if (!entry || !activeSearchHistoryInput) { return; }
     const input = activeSearchHistoryInput;
     input.value = entry.keyword;
+    updateSearchClearBtnVisibility();
     hideAllSearchHistoryDropdowns();
     if (input.id === 'searchInput') {
         // 首页:还原正则开关并立即重搜
@@ -3972,6 +4002,7 @@ async function jumpToLineInFullLog(lineNumber) {
     // 清除搜索关键词和过滤状态
     currentSearchKeyword = '';
     document.getElementById('searchInput').value = '';
+    updateSearchClearBtnVisibility();
     isFiltering = false;
 
     // 🔧 关键修复：如果数据已经完全加载，直接在当前数据中跳转，不需要重新加载
@@ -4063,6 +4094,7 @@ function handleJumpToTimeResult(data) {
             currentFilterValue = null;
             hideFilterStatus();
             document.getElementById('searchInput').value = '';
+            updateSearchClearBtnVisibility();
 
             // 请求重新加载完整日志并跳转
             vscode.postMessage({
@@ -4242,6 +4274,7 @@ function refresh() {
     setButtonLoadingById('refreshBtn', true);
     currentSearchKeyword = '';
     document.getElementById('searchInput').value = '';
+    updateSearchClearBtnVisibility();
     currentPage = 1;
     isFiltering = false; // 退出过滤模式
     vscode.postMessage({
@@ -4833,6 +4866,7 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
 
     // 输入时即时搜索（防抖）
     input.addEventListener('input', function () {
+        updateSearchClearBtnVisibility();
         // 输入变化跟随过滤历史;下拉未开(如刚搜索完)则重新弹出
         updateSearchHistoryFilter(this);
         // 防抖：用户停止输入一小段时间后再触发搜索，避免频繁请求
@@ -4857,6 +4891,18 @@ document.getElementById('timelineCanvas').addEventListener('mousemove', function
             hideAllSearchHistoryDropdowns();
         }
     });
+
+    // 清空按钮:取消尚未触发的防抖搜索,避免清空后旧防抖又跑一次空搜索
+    // (清空文本/清除过滤本身由 onclick 的 clearSearchInput 完成)
+    const clearBtn = document.getElementById('searchClearBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            if (instantSearchTimer) {
+                clearTimeout(instantSearchTimer);
+                instantSearchTimer = null;
+            }
+        });
+    }
 
     // 回车键触发搜索;主动执行搜索时收起历史下拉(即时搜索不收,避免弹出又被防抖搜索关掉)
     input.addEventListener('keypress', function (e) {

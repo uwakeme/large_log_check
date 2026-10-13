@@ -6,8 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.3.6] - 2026-10-13
+### Added
+- **搜索框一键清空** — 输入内容后搜索框右侧出现 × 按钮，点一下清空关键词并恢复未过滤的日志列表；正在当前页搜索时也能一键退出
+
 ### Changed
-- 修改项目介绍
+- **插件市场简介改为按实际表现描述** — 不再承诺「秒开」，改为说明载入有真实进度、搜索过滤翻页即时响应、跳转到行/时间走流式定位
+- **顶部横幅图更新** — 品牌图同步为 Open Log Viewer
 
 ## [1.3.5] - 2026-09-29
 ### Changed

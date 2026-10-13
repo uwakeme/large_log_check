@@ -55,6 +55,9 @@
         <div class="search-box" role="search" aria-label="搜索日志">
             <div class="search-input-wrap">
                 <input type="text" id="searchInput" placeholder="搜索日志内容（多关键词用空格分隔）..." aria-label="搜索关键词">
+                <button type="button" id="searchClearBtn" class="search-clear-btn" onclick="clearSearchInput()" aria-label="清空搜索内容" title="清空搜索内容">
+                    <i class="codicon codicon-close"></i>
+                </button>
                 <div class="search-history-dropdown" id="searchHistoryDropdown" role="listbox" aria-label="搜索历史"></div>
             </div>
             <label style="font-size: 12px; display: flex; align-items: center; gap: 5px;">

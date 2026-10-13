@@ -2,7 +2,7 @@
   "name": "big-log-viewer",
   "displayName": "%ext.displayName%",
   "description": "%ext.description%",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "license": "MIT",
   "publisher": "wake",
   "icon": "icon.png",

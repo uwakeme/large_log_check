@@ -1244,6 +1244,49 @@ select option {
     min-width: 200px;
 }
 
+/* 输入框给右侧清空按钮留出空间,长文本不至于滑到按钮底下 */
+#searchInput {
+    padding-right: 28px;
+}
+
+/* 搜索框内「清空」按钮:输入框有内容时浮在右侧(显隐由 .show 类控制)。
+   基础规则用 .search-box button.search-clear-btn 抬高优先级,
+   避免 body[data-theme] button 的主题底色/边框/悬停发光盖掉这里的透明样式 */
+.search-box button.search-clear-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    min-height: 20px;
+    padding: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 3px;
+    color: var(--vscode-input-foreground);
+    opacity: 0.7;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.search-box button.search-clear-btn.show {
+    display: flex;
+}
+
+.search-box button.search-clear-btn:hover:not(:disabled) {
+    opacity: 1;
+    background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
+    color: var(--vscode-input-foreground);
+    border: none;
+    box-shadow: none;
+    /* 重新声明:主题 hover 的 transform:none 优先级虽低,但不能让它顶掉居中位移 */
+    transform: translateY(-50%);
+}
+
 .search-history-dropdown {
     display: none;
     position: fixed;
