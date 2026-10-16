@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **排查模板执行后搜索框的清空按钮不再消失** — 之前模板把关键词填进搜索框时右侧不显示 × 按钮，手动输入才有；现在只要搜索框里有内容就会显示
 
 ## [1.3.6] - 2026-10-13
 ### Added

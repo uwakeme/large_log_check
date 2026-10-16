@@ -1273,7 +1273,10 @@ select option {
     cursor: pointer;
 }
 
-.search-box button.search-clear-btn.show {
+/* 显隐完全由 CSS 派生:输入框有内容(placeholder 隐藏)即出现,
+   值变化(含程序赋值)由浏览器样式引擎自动重估,无需任何 JS 事件同步。
+   依赖: #searchInput 必须带非空 placeholder,移除 placeholder 此规则失效 */
+#searchInput:not(:placeholder-shown) + button.search-clear-btn {
     display: flex;
 }
 
