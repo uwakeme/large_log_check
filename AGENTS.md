@@ -2,6 +2,14 @@
 
 Professional VSCode extension for viewing and processing large log files (one auto-rotated chunk at a time, typically up to a few hundred MB) — paged rendering, multi-keyword/regex search, time/level/thread filtering, fold-repeating-lines, bookmarks, comments, timeline view, and 4 selectable themes. Disk reads are stream-based (`fs.createReadStream` + readline) with real byte progress; after loading, ALL lines live in memory (extension host + WebView copies) — a deliberate per-chunk design, NOT a multi-GB-file design. Line/time jumps use streaming window reads (±500 lines) and never reload the whole file.
 
+## Why this exists (motivation — use this framing in user-facing copy)
+
+The author's real driver: people around them inspect log files with **记事本 (Notepad) / Notepad++ / `less`**, whose search-and-filter capabilities are very limited. This tool exists to give those people a dedicated log viewer.
+
+**Do not frame the problem as "VSCode can't open big files"** — that is a weaker, partly inaccurate story. Lead with the 记事本/Notepad++ angle ("别再用记事本看日志了"). The accurate framing is: 缺的从来不是「能打开」，是「快速定位」——在几十万行里快速定位到那几行的能力（搜索 / 过滤 / 跳转 / 时间线是一套完整动作），不是单纯的「筛选」。
+
+**文风**：面向程序员的工具介绍，只讲功能和使用，**不讲代码与实现**（不写架构分层、类名/接口、流式读取、内存模型等）。性能只说用户能感知的结论（"翻页不卡""搜索是即时的"），不解释原理。
+
 ## Setup commands
 
 - Install deps: `npm install`
