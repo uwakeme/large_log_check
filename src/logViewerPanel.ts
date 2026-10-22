@@ -819,6 +819,10 @@ export class LogViewerPanel {
         const searchHistoryScriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'searchHistory.js')
         );
+        // 日志选区复制脚本(接管 Ctrl+C,必须先于 webview.js 加载——webview.js 末尾会调 initLogClipboard)
+        const clipboardScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'clipboard.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -833,6 +837,7 @@ export class LogViewerPanel {
             .replace(/%%WEBVIEW_JS%%/g, scriptUri.toString())
             .replace(/%%TEMPLATES_JS%%/g, templatesScriptUri.toString())
             .replace(/%%SEARCH_HISTORY_JS%%/g, searchHistoryScriptUri.toString())
+            .replace(/%%CLIPBOARD_JS%%/g, clipboardScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 

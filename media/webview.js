@@ -5823,3 +5823,6 @@ if (logContainer) {
 
 // 初始化回到顶部按钮
 initScrollToTopButton();
+
+// 接管日志选区的复制(选中日志后 Ctrl+C),见 media/clipboard.js
+initLogClipboard();
