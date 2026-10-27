@@ -126,6 +126,7 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 
 ### GitHub Pages 操作约束
 
+- **版本号自动同步(2026-10-27 起)**:`index.html` 三处版本号(页顶徽章 / eyebrow / 页脚)带 `js-ver` class,页面加载时向 GitHub API 取 `releases/latest` 的 tag 动态填充;**发版只需发布 GitHub Release,主页版本号无需重新部署**。写死的版本号是拉取失败时的兜底,手改主页时记得同步更新兜底值
 - **Save 按钮灰 = 当前设置已是已保存状态**,不是出错;改任意下拉(Source / Branch)才会激活 Save
 - **Custom domain 不要填 `hexo.blog.uwakeme.tech`**(本机 DNS 没配 A/CNAME,填了站点能 "live" 但访问 404);留空用默认 GitHub 子域
 - **unpublish 后无法用 Save 重新启用** —— 改下拉也未必生效。最稳的方法:推空 commit 到 `gh-pages`,GitHub 自动恢复部署:
