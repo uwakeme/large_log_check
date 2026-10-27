@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **点过搜索框后，选中日志按 Ctrl+C 复制不出来** — 在新版 VS Code（1.143 及以上）里，只要在搜索框里点过一次，之后再选中日志复制就会失败，光标还会自己跳回搜索框；现在日志查看器把焦点稳稳留在日志区，任何 VS Code 版本下选中即可复制
 
 ## [1.3.7] - 2026-10-27
 ### Fixed

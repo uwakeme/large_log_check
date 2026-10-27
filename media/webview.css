@@ -170,6 +170,12 @@ button .codicon {
     line-height: 1.5;
 }
 
+/* 日志区会通过 tabindex="-1" 承接焦点(见 media/clipboard.js),不给它画焦点框 */
+.log-container:focus,
+.log-container:focus-visible {
+    outline: none;
+}
+
 .log-line {
     padding: 4px 0;
     border-bottom: 1px solid var(--vscode-panel-border);

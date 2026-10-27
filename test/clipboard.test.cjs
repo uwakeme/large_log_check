@@ -23,13 +23,16 @@ function loadSandbox(options = {}) {
         containerListeners: {},
         clipboard: null,       // { type, text } —— 实际写进剪贴板的内容
         prevented: false,      // 是否调用了 preventDefault
-        blurCount: 0
+        containerFocusCalls: [] // 日志容器每次 focus() 收到的参数
     };
 
     const logContainer = {
+        tagName: 'MAIN',
         addEventListener: (type, handler) => { state.containerListeners[type] = handler; },
-        contains: () => (options.containsInLog === undefined ? true : options.containsInLog)
+        contains: () => (options.containsInLog === undefined ? true : options.containsInLog),
+        focus(opts) { state.containerFocusCalls.push(opts); }
     };
+    state.logContainer = logContainer;
 
     const body = {};
 
@@ -147,15 +150,17 @@ test('选区不在日志区(比如弹窗里的内容):不接管', () => {
 });
 
 // =====================================================================
-// 3. 焦点让位:在日志区点选时,输入框不再留着焦点
+// 3. 焦点让位:在日志区点选时,输入框让出焦点,焦点收拢到日志容器本身
+//    (容器持有焦点后,VS Code 1.143 的复制前"焦点恢复"条件不再成立)
 // =====================================================================
 
-test('在日志区点选:搜索框让出焦点', () => {
+test('在日志区点选:搜索框让出焦点,焦点落到日志容器上', () => {
     const searchInput = makeInput();
     const { state } = loadSandbox({ activeElement: searchInput });
     state.fireMouseDown({ tagName: 'SPAN' });
     assert.equal(searchInput.blurred, true);
-    assert.equal(state.blurCount, 0);
+    assert.equal(state.containerFocusCalls.length, 1);
+    assert.equal(state.containerFocusCalls[0].preventScroll, true);
 });
 
 test('在日志区点选:文本域同样让出焦点', () => {
@@ -163,18 +168,29 @@ test('在日志区点选:文本域同样让出焦点', () => {
     const { state } = loadSandbox({ activeElement: textarea });
     state.fireMouseDown({ tagName: 'DIV' });
     assert.equal(textarea.blurred, true);
+    assert.equal(state.containerFocusCalls.length, 1);
 });
 
-test('焦点本来就不在输入框上:不乱动', () => {
-    const button = { tagName: 'BUTTON' };
-    const { state } = loadSandbox({ activeElement: button });
+test('焦点本来空落在 body 上:也要让日志容器持有焦点', () => {
+    // VS Code 1.143 只要焦点在 body 上就会把焦点还给最后聚焦过的输入框,
+    // 所以"没有输入框有焦点"时恰恰是最需要容器接住焦点的时候
+    const { state } = loadSandbox({ activeElement: null });
     state.fireMouseDown({ tagName: 'SPAN' });
-    assert.equal(button.blurred, undefined);
+    assert.equal(state.containerFocusCalls.length, 1);
+    assert.equal(state.containerFocusCalls[0].preventScroll, true);
 });
 
-test('点的是输入框自己:不抢焦点', () => {
+test('焦点已经在日志容器上:不重复 focus', () => {
+    const { sandbox, state } = loadSandbox({});
+    sandbox.document.activeElement = state.logContainer;
+    state.fireMouseDown({ tagName: 'SPAN' });
+    assert.equal(state.containerFocusCalls.length, 0);
+});
+
+test('点的是输入框自己:不抢焦点也不动容器', () => {
     const searchInput = makeInput();
     const { state } = loadSandbox({ activeElement: searchInput });
     state.fireMouseDown({ tagName: 'INPUT' });
     assert.equal(searchInput.blurred, undefined);
+    assert.equal(state.containerFocusCalls.length, 0);
 });

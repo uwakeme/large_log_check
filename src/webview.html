@@ -168,7 +168,8 @@
         </div>
     </div>
     
-    <main class="log-container" id="logContainer" role="log" aria-label="日志内容" aria-live="polite">
+    <!-- tabindex="-1":让日志区可以持有焦点(见 media/clipboard.js 的焦点收拢逻辑) -->
+    <main class="log-container" id="logContainer" tabindex="-1" role="log" aria-label="日志内容" aria-live="polite">
     </main>
     
     <!-- 回到顶部按钮 -->
