@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.3.8] - 2026-10-27
 ### Added
 - **选中日志文字后按 Ctrl+F 直接搜索** — 在日志区选中一段文字，按 `Ctrl+F`（macOS 为 `Cmd+F`），选中的内容自动填进搜索框并立即执行搜索，不用再复制粘贴；没有选中文字时 Ctrl+F 保持原有行为
 
