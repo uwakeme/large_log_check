@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **选中日志文字后按 Ctrl+F 直接搜索** — 在日志区选中一段文字，按 `Ctrl+F`（macOS 为 `Cmd+F`），选中的内容自动填进搜索框并立即执行搜索，不用再复制粘贴；没有选中文字时 Ctrl+F 保持原有行为
+
 ### Fixed
 - **点过搜索框后，选中日志按 Ctrl+C 复制不出来** — 在新版 VS Code（1.143 及以上）里，只要在搜索框里点过一次，之后再选中日志复制就会失败，光标还会自己跳回搜索框；现在日志查看器把焦点稳稳留在日志区，任何 VS Code 版本下选中即可复制
 

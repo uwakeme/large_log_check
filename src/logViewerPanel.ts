@@ -823,6 +823,10 @@ export class LogViewerPanel {
         const clipboardScriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'clipboard.js')
         );
+        // 选中日志文字 Ctrl+F 直接搜索(复用 clipboard.js 的 getLogSelectionText,须在其后加载)
+        const searchShortcutScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'searchShortcut.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -838,6 +842,7 @@ export class LogViewerPanel {
             .replace(/%%TEMPLATES_JS%%/g, templatesScriptUri.toString())
             .replace(/%%SEARCH_HISTORY_JS%%/g, searchHistoryScriptUri.toString())
             .replace(/%%CLIPBOARD_JS%%/g, clipboardScriptUri.toString())
+            .replace(/%%SEARCH_SHORTCUT_JS%%/g, searchShortcutScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 

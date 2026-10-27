@@ -5785,6 +5785,12 @@ document.addEventListener('keydown', function (e) {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
 
+    // 日志区有选区时 Ctrl/Cmd+F:选中文字直接进搜索框搜索(见 media/searchShortcut.js);
+    // 没有选区时不接管,交回后面的翻页快捷键与默认行为
+    if (handleSearchFromSelection(e)) {
+        return;
+    }
+
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
         goToPrevPage();

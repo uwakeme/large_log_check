@@ -29,6 +29,7 @@ The author's real driver: people around them inspect log files with **记事本 
 - `src/webview.html`        — WebView HTML scaffold
 - `media/webview.js`        — WebView frontend logic (search, filters, virtual scroll, timeline, bookmarks)
 - `media/clipboard.js`      — WebView 日志选区复制（接管 Ctrl+C）+ 日志区点选时让输入框让出焦点、焦点收拢到日志容器（规避 VS Code 1.143 webview 复制前的焦点恢复劫持）
+- `media/searchShortcut.js` — 选中日志文字后 Ctrl/Cmd+F 直接搜索（复用 clipboard.js 的 getLogSelectionText，须在其后加载）
 - `media/investigationTemplates.js` — 排查模板（模板 CRUD、导入导出、运行流水线）
 - `media/searchHistory.js`  — 搜索历史存储（会话级内存，按文件面板隔离）
 - `media/webview.css`       — base WebView styles
@@ -50,7 +51,7 @@ The author's real driver: people around them inspect log files with **记事本 
 ## Testing instructions
 
 - Unit tests use the built-in `node:test` runner: `npm test` (= compile + `node --test test/*.test.cjs`)
-- `test/` 现有三个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`templateImport.test.cjs`（排查模板导入校验）、`clipboard.test.cjs`（日志选区复制），共 44 个用例
+- `test/` 现有四个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`templateImport.test.cjs`（排查模板导入校验）、`clipboard.test.cjs`（日志选区复制）、`searchShortcut.test.cjs`（选中日志 Ctrl+F 搜索），共 54 个用例
 - 新增测试放 `test/*.test.cjs`；webview 侧模块要打桩浏览器全局（`localStorage` / `document` / `window.getSelection` 等）再用 `vm` 加载，写法参考 `test/clipboard.test.cjs`
 - `node --test` 的 glob 模式需要 Node 21+；更早版本改用 `node --test test/` 跑整个目录
 - Manual test path: `npm run watch` → `F5` in VSCode → exercise the feature in the Extension Development Host
