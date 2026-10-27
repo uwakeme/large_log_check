@@ -3,4 +3,3 @@ out
 dist
 *.vsix
 .vscode-test
-*.log
