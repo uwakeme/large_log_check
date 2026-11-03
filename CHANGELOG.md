@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **支持 GBK / UTF-16 编码的日志文件** — 中文 Windows 环境常见的 GBK 日志、PowerShell 重定向生成的 UTF-16 日志，打开不再乱码；编码自动识别，识别结果显示在顶部文件信息里，也可以在「编码」下拉中手动切换（当前面板内生效）
+
+### Changed
+- **非 UTF-8 文件暂不支持删除/裁剪** — GBK / UTF-16 编码的日志执行「按时间删除」「按行数删除」「保留范围」时会明确提示不支持，避免文件被改写成错误编码；需要裁剪时先「导出」成 UTF-8 副本再操作
 
 ## [1.3.8] - 2026-10-27
 ### Added

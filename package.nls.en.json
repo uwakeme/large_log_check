@@ -21,5 +21,11 @@
   "cmd.jumpToLine.title": "Jump to line",
   "cmd.showAdvancedSearch.title": "Advanced search",
   "cmd.showInvestigationTemplates.title": "Investigation templates",
-  "cmd.category": "Open Log Viewer"
+  "cmd.category": "Open Log Viewer",
+  "config.file.encoding.description": "Default encoding for log files. The default \"auto\" detects automatically: BOM first, then a strict UTF-8 probe, falling back to GBK. Pin GBK / UTF-16 here if you know the file format to avoid misdetection; the \"Encoding\" dropdown in the viewer toolbar also switches temporarily (per panel session). Changes take effect after reopening or refreshing the log file.",
+  "config.file.encoding.enumDescription.0": "Auto detect (BOM first, then UTF-8, fallback GBK)",
+  "config.file.encoding.enumDescription.1": "UTF-8 (with or without BOM)",
+  "config.file.encoding.enumDescription.2": "GBK (incl. GB2312, decoded as GB18030)",
+  "config.file.encoding.enumDescription.3": "UTF-16 LE (usually with BOM, e.g. PowerShell redirection)",
+  "config.file.encoding.enumDescription.4": "UTF-16 BE"
 }

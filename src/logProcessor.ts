@@ -3,6 +3,7 @@ import * as readline from 'readline';
 import { pipeline } from 'stream/promises';
 import { Transform, Readable } from 'stream';
 import { LogParser, LogLine, LogStats } from './logParser';
+import { FileEncoding, detectEncoding, decoderLabel, encodingDisplayName } from './encoding';
 
 // 进度回调触发间隔（行数）。processLines 的进度回调在"已读行数"超过这个
 // 增量时触发,避免每行都发 postMessage 把 webview 的 message queue 撑爆。
@@ -22,13 +23,69 @@ export class LogProcessor {
     private _totalLinesMtime = 0;
     private _statsCache: LogStats | null = null;
     private _statsCacheMtime = 0;
+    /** 构造时传入的编码偏好(null = auto)。设置项持久值或面板会话级手动切换。 */
+    private _defaultEncoding: FileEncoding | null = null;
+    /** auto 模式下的检测结果缓存(文件字节不变,检测一次即可) */
+    private _detectedEncoding: FileEncoding | null = null;
 
-    constructor(filePath: string) {
+    constructor(filePath: string, defaultEncoding: FileEncoding | null = null) {
         this._filePath = filePath;
+        this._defaultEncoding = defaultEncoding;
     }
 
     getFilePath(): string {
         return this._filePath;
+    }
+
+    /** 读文件头 maxBytes 裸字节(编码检测用)。 */
+    private async readHead(maxBytes: number): Promise<Buffer> {
+        const fd = await fs.promises.open(this._filePath, 'r');
+        try {
+            const buf = Buffer.alloc(maxBytes);
+            const { bytesRead } = await fd.read(buf, 0, maxBytes, 0);
+            return buf.subarray(0, bytesRead);
+        } finally {
+            await fd.close();
+        }
+    }
+
+    /**
+     * 解析当前生效的编码:构造偏好 > 自动检测(带缓存)。
+     * 检测只看文件头 64KB;头部纯 ASCII 而中段才出现 GBK 的文件会误判为
+     * UTF-8,这类情况由界面手动切换兜底。
+     */
+    async resolveEncoding(): Promise<FileEncoding> {
+        if (this._defaultEncoding) { return this._defaultEncoding; }
+        if (!this._detectedEncoding) {
+            this._detectedEncoding = detectEncoding(await this.readHead(64 * 1024)).encoding;
+        }
+        return this._detectedEncoding;
+    }
+
+    /** 当前生效的编码(界面编码徽章展示用)。 */
+    async getEncoding(): Promise<FileEncoding> {
+        return this.resolveEncoding();
+    }
+
+    /**
+     * 按当前编码创建解码流:裸字节流 → TextDecoder 流式解码 → 文本流。
+     * TextDecoder 默认跳过流首 BOM(utf-8 / utf-16le / utf-16be 统一处理)。
+     * 字节进度仍从裸流读 bytesRead,进度条语义与纯 UTF-8 路径一致。
+     */
+    private async createDecodedStream(): Promise<{ textStream: Transform; byteStream: fs.ReadStream }> {
+        const encoding = await this.resolveEncoding();
+        const byteStream = fs.createReadStream(this._filePath);
+        const decoder = new TextDecoder(decoderLabel(encoding));
+        const textStream = new Transform({
+            transform(chunk: Buffer, _enc, cb) {
+                cb(null, decoder.decode(chunk, { stream: true }));
+            },
+            flush(cb) {
+                cb(null, decoder.decode());
+            }
+        });
+        byteStream.pipe(textStream);
+        return { textStream, byteStream };
     }
 
     /**
@@ -46,24 +103,25 @@ export class LogProcessor {
      * 错误处理:任意环节(stream / readline)出错时,主动 destroy stream,
      * 避免文件描述符泄漏。Promise 始终会被 resolve 或 reject,不会悬挂。
      */
-    private processLines<T>(
+    private async processLines<T>(
         initial: T,
         fold: (acc: T, line: string, lineNumber: number) => T,
         onProgress?: (lineNumber: number, bytesRead?: number) => void,
         shouldStop?: (acc: T, lineNumber: number) => boolean
     ): Promise<T> {
+        const { textStream, byteStream } = await this.createDecodedStream();
         return new Promise((resolve, reject) => {
             let acc = initial;
             let lineNumber = 0;
             let lastReportedLines = 0;
             let lastReportedAt = 0;
             let settled = false;
-            const stream = fs.createReadStream(this._filePath);
-            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            const rl = readline.createInterface({ input: textStream, crlfDelay: Infinity });
             const settle = (fn: () => void) => {
                 if (settled) {return;}
                 settled = true;
-                stream.destroy();
+                textStream.destroy();
+                byteStream.destroy();
                 fn();
             };
             const reportIfDue = () => {
@@ -71,7 +129,7 @@ export class LogProcessor {
                 const now = Date.now();
                 if (lineNumber - lastReportedLines >= PROGRESS_REPORT_INTERVAL ||
                     (lineNumber > lastReportedLines && now - lastReportedAt >= PROGRESS_THROTTLE_MS)) {
-                    onProgress(lineNumber, stream.bytesRead);
+                    onProgress(lineNumber, byteStream.bytesRead);
                     lastReportedLines = lineNumber;
                     lastReportedAt = now;
                 }
@@ -87,13 +145,14 @@ export class LogProcessor {
             });
             rl.on('close', () => {
                 if (onProgress && lineNumber > lastReportedLines) {
-                    onProgress(lineNumber, stream.bytesRead);
+                    onProgress(lineNumber, byteStream.bytesRead);
                 }
                 settle(() => resolve(acc));
             });
             rl.on('error', (err) => settle(() => reject(err)));
-            // stream 自身错误(EACCES / ENOENT / disk error)也要兜底
-            stream.on('error', (err) => settle(() => reject(err)));
+            // 解码流/裸流自身错误(EACCES / ENOENT / disk error / 非法字节)都要兜底
+            textStream.on('error', (err) => settle(() => reject(err)));
+            byteStream.on('error', (err) => settle(() => reject(err)));
         });
     }
 
@@ -210,15 +269,16 @@ export class LogProcessor {
         if (!targetTime) {
             throw new Error('无法解析时间格式');
         }
+        const { textStream, byteStream } = await this.createDecodedStream();
         return new Promise((resolve, reject) => {
             let n = 0;
             let settled = false;
-            const stream = fs.createReadStream(this._filePath);
-            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            const rl = readline.createInterface({ input: textStream, crlfDelay: Infinity });
             const settle = (fn: () => void) => {
                 if (settled) {return;}
                 settled = true;
-                stream.destroy();
+                textStream.destroy();
+                byteStream.destroy();
                 fn();
             };
             rl.on('line', (content) => {
@@ -239,7 +299,8 @@ export class LogProcessor {
             });
             rl.on('close', () => settle(() => resolve(null)));
             rl.on('error', (err) => settle(() => reject(err)));
-            stream.on('error', (err) => settle(() => reject(err)));
+            textStream.on('error', (err) => settle(() => reject(err)));
+            byteStream.on('error', (err) => settle(() => reject(err)));
         });
     }
 
@@ -527,6 +588,13 @@ export class LogProcessor {
      * (比如区分"读源文件失败"和"写临时文件失败")。
      */
     private async rewriteFile(shouldKeep: (line: string, n: number) => boolean): Promise<{ deleted: number; kept: number }> {
+        // 非 UTF-8 文件禁止重写:Node 只有 UTF-8 的 TextEncoder,GBK 编码器需要
+        // 额外依赖;而静默把 GBK 改写成 UTF-8 等于毁掉用户文件,宁可拒绝。
+        // 导出走 exportLogs(总是写 UTF-8 新文件),是现成的逃生通道。
+        const encoding = await this.resolveEncoding();
+        if (encoding !== 'utf-8') {
+            throw new Error(`检测到文件编码为 ${encodingDisplayName(encoding)}，删除/裁剪类操作暂不支持非 UTF-8 文件；可先「导出日志」生成 UTF-8 副本后再操作`);
+        }
         const tempFilePath = `${this._filePath}.tmp`;
         let n = 0;
         let deleted = 0;

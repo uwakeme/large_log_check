@@ -543,6 +543,41 @@ function updateLoadingProgress(data) {
     }
 }
 
+// =====================================================================
+// 文件编码:宿主检测 + 会话级手动切换
+// 切换由宿主整体重载(行数/时间线/统计全部按新编码重算),这里只镜像
+// 状态供下拉回显 — sessionEncodingOverride=null 表示没手动切过(自动)。
+// =====================================================================
+const ENCODING_LABELS = { 'utf-8': 'UTF-8', 'gbk': 'GBK', 'utf-16le': 'UTF-16 LE', 'utf-16be': 'UTF-16 BE' };
+let sessionEncodingOverride = null;
+let lastFileEncoding = 'utf-8';
+let lastFileEncodingAuto = true;
+
+/** 编码下拉回显:手动切过/设置项固定 → 选中该编码;否则停在「自动检测」并带识别结果 */
+function updateEncodingBadge(encoding, isAuto) {
+    const select = document.getElementById('fileEncodingSelect');
+    if (!select) { return; }
+    const known = encoding && ENCODING_LABELS[encoding] ? encoding : 'utf-8';
+    select.value = (sessionEncodingOverride === known || !isAuto) ? known : 'auto';
+    const autoOption = select.querySelector('option[value="auto"]');
+    if (autoOption) {
+        autoOption.textContent = `自动检测（当前: ${ENCODING_LABELS[known]}）`;
+    }
+}
+
+/** 编码切换:交给宿主重载文件;fileLoaded 回来后徽章自动更新 */
+function switchFileEncoding(value) {
+    if (value === 'auto') {
+        sessionEncodingOverride = null;
+    } else if (ENCODING_LABELS[value]) {
+        sessionEncodingOverride = value;
+    } else {
+        updateEncodingBadge(lastFileEncoding, lastFileEncodingAuto); // 非法值回弹
+        return;
+    }
+    vscode.postMessage({ command: 'setEncoding', encoding: value });
+}
+
 function handleFileLoaded(data) {
     // 隐藏加载提示（使用 !important 强制覆盖）
     const loadingIndicator = document.getElementById('loadingIndicator');
@@ -558,6 +593,11 @@ function handleFileLoaded(data) {
     document.getElementById('fileName').textContent = data.fileName || '';
     document.getElementById('fileSize').textContent = data.fileSize || '0';
     document.getElementById('totalLines').textContent = data.totalLines || '0';
+
+    // 编码徽章:显示宿主当前生效的编码(自动识别结果或手动/设置项选择)
+    lastFileEncoding = data.fileEncoding || 'utf-8';
+    lastFileEncodingAuto = data.fileEncodingAuto !== false;
+    updateEncodingBadge(lastFileEncoding, lastFileEncodingAuto);
 
     totalLinesInFile = data.totalLines || 0;
     // 初次加载时，数据从文件开头开始

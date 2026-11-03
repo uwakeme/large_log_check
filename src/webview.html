@@ -50,6 +50,15 @@
                 <span><strong>大小:</strong> <span id="fileSize" aria-live="polite">0</span>MB</span>
                 <span style="margin-left: 15px;"><strong>总行数:</strong> <span id="totalLines" aria-live="polite">0</span></span>
                 <span style="margin-left: 15px;"><strong>已加载:</strong> <span id="loadedLines" aria-live="polite">0</span></span>
+                <span style="margin-left: 15px;"><strong>编码:</strong>
+                    <select id="fileEncodingSelect" onchange="switchFileEncoding(this.value)" aria-label="文件编码" title="文件编码（显示自动识别结果，可手动切换后重新加载）" style="font-size: 12px; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); border-radius: 2px; padding: 1px 4px;">
+                        <option value="auto">自动检测</option>
+                        <option value="utf-8">UTF-8</option>
+                        <option value="gbk">GBK</option>
+                        <option value="utf-16le">UTF-16 LE</option>
+                        <option value="utf-16be">UTF-16 BE</option>
+                    </select>
+                </span>
             </div>
         </div>
         <div class="search-box" role="search" aria-label="搜索日志">

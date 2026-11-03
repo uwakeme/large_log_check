@@ -109,6 +109,25 @@
           "minimum": 0,
           "description": "%config.search.debounceMs.description%"
         },
+        "big-log-viewer.file.encoding": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "utf-8",
+            "gbk",
+            "utf-16le",
+            "utf-16be"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "%config.file.encoding.enumDescription.0%",
+            "%config.file.encoding.enumDescription.1%",
+            "%config.file.encoding.enumDescription.2%",
+            "%config.file.encoding.enumDescription.3%",
+            "%config.file.encoding.enumDescription.4%"
+          ],
+          "description": "%config.file.encoding.description%"
+        },
         "big-log-viewer.collapse.minRepeatCount": {
           "type": "number",
           "default": 2,

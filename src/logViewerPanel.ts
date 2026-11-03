@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { LogProcessor } from './logProcessor';
 import { LogLine } from './logParser';
+import { FileEncoding, isFileEncoding } from './encoding';
 
 let cachedWebviewHtml: string | null = null;
 
@@ -18,6 +19,9 @@ export class LogViewerPanel {
     private _fileUri: vscode.Uri;
     private _logProcessor: LogProcessor;
     private _timelineSampleCount: number;
+    // 会话级编码手动切换(编码徽章)。放面板不放 processor:doLoadFile 每次重建
+    // LogProcessor,状态在面板里才能在「刷新/重载」后继续生效;null = 未手动切过。
+    private _encodingOverride: FileEncoding | null = null;
     /**
      * webviewReady 握手:webview 的内联早期脚本会先于 webview.js 监听器注册,
      * 它一加载完就 postMessage 'webviewReady'。在这之前 host 端不要发任何消息,
@@ -106,7 +110,7 @@ export class LogViewerPanel {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._fileUri = fileUri;
-        this._logProcessor = new LogProcessor(fileUri.fsPath);
+        this._logProcessor = new LogProcessor(fileUri.fsPath, this._readEncodingPreference());
 
         // 读取用户配置
         const config = vscode.workspace.getConfiguration('big-log-viewer');
@@ -255,6 +259,20 @@ export class LogViewerPanel {
                             }
                         }
                         break;
+                    case 'setEncoding': {
+                        // 编码徽章手动切换:面板会话级覆盖('auto' 回到设置项/自动检测),
+                        // 之后整个重载 — 行数/时间线/统计都是旧解码下的产物,全部要重算。
+                        // 非法值直接忽略:非破坏性操作,不值得弹错误打扰。
+                        if (message.encoding === 'auto') {
+                            this._encodingOverride = null;
+                        } else if (isFileEncoding(message.encoding)) {
+                            this._encodingOverride = message.encoding;
+                        } else {
+                            break;
+                        }
+                        await this.loadFile(this._fileUri);
+                        break;
+                    }
                 }
             },
             null,
@@ -271,6 +289,16 @@ export class LogViewerPanel {
     // 公共方法：刷新当前文件
     public async refresh() {
         await this.loadFile(this._fileUri);
+    }
+
+    /**
+     * 编码偏好:会话级手动切换 > 设置项 file.encoding(auto/非法值 → null 走自动检测)。
+     * doLoadFile 每次重建 LogProcessor 都从这里取,保证刷新/重载后选择不丢。
+     */
+    private _readEncodingPreference(): FileEncoding | null {
+        if (this._encodingOverride) { return this._encodingOverride; }
+        const raw = vscode.workspace.getConfiguration('big-log-viewer').get<string>('file.encoding', 'auto');
+        return isFileEncoding(raw) ? raw : null;
     }
 
     /** 命令面板「显示统计」直达宿主统计(与工具栏「统计」同一链路) */
@@ -315,7 +343,7 @@ export class LogViewerPanel {
         // 调到 refresh() 重新打开同一文件（不切换 filePath），旧 _logProcessor 里的
         // statsCache 是 mtime 键控的旧口径统计，必须清掉让重新加载走新别名。
         this._logProcessor.invalidateCaches();
-        this._logProcessor = new LogProcessor(fileUri.fsPath);
+        this._logProcessor = new LogProcessor(fileUri.fsPath, this._readEncodingPreference());
 
         try {
             const fileStats = await fs.promises.stat(fileUri.fsPath);
@@ -376,7 +404,12 @@ export class LogViewerPanel {
                     fileSize: fileSizeMB,
                     totalLines: totalLines,
                     lines: lines,
-                    allLoaded: true
+                    allLoaded: true,
+                    fileEncoding: await this._logProcessor.getEncoding(),
+                    // true = 自动检测(既没手动切换,设置项也是 auto);webview 据此决定
+                    // 下拉停在「自动检测(当前: XX)」还是直接选中具体编码
+                    fileEncodingAuto: this._encodingOverride === null &&
+                        !isFileEncoding(vscode.workspace.getConfiguration('big-log-viewer').get<string>('file.encoding', 'auto'))
                 }
             });
 

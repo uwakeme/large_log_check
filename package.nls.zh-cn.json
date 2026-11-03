@@ -21,5 +21,11 @@
   "cmd.jumpToLine.title": "跳转到行号",
   "cmd.showAdvancedSearch.title": "高级搜索",
   "cmd.showInvestigationTemplates.title": "排查模板",
-  "cmd.category": "Open Log Viewer"
+  "cmd.category": "Open Log Viewer",
+  "config.file.encoding.description": "日志文件的默认编码。默认 auto=自动检测（先看 BOM，再严格试解 UTF-8，失败按 GBK 处理）。确认文件固定是 GBK / UTF-16 时可在此指定，避免检测误判；查看器顶部的「编码」下拉也可临时切换（仅当前面板会话内生效）。配置变更需重新打开或刷新日志文件后生效。",
+  "config.file.encoding.enumDescription.0": "自动检测（BOM 优先，其次 UTF-8，失败按 GBK）",
+  "config.file.encoding.enumDescription.1": "UTF-8（含 BOM 与无 BOM）",
+  "config.file.encoding.enumDescription.2": "GBK（含 GB2312，按 GB18030 解码）",
+  "config.file.encoding.enumDescription.3": "UTF-16 LE（通常带 BOM，如 PowerShell 重定向产物）",
+  "config.file.encoding.enumDescription.4": "UTF-16 BE"
 }
