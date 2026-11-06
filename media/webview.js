@@ -719,11 +719,35 @@ function handleFileLoaded(data) {
     // 新数据集使在途的筛选/跳转请求全部过期
     invalidateInflightRequests();
 
+    // requestAllData(部分加载态下应用筛选)触发的整文件重载走宿主 'refresh' 命令,
+    // 回包带 loadReason:'reload' —— 只有这种来源按快照回填重载前生效的筛选,否则刚设的
+    // 范围/关键词/级别会被上面的复位悄悄冲掉。其它来源(命令面板刷新/删除后重载/编码切换)
+    // 属于用户主动重置,就地作废快照 —— 挂着只会污染下一次成功加载。
+    let restoredFilters = false;
+    if (pendingFilterRestore) {
+        if (data.loadReason === 'reload') {
+            Object.assign(unifiedFilters, pendingFilterRestore);
+            restoredFilters = true;
+            tplSyncFilterUi(); // 搜索框回显/正则勾选/级别复选框跟随回填的筛选
+        }
+        pendingFilterRestore = null;
+    }
+
+    // 复位(或回填)后统一重渲染筛选状态,否则芯片停留在重载前的旧状态
+    refreshLineRangeChip();
+    renderFilterStatusChips();
+
     allLines = data.lines || [];
     originalLines = [...allLines];
 
     // 初始化完整数据缓存（用于统一过滤）
     fullDataCache = [...allLines];
+
+    // 回填的筛选立即生效,不等 requestAllData 的 500ms 轮询 —— 否则这段时间里
+    // 芯片显示「已筛选」而列表是全量未过滤,界面短暂说谎
+    if (restoredFilters) {
+        applyUnifiedFilters();
+    }
 
     // 统一处理数据变更
     handleDataChange();
@@ -737,6 +761,9 @@ function handleFileLoaded(data) {
 
 /** 宿主读取失败:收起全屏加载遮罩并提示 — 否则 loading-overlay 永久盖住工具栏 */
 function handleFileLoadError(data) {
+    // 加载失败无从回填,快照就地作废 — 否则会泄漏到下一次成功加载,
+    // 把旧筛选带进无关的新数据集
+    pendingFilterRestore = null;
     const loadingIndicator = document.getElementById('loadingIndicator');
     if (loadingIndicator) {
         loadingIndicator.style.display = 'none';
@@ -797,6 +824,17 @@ function handleFilterResults(data) {
         return;
     }
     allLines = data.results || [];
+    // 后端只按单一维度(线程/类名/方法)过滤,行号范围在这里前端二次套用,
+    // 否则部分加载态下范围会被后端的全量结果整条绕过
+    const lr = unifiedFilters.lineRange;
+    if (lr && (lr.start != null || lr.end != null)) {
+        allLines = allLines.filter(line => {
+            const n = line.lineNumber || 0;
+            if (lr.start != null && n < lr.start) return false;
+            if (lr.end != null && n > lr.end) return false;
+            return true;
+        });
+    }
     console.log(' 收到过滤结果:', allLines.length, '条');
     isFiltering = true; // 设置为过滤模式
 
@@ -826,6 +864,10 @@ function handleFilterResults(data) {
         triggerAsyncCalc: true
     });
 
+    // 这条路径没走 applyUnifiedFilters(部分加载早退),芯片/范围 chip 在这里补渲染
+    refreshLineRangeChip();
+    renderFilterStatusChips();
+
     // 如果过滤结果为空，给出友好提示
     if (allLines.length === 0) {
         const levelText = (data.levels || []).join('、');
@@ -833,11 +875,17 @@ function handleFilterResults(data) {
         const classText = data.className || '';
         const methodText = data.methodName || '';
         const filterText = levelText || threadText || classText || methodText;
-        
+        // 范围激活时结果可能是「范围把命中筛空」——线程/类名在范围外是有日志的,
+        // 不说明范围用户会误判该筛选值不存在
+        const lr = unifiedFilters.lineRange;
+        const rangeHint = (lr && (lr.start != null || lr.end != null))
+            ? `(已按当前范围 ${formatLineRangeText(lr)} 过滤,范围外可能仍有该日志)`
+            : '';
+
         vscode.postMessage({
             command: 'showMessage',
             type: 'warning',
-            message: `未找到 "${filterText}" 相关的日志`
+            message: `未找到 "${filterText}" 相关的日志${rangeHint}`
         });
     }
 }
@@ -905,6 +953,9 @@ async function handleJumpToLineInFullLogResult(data) {
         timeRange: null,
         lineRange: null,
     };
+    // 复位后重渲染筛选状态,否则筛选芯片/范围 chip 停留在跳转前的旧状态
+    refreshLineRangeChip();
+    renderFilterStatusChips();
 
     console.log(`📦 跳转数据已加载 - baseLineOffset: ${baseLineOffset}, 数据行数: ${allLines.length}, 目标行号: ${data.targetLineNumber}`);
 
@@ -3800,6 +3851,30 @@ function hideFilterStatus() {
     renderFilterStatusChips();
 }
 
+/**
+ * 把统一过滤系统的当前状态同步到界面控件:搜索框回显、正则勾选、级别复选框(含全选联动)。
+ * 原本在 investigationTemplates.js(设计文档决策 14:模板过滤后的界面表达与手动操作一致),
+ * R5 复审后挪回 webview.js —— handleFileLoaded 的筛选回填在核心加载路径上调用它,
+ * 不能依赖后加载的功能模块(webviewReady 发出早于 templates.js 求值)。
+ */
+function tplSyncFilterUi() {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) { searchInput.value = unifiedFilters.keyword || ''; }
+    const regexEl = document.getElementById('regexMode');
+    if (regexEl) { regexEl.checked = unifiedFilters.isRegex === true; }
+    const tokens = { filterError: 'ERROR', filterWarn: 'WARN', filterInfo: 'INFO', filterDebug: 'DEBUG', filterOther: 'OTHER' };
+    const active = Array.isArray(unifiedFilters.levels) ? unifiedFilters.levels.map(l => String(l).toUpperCase()) : null;
+    let all = true;
+    for (const id of Object.keys(tokens)) {
+        const el = document.getElementById(id);
+        if (!el) { continue; }
+        el.checked = !active || active.includes(tokens[id]);
+        if (!el.checked) { all = false; }
+    }
+    const allEl = document.getElementById('filterAll');
+    if (allEl) { allEl.checked = all; }
+}
+
 // 清除自定义筛选 - 定位到行号
 function clearCustomFilter() {
     // 恢复到原来的行号
@@ -4278,6 +4353,9 @@ async function jumpToLineInFullLog(lineNumber) {
             timeRange: null,
             lineRange: null,
         };
+        // 复位后重渲染筛选状态,否则筛选芯片/范围 chip 停留在跳转前的旧状态
+        refreshLineRangeChip();
+        renderFilterStatusChips();
 
         // 手动同步渲染：让界面立刻显示全量数据（折叠模式按 pageRanges 估算显示）
         pageRanges.clear();
@@ -4518,6 +4596,7 @@ function refresh() {
     document.getElementById('searchInput').value = '';
     currentPage = 1;
     isFiltering = false; // 退出过滤模式
+    pendingFilterRestore = null; // 手动刷新 = 用户主动重置,不回填重载前的筛选
     vscode.postMessage({
         command: 'refresh'
     });
@@ -4584,6 +4663,10 @@ function updatePagination() {
 
 // 请求加载全部数据(用于统一过滤)
 let reloadPollTimer = null;
+// requestAllData(部分加载态应用筛选)触发的整文件重载会把 unifiedFilters 复位,
+// 这里暂存重载前的筛选快照,handleFileLoaded 回填;手动刷新(refresh)置空不回填
+let pendingFilterRestore = null;
+
 function requestAllData() {
     if (allDataLoaded) {
         // 数据已全部加载,直接应用过滤
@@ -4601,6 +4684,8 @@ function requestAllData() {
     // 触发完整重载,然后轮询直到 fileLoaded 事件设置 allDataLoaded=true,再应用过滤。
     // 单例定时器:重复调用先清旧的,否则快速切换筛选会叠出 N 个轮询;
     // 60 秒超时兜底,加载失败时不至于永久泄漏。
+    // 重载会复位 unifiedFilters,先快照当前筛选供 handleFileLoaded 回填
+    pendingFilterRestore = JSON.parse(JSON.stringify(unifiedFilters));
     requestFullReload();
     if (reloadPollTimer) {
         clearInterval(reloadPollTimer);

@@ -1369,31 +1369,6 @@ function stopPipeline() {
 function tplFlowStop() { return { __tplFlow: true, reason: 'stop' }; }
 function tplFlowAbort() { return { __tplFlow: true, reason: 'abort' }; }
 
-/**
- * 把统一过滤系统的当前状态同步到界面控件,让模板过滤后的界面表达
- * 与手动操作完全一致(设计文档决策 14):
- *   - 关键词回显到搜索框、正则勾选归位
- *   - 日志级别过滤同步到级别勾选框(全选框联动)
- * 具体筛了什么由这些原有控件表达,不再统一覆盖成模板名。
- */
-function tplSyncFilterUi() {
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) { searchInput.value = unifiedFilters.keyword || ''; }
-    const regexEl = document.getElementById('regexMode');
-    if (regexEl) { regexEl.checked = unifiedFilters.isRegex === true; }
-    const tokens = { filterError: 'ERROR', filterWarn: 'WARN', filterInfo: 'INFO', filterDebug: 'DEBUG', filterOther: 'OTHER' };
-    const active = Array.isArray(unifiedFilters.levels) ? unifiedFilters.levels.map(l => String(l).toUpperCase()) : null;
-    let all = true;
-    for (const id of Object.keys(tokens)) {
-        const el = document.getElementById(id);
-        if (!el) { continue; }
-        el.checked = !active || active.includes(tokens[id]);
-        if (!el.checked) { all = false; }
-    }
-    const allEl = document.getElementById('filterAll');
-    if (allEl) { allEl.checked = all; }
-}
-
 async function executePipeline(template, paramValues) {
     tplPipelineRunning = true;
     tplPipelineAbort = false;
@@ -1542,8 +1517,13 @@ async function executeTplStep(step, index, paramValues, context, summary) {
         let targetLine = null;
         if (step.source === 'line') {
             const resolvedLine = resolveTplString(step.line, paramValues).trim();
+            // 严格口径与手动弹窗一致(parse 会把 '12abc' 解成 12、'3.7' 解成 3,静默错位)
+            if (!/^\d+$/.test(resolvedLine)) {
+                summary.warnings.push(`${at}: 行号「${resolvedLine}」不是有效行号(1 ~ ${totalLinesInFile}),已跳过范围设置`);
+                return;
+            }
             const parsed = parseInt(resolvedLine, 10);
-            if (!Number.isInteger(parsed) || parsed < 1 || parsed > totalLinesInFile) {
+            if (parsed < 1 || parsed > totalLinesInFile) {
                 summary.warnings.push(`${at}: 行号「${resolvedLine}」不是有效行号(1 ~ ${totalLinesInFile}),已跳过范围设置`);
                 return;
             }

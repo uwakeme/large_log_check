@@ -48,6 +48,8 @@ function loadSandbox() {
         jumpToLine: (n) => { sandbox.jumpedTo = n; },
         hideFilterStatus: () => {},
         showFilterStatus: () => {},
+        // tplSyncFilterUi 已挪回 webview.js,沙箱桩只需保证调用不抛错
+        tplSyncFilterUi: () => {},
         renderLines: () => {},
         bookmarks: new Map(),
         comments: new Map(),
@@ -371,4 +373,15 @@ test('执行: 查询 0 命中文案携带范围信息', async () => {
     await sandbox.executeTplStep(
         { type: 'search', keywords: ['target'], hitPolicy: 'all', onEmpty: 'skip' }, 1, {}, sandbox.context, sandbox.summary);
     assert.match(sandbox.summary.warnings[0], /第 100 ~ 200 行/);
+});
+
+test('执行: setRange 行号表达式非纯数字拒绝(与手动弹窗口径一致)', async () => {
+    const sandbox = loadPipelineSandbox();
+    await sandbox.executeTplStep(
+        { type: 'setRange', apply: 'end', source: 'line', line: '12abc' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(sandbox.summary.warnings.length, 1);
+    assert.equal(sandbox.unifiedFilters.lineRange, null);
+    await sandbox.executeTplStep(
+        { type: 'setRange', apply: 'end', source: 'line', line: '3.7' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(sandbox.summary.warnings.length, 2);
 });

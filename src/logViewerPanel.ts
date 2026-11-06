@@ -151,7 +151,7 @@ export class LogViewerPanel {
                         }
                         break;
                     case 'refresh':
-                        await this.loadFile(this._fileUri);
+                        await this.loadFile(this._fileUri, 'reload');
                         break;
                     case 'filterByThread':
                         await this.filterByThreadName(message.threadName, message.filterSeq);
@@ -324,7 +324,7 @@ export class LogViewerPanel {
      * - 同一时间只跑一个全文件扫描,排队中的过期任务直接跳过
      * - 面板关闭或被更新的加载取代后,不再往 webview 发消息
      */
-    private loadFile(fileUri: vscode.Uri): Promise<void> {
+    private loadFile(fileUri: vscode.Uri, loadReason: 'load' | 'reload' = 'load'): Promise<void> {
         const seq = ++this._loadSeq;
         this._loadChain = this._loadChain
             .catch(() => undefined)   // 前一次失败不阻塞后续
@@ -332,12 +332,12 @@ export class LogViewerPanel {
                 if (this._disposed || seq !== this._loadSeq) {
                     return; // 已被更新的加载取代
                 }
-                return this.doLoadFile(fileUri, seq);
+                return this.doLoadFile(fileUri, seq, loadReason);
             });
         return this._loadChain;
     }
 
-    private async doLoadFile(fileUri: vscode.Uri, seq: number) {
+    private async doLoadFile(fileUri: vscode.Uri, seq: number, loadReason: 'load' | 'reload') {
         this._fileUri = fileUri;
         // v1.3.3：在替换 _logProcessor 之前先让旧对象释放缓存。alias 变更后用户可能
         // 调到 refresh() 重新打开同一文件（不切换 filePath），旧 _logProcessor 里的
@@ -405,6 +405,10 @@ export class LogViewerPanel {
                     totalLines: totalLines,
                     lines: lines,
                     allLoaded: true,
+                    // 加载来源:'reload' = webview 的 refresh 命令(含筛选触发的整文件重载),
+                    // 'load' = 打开面板/命令面板刷新/删除后重载/编码切换等其它路径。
+                    // webview 的筛选快照只认 'reload' 回填(R1: 命令面板刷新不带此标记,不回填)
+                    loadReason,
                     fileEncoding: await this._logProcessor.getEncoding(),
                     // true = 自动检测(既没手动切换,设置项也是 auto);webview 据此决定
                     // 下拉停在「自动检测(当前: XX)」还是直接选中具体编码
