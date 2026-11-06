@@ -7,8 +7,10 @@ const { join } = require('node:path');
 const vm = require('node:vm');
 
 // investigationTemplates.js 是浏览器全局脚本(依赖 webview.js 提供的全局环境),
-// 按 AGENTS.md 约定打桩浏览器全局后用 vm 加载;这里只测导入相关的纯逻辑路径。
+// 按 AGENTS.md 约定打桩浏览器全局后用 vm 加载;这里测导入校验与模板流水线执行体。
 const src = readFileSync(join(__dirname, '..', 'media', 'investigationTemplates.js'), 'utf8');
+// setRange 执行体依赖 lineRange.js 的真实纯函数(setLineRangeBound/formatLineRangeText)
+const rangeSrc = readFileSync(join(__dirname, '..', 'media', 'lineRange.js'), 'utf8');
 
 function loadSandbox() {
     const backing = new Map();
@@ -35,9 +37,34 @@ function loadSandbox() {
         document: {
             addEventListener: () => {},
             getElementById: () => ({ innerHTML: '', style: {} })
-        }
+        },
+        // —— executeTplStep 运行时依赖(webview.js 全局打桩) ——
+        unifiedFilters: {
+            keyword: null, isRegex: false, isMultiple: false, threadName: null,
+            className: null, methodName: null, levels: null, timeRange: null, lineRange: null
+        },
+        totalLinesInFile: 1000,
+        extractLogFields: () => ({ threadName: '', className: '', methodName: '' }),
+        jumpToLine: (n) => { sandbox.jumpedTo = n; },
+        hideFilterStatus: () => {},
+        showFilterStatus: () => {},
+        renderLines: () => {},
+        bookmarks: new Map(),
+        comments: new Map(),
+        allLines: [],
+        setFilterAndApply: (filters, options) => {
+            sandbox.appliedFilters = sandbox.appliedFilters || [];
+            sandbox.appliedFilters.push({ filters, options });
+        },
+        // webview.js 的 applyLineRange 打桩: 语义对齐真身(写 unifiedFilters + 触发 setFilterAndApply)
+        applyLineRange: (range) => {
+            sandbox.unifiedFilters.lineRange = range;
+            sandbox.setFilterAndApply({}, { resetPage: true });
+        },
+        clearFilter: (name) => { sandbox.clearedFilters = sandbox.clearedFilters || []; sandbox.clearedFilters.push(name); }
     };
     vm.createContext(sandbox);
+    vm.runInContext(rangeSrc, sandbox, { filename: 'lineRange.js' });
     vm.runInContext(src, sandbox, { filename: 'investigationTemplates.js' });
     return sandbox;
 }
@@ -162,4 +189,186 @@ test('存量 localStorage 数据(无 group 字段):载入不丢,归到未分组'
     assert.equal(store.length, 2);
     assert.equal(store[0].group, '');
     assert.equal(store[1].group, '');
+});
+
+// vm 沙箱与宿主是不同 realm(原型不同),deepStrictEqual 不可用,改比 JSON
+const jsonOfSteps = (steps) => JSON.stringify(steps);
+
+// =====================================================================
+// 6. setRange(限定范围)动作校验
+// =====================================================================
+
+test('validate: setRange 起点/最近命中 合法且字段收敛', () => {
+    const sandbox = loadSandbox();
+    const result = sandbox.validateInvestigationTemplate({
+        name: 't',
+        steps: [{ type: 'setRange', apply: 'start', source: 'lastHit', line: '随便填也会被清掉' }]
+    });
+    assert.equal(result.ok, true);
+    // source=lastHit 时行号表达式无意义,校验层归一为空串
+    assert.equal(jsonOfSteps([result.template.steps[0]]), jsonOfSteps([{ type: 'setRange', apply: 'start', source: 'lastHit', line: '' }]));
+});
+
+test('validate: setRange 指定行号来源要求行号非空', () => {
+    const sandbox = loadSandbox();
+    const ok = sandbox.validateInvestigationTemplate({
+        name: 't',
+        steps: [{ type: 'setRange', apply: 'end', source: 'line', line: '${endLine}' }]
+    });
+    assert.equal(ok.ok, true);
+    assert.equal(ok.template.steps[0].line, '${endLine}');
+
+    const empty = sandbox.validateInvestigationTemplate({
+        name: 't',
+        steps: [{ type: 'setRange', apply: 'end', source: 'line', line: '  ' }]
+    });
+    assert.equal(empty.ok, false);
+    assert.match(empty.error, /行号/);
+});
+
+test('validate: setRange 清除范围不保留 source/line', () => {
+    const sandbox = loadSandbox();
+    const result = sandbox.validateInvestigationTemplate({
+        name: 't',
+        steps: [{ type: 'setRange', apply: 'clear', source: 'line', line: '999' }]
+    });
+    assert.equal(result.ok, true);
+    assert.equal(jsonOfSteps([result.template.steps[0]]), jsonOfSteps([{ type: 'setRange', apply: 'clear' }]));
+});
+
+test('validate: setRange 非法 apply 拒绝,未知 source 收敛默认', () => {
+    const sandbox = loadSandbox();
+    const badApply = sandbox.validateInvestigationTemplate({
+        name: 't', steps: [{ type: 'setRange', apply: 'middle' }]
+    });
+    assert.equal(badApply.ok, false);
+    const badSource = sandbox.validateInvestigationTemplate({
+        name: 't', steps: [{ type: 'setRange', apply: 'start', source: 'unknown' }]
+    });
+    // source 容错口径与 hitPolicy/onEmpty 一致: 未知值收敛默认 lastHit,不拒绝
+    assert.equal(badSource.ok, true);
+    assert.equal(badSource.template.steps[0].source, 'lastHit');
+});
+
+test('validate: 旧版扩展语义下含 setRange 的模板按无效跳过(决策 8 兼容回归)', () => {
+    // 新版导出: schemaVersion 保持 1,含 setRange 步骤
+    const sandbox = loadSandbox();
+    const exported = sandbox.tplExportPayload([sandbox.validateInvestigationTemplate({
+        name: 'range-flow',
+        steps: [{ type: 'search', keywords: ['任务开始'] }, { type: 'setRange', apply: 'start', source: 'lastHit' }]
+    }).template]);
+    const payload = JSON.parse(exported);
+    assert.equal(payload.schemaVersion, 1);
+    // 模拟旧版校验: 白名单里没有 setRange -> validateTplStep 报「类型未知」-> 整个模板 invalid。
+    // TPL_ACTION_TYPES 是 const 声明的对象,绑定不可重赋值但属性可 delete,沙箱里可直接复现旧版白名单。
+    const oldSandbox = loadSandbox();
+    vm.runInContext('delete TPL_ACTION_TYPES.setRange;', oldSandbox);
+    const reimport = oldSandbox.validateInvestigationTemplate(payload.templates[0]);
+    assert.equal(reimport.ok, false);
+    assert.match(reimport.error, /类型未知/);
+});
+
+// =====================================================================
+// 7. setRange 执行体 + 查询动作范围内叠加
+// =====================================================================
+
+function makeLine(n, text) {
+    return { lineNumber: n, content: text, timestamp: null };
+}
+
+function loadPipelineSandbox() {
+    const sandbox = loadSandbox();
+    sandbox.fullDataCache = [];
+    sandbox.context = { hits: [], lastHit: null, lastThread: '' };
+    sandbox.summary = { bookmarks: 0, comments: 0, thread: '', jumpLine: 0, filtered: false, warnings: [], stopped: false };
+    return sandbox;
+}
+
+test('执行: setRange 起点/最近命中 写入范围并触发重算', async () => {
+    const sandbox = loadPipelineSandbox();
+    sandbox.context.lastHit = makeLine(120, '任务开始');
+    await sandbox.executeTplStep(
+        { type: 'setRange', apply: 'start', source: 'lastHit' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(jsonOfSteps([sandbox.unifiedFilters.lineRange]), jsonOfSteps([{ start: 120, end: null }]));
+    assert.equal(sandbox.appliedFilters.length, 1);
+    assert.equal(sandbox.summary.filtered, true);
+});
+
+test('执行: setRange 指定行号支持 ${参数}', async () => {
+    const sandbox = loadPipelineSandbox();
+    await sandbox.executeTplStep(
+        { type: 'setRange', apply: 'end', source: 'line', line: '${endLine}' }, 1, { endLine: '300' }, sandbox.context, sandbox.summary);
+    assert.equal(jsonOfSteps([sandbox.unifiedFilters.lineRange]), jsonOfSteps([{ start: null, end: 300 }]));
+});
+
+test('执行: setRange 行号非法 -> 警告跳过,范围不变', async () => {
+    const sandbox = loadPipelineSandbox();
+    sandbox.unifiedFilters.lineRange = { start: 100, end: null };
+    await sandbox.executeTplStep(
+        { type: 'setRange', apply: 'end', source: 'line', line: 'abc' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(sandbox.summary.warnings.length, 1);
+    assert.equal(jsonOfSteps([sandbox.unifiedFilters.lineRange]), jsonOfSteps([{ start: 100, end: null }]));
+});
+
+test('执行: setRange 构成空范围 -> 警告跳过', async () => {
+    const sandbox = loadPipelineSandbox();
+    sandbox.unifiedFilters.lineRange = { start: null, end: 200 };
+    sandbox.context.lastHit = makeLine(300, '任务开始');
+    await sandbox.executeTplStep(
+        { type: 'setRange', apply: 'start', source: 'lastHit' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(sandbox.summary.warnings.length, 1);
+    assert.equal(jsonOfSteps([sandbox.unifiedFilters.lineRange]), jsonOfSteps([{ start: null, end: 200 }]));
+});
+
+test('执行: setRange 无最近命中 -> 警告跳过; clear 走 clearFilter', async () => {
+    const sandbox = loadPipelineSandbox();
+    await sandbox.executeTplStep(
+        { type: 'setRange', apply: 'start', source: 'lastHit' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(sandbox.summary.warnings.length, 1);
+    await sandbox.executeTplStep({ type: 'setRange', apply: 'clear' }, 2, {}, sandbox.context, sandbox.summary);
+    assert.deepEqual(sandbox.clearedFilters, ['lineRange']);
+});
+
+test('执行: 查询动作命中被范围边界截断', async () => {
+    const sandbox = loadPipelineSandbox();
+    for (let n = 1; n <= 300; n++) {
+        sandbox.fullDataCache.push(makeLine(n, `hit target line ${n}`));
+    }
+    sandbox.unifiedFilters.lineRange = { start: 100, end: 200 };
+    await sandbox.executeTplStep(
+        { type: 'search', keywords: ['target'], hitPolicy: 'all', onEmpty: 'stop' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(sandbox.context.hits.length, 101); // 100 ~ 200 闭区间
+    assert.ok(sandbox.context.hits.every(l => l.lineNumber >= 100 && l.lineNumber <= 200));
+});
+
+test('执行(决策 7 回归): 查询动作的 setFilterAndApply 参数不含 lineRange 键', async () => {
+    const sandbox = loadPipelineSandbox();
+    sandbox.fullDataCache = [makeLine(150, '任务结束 ok')];
+    sandbox.unifiedFilters.lineRange = { start: 100, end: 200 };
+    await sandbox.executeTplStep(
+        { type: 'search', keywords: ['任务结束'], hitPolicy: 'first', onEmpty: 'stop' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.equal(sandbox.appliedFilters.length, 1);
+    const keys = Object.keys(sandbox.appliedFilters[0].filters);
+    assert.equal(keys.includes('lineRange'), false);
+});
+
+test('执行: afterLastHit 与范围起点并存时双约束生效', async () => {
+    const sandbox = loadPipelineSandbox();
+    for (let n = 1; n <= 300; n++) {
+        sandbox.fullDataCache.push(makeLine(n, `hit target line ${n}`));
+    }
+    sandbox.unifiedFilters.lineRange = { start: 100, end: 200 };
+    sandbox.context.lastHit = makeLine(150, 'anchor');
+    await sandbox.executeTplStep(
+        { type: 'search', keywords: ['target'], hitPolicy: 'all', onEmpty: 'stop', afterLastHit: true }, 1, {}, sandbox.context, sandbox.summary);
+    assert.ok(sandbox.context.hits.every(l => l.lineNumber > 150 && l.lineNumber <= 200));
+});
+
+test('执行: 查询 0 命中文案携带范围信息', async () => {
+    const sandbox = loadPipelineSandbox();
+    sandbox.fullDataCache = [makeLine(5, 'unrelated')];
+    sandbox.unifiedFilters.lineRange = { start: 100, end: 200 };
+    await sandbox.executeTplStep(
+        { type: 'search', keywords: ['target'], hitPolicy: 'all', onEmpty: 'skip' }, 1, {}, sandbox.context, sandbox.summary);
+    assert.match(sandbox.summary.warnings[0], /第 100 ~ 200 行/);
 });

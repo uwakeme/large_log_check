@@ -30,6 +30,7 @@ const TPL_MAX_GROUP_LEN = 50;     // 分组名长度上限
 const TPL_ACTION_TYPES = {
     search: '查询日志',
     filter: '筛选',
+    setRange: '限定范围',
     bookmark: '打书签',
     comment: '加注释'
 };
@@ -43,6 +44,8 @@ const TPL_FILTER_FIELDS = {
     levels: '日志级别',
     timeRange: '时间范围'
 };
+const TPL_RANGE_APPLY = { start: '起点', end: '终点', clear: '清除范围' };
+const TPL_RANGE_SOURCE = { lastHit: '最近一次命中的行', line: '指定行号(支持 ${参数})' };
 const TPL_LEVEL_TOKENS = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'OTHER'];
 const TPL_LEVEL_LABELS = { ERROR: 'ERROR', WARN: 'WARN', INFO: 'INFO', DEBUG: 'DEBUG', OTHER: '其他' };
 
@@ -241,6 +244,25 @@ function validateTplStep(raw, index) {
         if (!value) { return { ok: false, error: `${at}: 筛选值不能为空` }; }
         if (value.length > TPL_MAX_KEYWORD_LEN) { return { ok: false, error: `${at}: 筛选值过长` }; }
         return { ok: true, step: { type: type, field: field, value: value, keepKeyword: keepKeyword } };
+    }
+
+    if (type === 'setRange') {
+        const apply = raw.apply;
+        if (!TPL_RANGE_APPLY[apply]) {
+            return { ok: false, error: `${at}: 应用为未知: ${apply}(支持: ${Object.keys(TPL_RANGE_APPLY).join('/')})` };
+        }
+        if (apply === 'clear') {
+            return { ok: true, step: { type: type, apply: apply } };
+        }
+        // source 容错口径与 hitPolicy/onEmpty 一致: 未知值收敛默认,不拒绝
+        const source = raw.source === 'line' ? 'line' : 'lastHit';
+        const line = String(raw.line || '').trim();
+        if (source === 'line') {
+            if (!line) { return { ok: false, error: `${at}: 指定行号来源需要填写行号(可用 \${参数})` }; }
+            if (line.length > TPL_MAX_KEYWORD_LEN) { return { ok: false, error: `${at}: 行号表达式过长` }; }
+        }
+        // source=lastHit 时行号表达式无意义,归一为空串(与 collectTplStepFields 口径一致)
+        return { ok: true, step: { type: type, apply: apply, source: source, line: source === 'line' ? line : '' } };
     }
 
     if (type === 'bookmark') {
@@ -714,6 +736,7 @@ function renderTemplateEditor() {
     html += '<div class="tpl-add-row">';
     html += '<button type="button" onclick="tplAddStep(\'search\')">＋ 查询日志</button>';
     html += '<button type="button" onclick="tplAddStep(\'filter\')">＋ 筛选</button>';
+    html += '<button type="button" onclick="tplAddStep(\'setRange\')">＋ 限定范围</button>';
     html += '<button type="button" onclick="tplAddStep(\'bookmark\')">＋ 打书签</button>';
     html += '<button type="button" onclick="tplAddStep(\'comment\')">＋ 加注释</button>';
     html += '</div></div>';
@@ -860,6 +883,13 @@ function tplStepSummary(step) {
             parts.push(`按${fieldName}「${step.value || '…'}」`);
         }
         if (step.keepKeyword === false) { parts.push('不保留关键词'); }
+    } else if (step.type === 'setRange') {
+        if (step.apply === 'clear') {
+            parts.push('清除范围');
+        } else {
+            const target = step.apply === 'start' ? '范围起点' : '范围终点';
+            parts.push(`设为${target} · ${step.source === 'line' ? `第 ${step.line || '…'} 行` : '用最近命中'}`);
+        }
     } else if (step.type === 'bookmark') {
         parts.push(`给${step.target === 'view' ? '当前视图' : '查询结果'}打书签${step.name ? `「${step.name}」` : ''}`);
     } else if (step.type === 'comment') {
@@ -949,6 +979,25 @@ function renderTplStepFields(step, i) {
         html += `<input type="checkbox" id="tplStep_${p}_keepKeyword"${keep ? ' checked' : ''}> 保留关键词叠加</label></div>`;
         html += '</div>';
         html += `<div id="tplStep_${p}_valueArea">${renderTplFilterValueArea(field, step.value, p)}</div>`;
+        return html;
+    }
+
+    if (step.type === 'setRange') {
+        const apply = TPL_RANGE_APPLY[step.apply] ? step.apply : 'start';
+        const source = step.source === 'line' ? 'line' : 'lastHit';
+        html += '<div style="display: flex; gap: 10px;">';
+        html += `<div style="flex: 1;"><label style="${TPL_LABEL_STYLE}">应用为:</label>`;
+        html += `<select id="tplStep_${p}_apply" onchange="tplStepFieldChanged(${p})" style="${TPL_INPUT_STYLE}">${tplSelectOptions(TPL_RANGE_APPLY, apply)}</select></div>`;
+        if (apply !== 'clear') {
+            html += `<div style="flex: 1;"><label style="${TPL_LABEL_STYLE}">取值来源:</label>`;
+            html += `<select id="tplStep_${p}_source" onchange="tplStepFieldChanged(${p})" style="${TPL_INPUT_STYLE}">${tplSelectOptions(TPL_RANGE_SOURCE, source)}</select></div>`;
+        }
+        html += '</div>';
+        if (apply !== 'clear' && source === 'line') {
+            html += `<div style="margin-top: 10px;"><label style="${TPL_LABEL_STYLE}">行号(支持 \${参数}):</label>`;
+            html += `<input id="tplStep_${p}_line" value="${escapeAttr(step.line || '')}" placeholder="例如: \${endLine}" style="${TPL_INPUT_STYLE}"></div>`;
+        }
+        html += '<div class="hint" style="margin-top: 5px;">配合查询动作使用: 查到开始标记后「应用为起点」,查到结束标记后「应用为终点」,之后的查询/筛选就只在这段范围内进行。</div>';
         return html;
     }
 
@@ -1055,6 +1104,7 @@ function tplDefaultStep(type) {
     switch (type) {
         case 'search': return { type: 'search', keywords: [''], hitPolicy: 'ask', onEmpty: 'stop', afterLastHit: false, sameThread: false };
         case 'filter': return { type: 'filter', field: 'threadName', value: 'lastHit', keepKeyword: true };
+        case 'setRange': return { type: 'setRange', apply: 'start', source: 'lastHit', line: '' };
         case 'bookmark': return { type: 'bookmark', target: 'hits', name: '' };
         case 'comment': return { type: 'comment', target: 'hits', content: '' };
         default: return { type: 'search', keywords: [''], hitPolicy: 'ask', onEmpty: 'stop', afterLastHit: false, sameThread: false };
@@ -1115,6 +1165,14 @@ function collectTplStepFields(type, i) {
             };
         }
         return { type: type, field: field, value: val('value').trim(), keepKeyword: keepKeyword };
+    }
+    if (type === 'setRange') {
+        const apply = val('apply') || 'start';
+        if (apply === 'clear') {
+            return { type: type, apply: apply };
+        }
+        const source = val('source') === 'line' ? 'line' : 'lastHit';
+        return { type: type, apply: apply, source: source, line: source === 'line' ? val('line').trim() : '' };
     }
     if (type === 'bookmark') {
         return { type: type, target: val('target') || 'hits', name: val('name').trim() };
@@ -1392,6 +1450,11 @@ async function executeTplStep(step, index, paramValues, context, summary) {
         let afterLine = 0;              // 严格大于该行号
         let threadLower = null;         // 小写线程名(用于匹配)
         let threadOriginal = null;      // 原始大小写(用于视图筛选显示)
+        // 当前激活的行号范围(手动右键/弹窗/前面 setRange 步骤设置)对本次查询同样生效;
+        // 与 afterLastHit 并存时两条下界约束同时应用,自然取更严者
+        const range = unifiedFilters.lineRange;
+        const rangeStart = (range && range.start != null) ? range.start : 0;
+        const rangeEnd = (range && range.end != null) ? range.end : Infinity;
         if (step.afterLastHit || step.sameThread) {
             if (!context.lastHit) {
                 return tplHandleEmpty(step, summary, at, '配置了「从上一步命中后开始查/仅同线程」,但前面没有选中的命中行');
@@ -1409,6 +1472,8 @@ async function executeTplStep(step, index, paramValues, context, summary) {
         const lowered = words.map(w => w.toLowerCase());
         const hits = fullDataCache.filter(line => {
             if (afterLine && line.lineNumber <= afterLine) { return false; }
+            if (rangeStart && line.lineNumber < rangeStart) { return false; }
+            if (rangeEnd !== Infinity && line.lineNumber > rangeEnd) { return false; }
             if (threadLower) {
                 const fields = extractLogFields(line);
                 if (!fields.threadName || fields.threadName.toLowerCase() !== threadLower) { return false; }
@@ -1435,9 +1500,13 @@ async function executeTplStep(step, index, paramValues, context, summary) {
         hideFilterStatus();
         if (threadOriginal) { context.lastThread = threadOriginal; }
         if (hits.length === 0) {
+            const rangeText = (rangeStart || rangeEnd !== Infinity)
+                ? `(范围: ${formatLineRangeText({ start: rangeStart || null, end: rangeEnd !== Infinity ? rangeEnd : null })})`
+                : '';
             return tplHandleEmpty(step, summary, at, `未找到包含「${words.join(' ')}」的日志` +
                 (afterLine ? `(第 ${afterLine} 行之后)` : '') +
-                (threadLower ? `(线程 ${threadOriginal})` : ''));
+                (threadLower ? `(线程 ${threadOriginal})` : '') +
+                rangeText);
         }
         // 命中策略决定本步骤的产出集(context.hits):
         //   first/ask -> 收敛为一条,后续「打书签/加注释」只作用于这一条;
@@ -1461,6 +1530,38 @@ async function executeTplStep(step, index, paramValues, context, summary) {
         context.lastHit = picked;
         jumpToLine(picked.lineNumber);
         summary.jumpLine = picked.lineNumber;
+        return;
+    }
+
+    if (step.type === 'setRange') {
+        if (step.apply === 'clear') {
+            clearFilter('lineRange');
+            summary.filtered = true;
+            return;
+        }
+        let targetLine = null;
+        if (step.source === 'line') {
+            const resolvedLine = resolveTplString(step.line, paramValues).trim();
+            const parsed = parseInt(resolvedLine, 10);
+            if (!Number.isInteger(parsed) || parsed < 1 || parsed > totalLinesInFile) {
+                summary.warnings.push(`${at}: 行号「${resolvedLine}」不是有效行号(1 ~ ${totalLinesInFile}),已跳过范围设置`);
+                return;
+            }
+            targetLine = parsed;
+        } else {
+            if (!context.lastHit) {
+                summary.warnings.push(`${at}: 没有可用的命中行,已跳过范围设置`);
+                return;
+            }
+            targetLine = context.lastHit.lineNumber;
+        }
+        const result = setLineRangeBound(unifiedFilters.lineRange, step.apply, targetLine, totalLinesInFile);
+        if (!result.ok) {
+            summary.warnings.push(`${at}: ${result.error},已跳过范围设置`);
+            return;
+        }
+        applyLineRange(result.range);
+        summary.filtered = true;
         return;
     }
 
@@ -1504,11 +1605,8 @@ async function executeTplStep(step, index, paramValues, context, summary) {
         setFilterAndApply(filters, { resetPage: true });
         summary.filtered = true;
         // 界面表达与手动操作一致:级别过滤同步勾选框;
-        // 状态条按手动口径显示具体筛选值(线程名/类名/方法名),级别过滤由勾选框本身表达
+        // 筛选条件芯片组由 applyUnifiedFilters 自动重渲染,生效中的每个条件各自可见、可单独取消
         tplSyncFilterUi();
-        if (step.field === 'threadName' && filters.threadName) { showFilterStatus(`线程名: ${filters.threadName}`); }
-        else if (step.field === 'className' && filters.className) { showFilterStatus(`类名: ${filters.className}`); }
-        else if (step.field === 'methodName' && filters.methodName) { showFilterStatus(`方法名: ${filters.methodName}`); }
         // 定位到当前命中行,而不是停在筛选结果的开头
         if (context.lastHit) {
             jumpToLine(context.lastHit.lineNumber);

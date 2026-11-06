@@ -60,6 +60,7 @@ let unifiedFilters = {
     methodName: null,        // 方法名筛选
     levels: null,            // 日志级别过滤 (数组，如 ['ERROR', 'WARN'])
     timeRange: null,         // 时间范围 { start, end }
+    lineRange: null,         // 行号范围 { start, end }，原文件行号，各侧可独立为 null
 };
 
 // 原始完整数据（用于统一过滤）
@@ -108,6 +109,8 @@ function applyUnifiedFilters() {
         allLines = [...fullDataCache];
         isFiltering = false;
         currentSearchKeyword = '';
+        refreshLineRangeChip();
+        renderFilterStatusChips();
         return;
     }
     
@@ -257,23 +260,39 @@ function applyUnifiedFilters() {
         });
     }
     
+    // 应用行号范围过滤(与时间范围同语义:各侧可独立生效)
+    if (unifiedFilters.lineRange && (unifiedFilters.lineRange.start != null || unifiedFilters.lineRange.end != null)) {
+        const rangeStart = unifiedFilters.lineRange.start;
+        const rangeEnd = unifiedFilters.lineRange.end;
+        results = results.filter(line => {
+            const n = line.lineNumber || 0;
+            if (rangeStart != null && n < rangeStart) return false;
+            if (rangeEnd != null && n > rangeEnd) return false;
+            return true;
+        });
+    }
+
     console.log(`过滤完成 - 原始数据: ${fullDataCache.length} 条，过滤后: ${results.length} 条`);
-    
+
     allLines = results;
     isFiltering = hasAnyFilter();
+    refreshLineRangeChip();
+    renderFilterStatusChips();
 }
 
 /**
  * 检查是否有任何过滤条件
  */
 function hasAnyFilter() {
+    const lr = unifiedFilters.lineRange;
     return !!(
         unifiedFilters.keyword ||
         unifiedFilters.threadName ||
         unifiedFilters.className ||
         unifiedFilters.methodName ||
         (unifiedFilters.levels && unifiedFilters.levels.length > 0) ||
-        unifiedFilters.timeRange
+        unifiedFilters.timeRange ||
+        (lr && (lr.start != null || lr.end != null))
     );
 }
 
@@ -343,8 +362,12 @@ function clearFilter(filterName) {
         unifiedFilters.methodName = null;
     } else if (filterName === 'levels') {
         unifiedFilters.levels = null;
+        // 复选框跟随复位,否则侧栏勾着级别而筛选已关,界面说谎
+        resetLevelCheckboxes();
     } else if (filterName === 'timeRange') {
         unifiedFilters.timeRange = null;
+    } else if (filterName === 'lineRange') {
+        unifiedFilters.lineRange = null;
     }
     
     // 重新应用剩余的过滤条件
@@ -364,6 +387,70 @@ function clearFilter(filterName) {
 function clearAllFilters() {
     // 这个只用于其他情况，直接恢复页码
     clearAllFiltersWithLine(null);
+}
+
+/**
+ * 写入行号范围并触发重算(手动右键/弹窗/模板 setRange 的统一入口)。
+ * range 为 null 或双侧皆 null 时等价于清除范围。
+ */
+function applyLineRange(range) {
+    unifiedFilters.lineRange = range;
+    // 范围芯片与筛选状态面板由 applyUnifiedFilters 内的 renderFilterStatusChips 统一重渲染
+    setFilterAndApply({}, { resetPage: true });
+}
+
+// ========== 行号范围限定(手动入口) ==========
+
+/** 右键设边界: 写入失败(空范围/非法行号)时 toast 说明,不静默 */
+function setRangeBoundFromContextMenu(side, lineNumber) {
+    const result = setLineRangeBound(unifiedFilters.lineRange, side, lineNumber, totalLinesInFile);
+    if (!result.ok) {
+        showToast(result.error, 'error');
+        return;
+    }
+    applyLineRange(result.range);
+}
+
+/** 「设置行号范围…」弹窗: 预填起点=右键行(未有起点时),终点=已有终点值 */
+function openRangeModal(prefillLine) {
+    const range = unifiedFilters.lineRange || {};
+    const startEl = document.getElementById('rangeModalStart');
+    const endEl = document.getElementById('rangeModalEnd');
+    const errorEl = document.getElementById('rangeModalError');
+    if (startEl) { startEl.value = (range.start != null) ? String(range.start) : (prefillLine ? String(prefillLine) : ''); }
+    if (endEl) { endEl.value = (range.end != null) ? String(range.end) : ''; }
+    if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+    document.getElementById('rangeModal').style.display = 'block';
+    if (startEl) { startEl.focus(); }
+}
+
+function closeRangeModal() {
+    document.getElementById('rangeModal').style.display = 'none';
+}
+
+function showRangeModalError(msg) {
+    const errorEl = document.getElementById('rangeModalError');
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+}
+
+/** 弹窗「应用」: 校验失败在弹窗内标错(宁显勿隐),成功即关闭并生效 */
+function confirmRangeModal() {
+    const startEl = document.getElementById('rangeModalStart');
+    const endEl = document.getElementById('rangeModalEnd');
+    const result = parseLineRangeInput(startEl ? startEl.value : '', endEl ? endEl.value : '', totalLinesInFile);
+    if (!result.ok) {
+        showRangeModalError(result.error);
+        return;
+    }
+    closeRangeModal();
+    applyLineRange({ start: result.start, end: result.end });
+}
+
+/** 弹窗「清除范围」: 只清范围,不动关键词/级别筛选;同时关弹窗 */
+function clearRangeFromModal() {
+    closeRangeModal();
+    clearFilter('lineRange');
 }
 
 /**
@@ -625,6 +712,7 @@ function handleFileLoaded(data) {
         methodName: null,
         levels: null,
         timeRange: null,
+        lineRange: null,
     };
     // 级别复选框跟随复位 — 否则侧栏还勾着 ERROR,列表却已是全量数据
     resetLevelCheckboxes();
@@ -815,6 +903,7 @@ async function handleJumpToLineInFullLogResult(data) {
         methodName: null,
         levels: null,
         timeRange: null,
+        lineRange: null,
     };
 
     console.log(`📦 跳转数据已加载 - baseLineOffset: ${baseLineOffset}, 数据行数: ${allLines.length}, 目标行号: ${data.targetLineNumber}`);
@@ -1838,14 +1927,19 @@ function searchInCurrentPage(keyword, isRegex) {
 function showCurrentPageSearchStatus(keyword, count) {
     const panel = document.getElementById('filterStatusPanel');
     const statusText = document.getElementById('filterStatusText');
+    const chipsSpan = document.getElementById('filterStatusChips');
+    if (chipsSpan) { chipsSpan.style.display = 'none'; } // 模式文案与维度芯片互斥
     // textContent:关键词可能来自日志内容,innerHTML 会让 <img onerror> 直接执行
     statusText.textContent = `当前页搜索: "${keyword}" (找到 ${count} 条)`;
+    statusText.style.display = '';
     panel.style.display = 'flex';
-    
-    // 修改清除按钮的行为
-    const clearBtn = panel.querySelector('button');
-    clearBtn.onclick = clearCurrentPageSearch;
-    clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 退出当前页搜索';
+
+    // 修改清除按钮的行为(按 id 取,不能 querySelector('button') —— 芯片组里也有按钮)
+    const clearBtn = document.getElementById('filterStatusClearAllBtn');
+    if (clearBtn) {
+        clearBtn.onclick = clearCurrentPageSearch;
+        clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 退出当前页搜索';
+    }
 }
 
 /**
@@ -1879,9 +1973,11 @@ function clearCurrentPageSearch() {
 
         // 恢复清除按钮的原始行为
         const panel = document.getElementById('filterStatusPanel');
-        const clearBtn = panel.querySelector('button');
-        clearBtn.onclick = clearCustomFilter;
-        clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 取消筛选';
+        const clearBtn = document.getElementById('filterStatusClearAllBtn');
+        if (clearBtn) {
+            clearBtn.onclick = clearCustomFilter;
+            clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 取消筛选';
+        }
 
         showToast('已退出当前页搜索');
     }
@@ -2835,6 +2931,41 @@ function showContextMenu(event, content, lineNumber) {
         menu.appendChild(deleteCommentItem);
     }
 
+    // 行号范围限定(设计决策 3:右键设边界 + 弹窗微调;写入失败 toast 说明,不静默)
+    const rangeSeparator = document.createElement('div');
+    rangeSeparator.className = 'context-menu-separator';
+    menu.appendChild(rangeSeparator);
+
+    const rangeStartItem = document.createElement('div');
+    rangeStartItem.className = 'context-menu-item';
+    rangeStartItem.innerHTML = '<span><i class="codicon codicon-arrow-right"></i></span><span>设为范围起点</span>';
+    rangeStartItem.onclick = (e) => {
+        e.stopPropagation();
+        closeContextMenu();
+        setRangeBoundFromContextMenu('start', lineNumber);
+    };
+    menu.appendChild(rangeStartItem);
+
+    const rangeEndItem = document.createElement('div');
+    rangeEndItem.className = 'context-menu-item';
+    rangeEndItem.innerHTML = '<span><i class="codicon codicon-arrow-left"></i></span><span>设为范围终点</span>';
+    rangeEndItem.onclick = (e) => {
+        e.stopPropagation();
+        closeContextMenu();
+        setRangeBoundFromContextMenu('end', lineNumber);
+    };
+    menu.appendChild(rangeEndItem);
+
+    const rangeModalItem = document.createElement('div');
+    rangeModalItem.className = 'context-menu-item';
+    rangeModalItem.innerHTML = '<span><i class="codicon codicon-arrow-both"></i></span><span>设置行号范围…</span>';
+    rangeModalItem.onclick = (e) => {
+        e.stopPropagation();
+        closeContextMenu();
+        openRangeModal(lineNumber);
+    };
+    menu.appendChild(rangeModalItem);
+
     // 如果是搜索/过滤模式，添加"跳转到完整日志"选项
     if (currentSearchKeyword || isFiltering) {
         // 分隔线
@@ -3314,7 +3445,7 @@ function confirmAdvancedSearch() {
 
     // 筛选状态栏常驻显示这条查询,让「生效中的是什么」随时可见、可一键取消
     showFilterStatus('高级搜索: ' + previewText);
-    const clearBtn = document.querySelector('#filterStatusPanel button');
+    const clearBtn = document.getElementById('filterStatusClearAllBtn');
     if (clearBtn) {
         clearBtn.onclick = clearCustomFilter;
         clearBtn.innerHTML = '<i class="codicon codicon-close"></i> 取消筛选';
@@ -3586,17 +3717,87 @@ function savePositionBeforeFilter() {
 }
 
 // 显示筛选状态
+// 筛选状态面板有两类内容,互斥展示:
+//   1. 维度芯片(renderFilterStatusChips)——每个生效的过滤条件一枚、各自可单独取消,
+//      数据源就是 unifiedFilters,由 applyUnifiedFilters 在每次过滤后重渲染;
+//   2. 搜索模式文案(showFilterStatus 传入的文本)——高级搜索/当前页搜索这类
+//      不走 unifiedFilters 的模式,自带预览文案与退出按钮。
+// 「正在筛选：」标签与「取消筛选」全清按钮(#filterStatusClearAllBtn)两类内容共用。
+
+/**
+ * 维度筛选芯片组: 每个生效的过滤条件一枚芯片、各自可单独取消,不必一键全清。
+ * 高级搜索/当前页搜索是独立搜索模式(不走 unifiedFilters),持有面板期间芯片不出场。
+ */
+function renderFilterStatusChips() {
+    const chipsSpan = document.getElementById('filterStatusChips');
+    const panel = document.getElementById('filterStatusPanel');
+    if (!chipsSpan || !panel) { return; }
+    if (isInSearchMode || window._currentPageSearchBackup) { return; }
+
+    const chips = [];
+    if (unifiedFilters.keyword) {
+        const kw = String(unifiedFilters.keyword);
+        const shown = kw.length > 30 ? kw.slice(0, 30) + '…' : kw;
+        chips.push({ clear: 'clearKeywordChip()', label: (unifiedFilters.isRegex ? '正则: ' : '关键词: ') + shown, title: kw });
+    }
+    if (unifiedFilters.threadName) { chips.push({ clear: "clearFilter('threadName')", label: '线程名: ' + unifiedFilters.threadName, title: '' }); }
+    if (unifiedFilters.className) { chips.push({ clear: "clearFilter('className')", label: '类名: ' + unifiedFilters.className, title: '' }); }
+    if (unifiedFilters.methodName) { chips.push({ clear: "clearFilter('methodName')", label: '方法名: ' + unifiedFilters.methodName, title: '' }); }
+    if (unifiedFilters.levels && unifiedFilters.levels.length > 0) {
+        chips.push({ clear: "clearFilter('levels')", label: '级别: ' + unifiedFilters.levels.join('/'), title: '' });
+    }
+    if (unifiedFilters.timeRange && (unifiedFilters.timeRange.start || unifiedFilters.timeRange.end)) {
+        const tr = unifiedFilters.timeRange;
+        chips.push({ clear: "clearFilter('timeRange')", label: '时间范围: ' + (tr.start || '…') + ' ~ ' + (tr.end || '…'), title: '' });
+    }
+    const lr = unifiedFilters.lineRange;
+    if (lr && (lr.start != null || lr.end != null)) {
+        chips.push({ clear: "clearFilter('lineRange')", label: '范围: ' + formatLineRangeText(lr), title: '' });
+    }
+
+    if (chips.length === 0) {
+        chipsSpan.innerHTML = '';
+        chipsSpan.style.display = 'none';
+        panel.style.display = 'none';
+        return;
+    }
+    chipsSpan.innerHTML = chips.map(c => {
+        // title 恒挂全量文案(超长值被省略号截断后悬停可见);内层 span 负责截断,芯片宽度有上限
+        return `<span title="${escapeAttr(c.title || c.label)}" style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 4px 2px 8px; border: 1px solid var(--vscode-input-border); border-radius: 10px; background-color: var(--vscode-input-background); max-width: 360px;">` +
+            `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(c.label)}</span>` +
+            `<button type="button" onclick="${c.clear}" title="只取消这一项筛选" style="background: transparent; border: none; color: var(--vscode-descriptionForeground); cursor: pointer; padding: 0 4px; font-size: 13px; line-height: 1; min-height: 0; flex-shrink: 0;">×</button></span>`;
+    }).join('');
+    chipsSpan.style.display = 'inline-flex';
+    const textSpan = document.getElementById('filterStatusText');
+    if (textSpan) { textSpan.style.display = 'none'; }
+    panel.style.display = 'flex';
+}
+
 function showFilterStatus(text) {
     const panel = document.getElementById('filterStatusPanel');
     const statusText = document.getElementById('filterStatusText');
+    const chipsSpan = document.getElementById('filterStatusChips');
+    if (chipsSpan) { chipsSpan.style.display = 'none'; } // 模式文案与维度芯片互斥,文案出场时芯片让位
     statusText.textContent = text;
+    statusText.style.display = '';
     panel.style.display = 'flex';
+}
+
+/** 关键词芯片的 ×: 与搜索框自带的 × 同语义,连输入框回显一起清 */
+function clearKeywordChip() {
+    const el = document.getElementById('searchInput');
+    if (el) { el.value = ''; }
+    clearFilter('keyword');
 }
 
 // 隐藏筛选状态
 function hideFilterStatus() {
     const panel = document.getElementById('filterStatusPanel');
+    const statusText = document.getElementById('filterStatusText');
+    if (statusText) { statusText.textContent = ''; }
     panel.style.display = 'none';
+    // 维度筛选仍生效时,芯片组如实回到面板(这里隐藏的只是模式文案这类一次性提示)
+    renderFilterStatusChips();
 }
 
 // 清除自定义筛选 - 定位到行号
@@ -3628,6 +3829,7 @@ function clearAllFiltersWithLine(restoreLine) {
         methodName: null,
         levels: null,
         timeRange: null,
+        lineRange: null,
     };
     // 复选框跟随复位,避免侧栏仍勾着 ERROR 而列表已是全量数据
     resetLevelCheckboxes();
@@ -3899,7 +4101,17 @@ function confirmJump() {
 function jumpToLine(lineNumber) {
     console.log('定位到行号:', lineNumber);
     console.log(`📊 当前数据状态 - allLines: ${allLines.length} 行, baseLineOffset: ${baseLineOffset}, totalLinesInFile: ${totalLinesInFile}`);
-    
+
+    // 范围激活时,目标行在范围外直接提示并放弃定位(设计决策 5:不静默、不替用户清范围)。
+    // 必须放在「已加载数据范围」检查之前——范围外的行不在过滤后的 allLines 里,
+    // 旧检查会给出误导性的「数据未加载」提示。
+    const activeRange = unifiedFilters.lineRange;
+    if (activeRange && ((activeRange.start != null && lineNumber < activeRange.start) ||
+                        (activeRange.end != null && lineNumber > activeRange.end))) {
+        showToast(`第 ${lineNumber} 行在当前范围外(范围: ${formatLineRangeText(activeRange)})`, 'error');
+        return;
+    }
+
     // 检查数据范围
     if (allLines.length > 0) {
         const firstLine = allLines[0].lineNumber || 0;
@@ -4064,6 +4276,7 @@ async function jumpToLineInFullLog(lineNumber) {
             methodName: null,
             levels: null,
             timeRange: null,
+            lineRange: null,
         };
 
         // 手动同步渲染：让界面立刻显示全量数据（折叠模式按 pageRanges 估算显示）

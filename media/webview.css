@@ -1826,3 +1826,21 @@ a:focus-visible {
         transition: none;
     }
 }
+/* ========== 筛选条件芯片(正在筛选栏) ==========
+   芯片与全清按钮都用内联样式压过全局 button 蓝底;
+   悬停效果内联样式覆盖不了 :hover,这里用 !important 收口 */
+
+#filterStatusChips button:hover:not(:disabled) {
+    background-color: transparent !important;
+    color: var(--vscode-errorForeground) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+#filterStatusClearAllBtn:hover:not(:disabled) {
+    background-color: transparent !important;
+    color: var(--vscode-foreground) !important;
+    border-color: var(--vscode-focus-border, var(--vscode-input-border)) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}

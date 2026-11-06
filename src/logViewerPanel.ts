@@ -860,6 +860,10 @@ export class LogViewerPanel {
         const searchShortcutScriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'searchShortcut.js')
         );
+        // 行号范围限定纯逻辑脚本(解析/校验/chip 文案,webview.js 过滤链运行时调用,须先于其加载)
+        const lineRangeScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'lineRange.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -876,6 +880,7 @@ export class LogViewerPanel {
             .replace(/%%SEARCH_HISTORY_JS%%/g, searchHistoryScriptUri.toString())
             .replace(/%%CLIPBOARD_JS%%/g, clipboardScriptUri.toString())
             .replace(/%%SEARCH_SHORTCUT_JS%%/g, searchShortcutScriptUri.toString())
+            .replace(/%%LINE_RANGE_JS%%/g, lineRangeScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 

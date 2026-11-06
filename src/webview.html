@@ -135,11 +135,12 @@
         </label>
     </nav>
     
-    <!-- 筛选状态提示 -->
-    <div class="filter-status-panel" id="filterStatusPanel" style="display: none;">
+    <!-- 筛选状态提示: 维度芯片(每个生效条件一枚,可单独取消) 或 搜索模式文案(高级搜索/当前页搜索) -->
+    <div class="filter-status-panel" id="filterStatusPanel" style="display: none; flex-wrap: wrap;">
         <span style="font-size: 12px; font-weight: bold;"><i class="codicon codicon-filter"></i> 正在筛选：</span>
+        <span id="filterStatusChips" style="display: none; align-items: center; gap: 6px; flex-wrap: wrap;"></span>
         <span id="filterStatusText" style="font-size: 12px; color: var(--vscode-textLink-foreground); font-weight: 500;"></span>
-        <button onclick="clearCustomFilter()" style="padding: 3px 10px; font-size: 11px; margin-left: 10px;"><i class="codicon codicon-close"></i> 取消筛选</button>
+        <button id="filterStatusClearAllBtn" onclick="clearCustomFilter()" style="padding: 3px 10px; font-size: 11px; margin-left: 10px; min-height: 22px; background: transparent; border: 1px solid var(--vscode-input-border); color: var(--vscode-descriptionForeground);"><i class="codicon codicon-close"></i> 取消筛选</button>
     </div>
     
     <!-- 时间线导航 -->
@@ -210,6 +211,10 @@
         <span class="page-info" aria-live="polite">
             <span id="lineRangeInfo" style="display: none;">第 <span id="lineRangeStart">0</span> - <span id="lineRangeEnd">0</span> 行 / </span>共 <span id="totalLinesInPage">0</span> 行
         </span>
+        <span id="rangeFilterChip" style="display: none; margin-left: 20px; font-size: 12px; padding: 2px 10px; border: 1px solid var(--vscode-input-border); border-radius: 10px; background-color: var(--vscode-input-background); align-items: center; gap: 6px;" aria-live="polite">
+            <span id="rangeFilterChipText"></span>
+            <button type="button" onclick="clearFilter('lineRange')" title="清除范围(不影响其他筛选)" aria-label="清除行号范围" style="background: transparent; border: none; color: var(--vscode-descriptionForeground); cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1;">×</button>
+        </span>
     </nav>
     
     <!-- 统计弹窗 -->
@@ -223,6 +228,35 @@
                 <div class="stats-grid" id="statsGrid">
                     <!-- 统计信息将动态生成 -->
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 行号范围弹窗 -->
+    <div id="rangeModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <h2>设置行号范围</h2>
+                <span class="modal-close" onclick="closeRangeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 10px; margin-bottom: 6px;">
+                    <div style="flex: 1;">
+                        <label for="rangeModalStart" style="font-size: 12px; display: block; margin-bottom: 4px;">起点行号(可留空 = 从文件头)</label>
+                        <input type="number" id="rangeModalStart" min="1" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="rangeModalEnd" style="font-size: 12px; display: block; margin-bottom: 4px;">终点行号(可留空 = 到文件尾)</label>
+                        <input type="number" id="rangeModalEnd" min="1" style="width: 100%; padding: 6px 8px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 3px; box-sizing: border-box;">
+                    </div>
+                </div>
+                <div id="rangeModalError" style="display: none; color: var(--vscode-errorForeground); font-size: 12px; margin-bottom: 6px;"></div>
+                <div style="font-size: 11px; color: var(--vscode-descriptionForeground);">设置后搜索、筛选、翻页都只在范围内进行。起点不想含标记行本身时,可填它的下一行。</div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeRangeModal()">取消</button>
+                <button onclick="clearRangeFromModal()">清除范围</button>
+                <button onclick="confirmRangeModal()">应用</button>
             </div>
         </div>
     </div>
@@ -719,6 +753,8 @@
     <script src="%%CLIPBOARD_JS%%"></script>
     <!-- searchShortcut 复用 clipboard.js 的 getLogSelectionText,须在其后加载 -->
     <script src="%%SEARCH_SHORTCUT_JS%%"></script>
+    <!-- lineRange 行号范围纯逻辑(解析/校验/chip 文案),webview.js 过滤链运行时调用,须在其前加载 -->
+    <script src="%%LINE_RANGE_JS%%"></script>
     <script src="%%WEBVIEW_JS%%"></script>
     <script src="%%TEMPLATES_JS%%"></script>
     <script src="%%SEARCH_HISTORY_JS%%"></script>
