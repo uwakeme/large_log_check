@@ -130,6 +130,10 @@
             <span>折叠重复日志</span>
         </label>
         <label style="font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="checkbox" id="foldLongLines" checked onchange="toggleFoldLongLines()" aria-label="折叠超长的日志行">
+            <span>折叠长行</span>
+        </label>
+        <label style="font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer;">
             <input type="checkbox" id="enableJsonParse" checked onchange="toggleJsonParse()" aria-label="自动解析 JSON 和 XML 内容">
             <span>解析JSON/XML</span>
         </label>
@@ -755,6 +759,8 @@
     <script src="%%SEARCH_SHORTCUT_JS%%"></script>
     <!-- lineRange 行号范围纯逻辑(解析/校验/chip 文案),webview.js 过滤链运行时调用,须在其前加载 -->
     <script src="%%LINE_RANGE_JS%%"></script>
+    <!-- foldLongLines 长行折叠纯逻辑(判定/文案),webview.js 渲染链运行时调用,须在其前加载 -->
+    <script src="%%FOLD_LONG_LINES_JS%%"></script>
     <script src="%%WEBVIEW_JS%%"></script>
     <script src="%%TEMPLATES_JS%%"></script>
     <script src="%%SEARCH_HISTORY_JS%%"></script>

@@ -5,6 +5,8 @@
   "config.search.debounceMs.description": "Debounce delay in milliseconds before the search runs automatically as you type in the search box.",
   "config.collapse.minRepeatCount.description": "Minimum number of consecutive repetitions before repeated log lines get folded.",
   "config.timeline.samplePoints.description": "Number of sample points in the timeline view. Higher values are more precise but take longer to compute.",
+  "config.view.foldLongLines.description": "Fold extra-long log lines (e.g. JSON payloads thousands of characters long): only the first few rows are shown, click a line to expand it in full, so the mouse wheel can sweep through a page in a few notches. The toolbar checkbox can toggle this per session. Takes effect after reopening or refreshing the log file.",
+  "config.view.foldMaxRows.description": "Number of visual rows to keep when folding a long line (1-50). Takes effect after reopening or refreshing the log file.",
   "config.theme.description": "Visual theme of the log viewer. You can also switch it temporarily from the Theme option in the viewer's settings panel.",
   "config.theme.enumDescription.0": "Default theme (follows the current VS Code theme)",
   "config.theme.enumDescription.1": "NEON.CYBER — cyberpunk terminal (pure black + neon)",

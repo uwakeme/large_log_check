@@ -204,6 +204,69 @@ button .codicon {
     display: inline;
 }
 
+/* ========== 长行折叠 ==========
+   超长行(一行几千字符的 JSON)钳制在 --fold-max-rows 个视觉行内,点击整行展开。
+   钳制只作用于 .log-line-main(行号+正文),JSON/XML 解析树、注释块在 wrapper
+   外始终可见。日志容器 line-height 1.5(见 .log-container),max-height 按
+   1.5em/行 精确换算。
+
+   折叠指示用「⋯ 展开」实心按钮(--vscode-button-background,与顶部工具栏按钮
+   同一套视觉语言):日志正文里到处都是「...」字面量,暗色小方块会被当成标点
+   直接略过 —— 带文字的实心按钮才读得出「这里能点」。展开态的「收起」chip
+   同一套样式,保持前后的视觉语言一致。 */
+.log-line-main {
+    display: block;
+}
+
+.log-line.folded-long {
+    cursor: pointer;
+}
+
+.log-line.folded-long .log-line-main {
+    position: relative;
+    max-height: calc(var(--fold-max-rows, 3) * 1.5em);
+    overflow: hidden;
+}
+
+/* 「⋯ 展开」是真实元素而不是 ::after 伪元素:伪元素不是点击目标,
+   无法区分「点了按钮」和「点了正文」,单击/双击冲突的立即生效分支就失效了 */
+.log-line.folded-long .log-line-main .fold-expand-btn {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 2px 8px;
+    background: var(--vscode-button-background, #0078d4);
+    color: var(--vscode-button-foreground, #ffffff);
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.log-line.folded-long:hover .fold-expand-btn {
+    filter: brightness(1.2);
+}
+
+.fold-toggle {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 15px;
+    border-radius: 3px;
+    background: var(--vscode-button-secondaryBackground, var(--vscode-button-background, #0078d4));
+    color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground, #ffffff));
+    cursor: pointer;
+    user-select: none;
+}
+
+.fold-toggle:hover {
+    filter: brightness(1.2);
+}
+
 .jump-btn {
     display: inline-block;
     width: 20px;

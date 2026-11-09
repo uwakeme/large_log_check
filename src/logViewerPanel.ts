@@ -151,6 +151,9 @@ export class LogViewerPanel {
                         }
                         break;
                     case 'refresh':
+                        // 刷新时重新下发配置 —— 用户在 VS Code 设置里改了长行折叠
+                        // 相关项后点「刷新」就该生效(README/设置项描述都这么承诺)
+                        this.sendConfigToWebview();
                         await this.loadFile(this._fileUri, 'reload');
                         break;
                     case 'filterByThread':
@@ -693,6 +696,9 @@ export class LogViewerPanel {
         const searchDebounceMs = config.get<number>('search.debounceMs', 400);
         const collapseMinRepeatCount = config.get<number>('collapse.minRepeatCount', 2);
         const timelineSamplePoints = config.get<number>('timeline.samplePoints', 200);
+        // 长行折叠:开关默认开,保留行数钳制到 schema 声明的区间(1~50)
+        const foldLongLines = config.get<boolean>('view.foldLongLines', true);
+        const foldMaxRows = LogViewerPanel.clampInt(config.get<number>('view.foldMaxRows', 3), 1, 50, 3);
         // 主题是字符串 enum,host 端唯一来源是 VSCode 配置;
         // webview 端的 localStorage 只是"未收到 config 前的占位值"。
         const theme = config.get<string>('theme', 'default');
@@ -705,6 +711,8 @@ export class LogViewerPanel {
                 searchDebounceMs,
                 collapseMinRepeatCount,
                 timelineSamplePoints,
+                foldLongLines,
+                foldMaxRows,
                 theme
             }
         });
@@ -868,6 +876,10 @@ export class LogViewerPanel {
         const lineRangeScriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'lineRange.js')
         );
+        // 长行折叠纯逻辑脚本(判定/文案,webview.js 渲染链运行时调用,须先于其加载)
+        const foldLongLinesScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'foldLongLines.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -885,6 +897,7 @@ export class LogViewerPanel {
             .replace(/%%CLIPBOARD_JS%%/g, clipboardScriptUri.toString())
             .replace(/%%SEARCH_SHORTCUT_JS%%/g, searchShortcutScriptUri.toString())
             .replace(/%%LINE_RANGE_JS%%/g, lineRangeScriptUri.toString())
+            .replace(/%%FOLD_LONG_LINES_JS%%/g, foldLongLinesScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 

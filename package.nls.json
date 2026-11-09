@@ -5,6 +5,8 @@
   "config.search.debounceMs.description": "搜索框输入后自动触发搜索的防抖时间（毫秒）。",
   "config.collapse.minRepeatCount.description": "折叠重复日志时，至少重复多少次才会被折叠。",
   "config.timeline.samplePoints.description": "时间线采样点数量，数值越大越精细但计算时间越长。",
+  "config.view.foldLongLines.description": "折叠超长的日志行（如一行几千字符的 JSON 请求体），默认只显示前几行、点击整行展开全文，滚轮几格就能掠过一页。工具栏的「折叠长行」开关可临时切换。配置变更需重新打开或刷新日志文件后生效。",
+  "config.view.foldMaxRows.description": "折叠长行时保留的视觉行数（1~50）。配置变更需重新打开或刷新日志文件后生效。",
   "config.theme.description": "日志查看器的视觉主题。也可在查看器「设置」面板的「主题」选项中临时切换。",
   "config.theme.enumDescription.0": "默认主题(跟随 VSCode 当前主题)",
   "config.theme.enumDescription.1": "NEON.CYBER — 赛博朋克终端(纯黑+霓虹)",

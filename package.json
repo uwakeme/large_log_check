@@ -141,6 +141,18 @@
           "maximum": 1000,
           "description": "%config.timeline.samplePoints.description%"
         },
+        "big-log-viewer.view.foldLongLines": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.view.foldLongLines.description%"
+        },
+        "big-log-viewer.view.foldMaxRows": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "%config.view.foldMaxRows.description%"
+        },
         "big-log-viewer.theme": {
           "type": "string",
           "enum": [
