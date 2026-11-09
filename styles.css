@@ -1193,16 +1193,30 @@ code {
 }
 
 /* ========== 折叠长行示意(fm-fold,v1.5.0) ========== */
+/* 约定与 fm-io / fm-annotate 一致:mono 字体、#fafafa 底、14px 内边距、
+   行 .82rem / 1.7 行距;钳制行用 line-clamp 裁两行,「⋯ 展开」盖在切口右下 */
+.fm-fold {
+  font-family: var(--font-mono);
+  background: #fafafa;
+}
+.fm-fold-lines { padding: 14px 16px; }
+
 .fm-fold-line {
   display: flex;
   align-items: flex-start;
   gap: 14px;
+  margin-bottom: 6px;
+  font-size: .82rem;
+  color: var(--ink-2);
+  line-height: 1.7;
 }
-.fm-fold-line .fm-io-msg {
+.fm-fold-line .fm-io-line-num { color: var(--ink-3); min-width: 78px; white-space: nowrap; }
+.fm-fold-line .fm-io-time { color: var(--ink-3); min-width: 70px; white-space: nowrap; }
+.fm-fold-line .fm-io-level { display: inline-block; width: 50px; font-weight: 600; flex: none; }
+
+.fm-fold-line.fm-fold-line-clamped .fm-io-msg {
   flex: 1;
   min-width: 0;
-}
-.fm-fold-line.fm-fold-line-clamped .fm-io-msg {
   white-space: normal;
   word-break: break-all;
   display: -webkit-box;
@@ -1210,7 +1224,6 @@ code {
   -webkit-line-clamp: 2;
   overflow: hidden;
   position: relative;
-  line-height: 1.5;
 }
 .fm-fold-btn {
   position: absolute;
@@ -1220,27 +1233,27 @@ code {
   color: #fff;
   font-size: 10px;
   font-weight: 600;
-  line-height: 1;
-  padding: 2px 7px;
+  line-height: 1.4;
+  padding: 1px 8px;
   border-radius: 3px;
   white-space: nowrap;
-  font-style: normal;
 }
 .fm-fold-chip {
   display: inline-block;
   margin-left: 8px;
-  padding: 0 6px;
+  padding: 0 7px;
   font-size: 10px;
-  line-height: 1.6;
   border: 1px solid var(--border-strong);
   border-radius: 3px;
   color: var(--ink-2);
   white-space: nowrap;
-  font-style: normal;
 }
 .fm-fold-note {
-  margin-top: 10px;
+  margin-top: 4px;
+  padding: 10px 16px 14px;
   font-size: 11px;
   color: var(--ink-3);
   text-align: center;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
 }
