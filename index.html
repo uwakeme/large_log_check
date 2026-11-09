@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件</title>
-  <meta name="description" content="Open Log Viewer 是 VSCode 扩展,把服务器日志块变成可打开、可搜索、可标注、可排查的工具。整块载入带真实进度、多关键词搜索、时间线导航、书签注释、可重跑的排查模板。" />
+  <meta name="description" content="Open Log Viewer 是 VSCode 扩展,把服务器日志块变成可打开、可搜索、可标注、可排查的工具。整块载入带真实进度、多关键词搜索、时间线导航、书签注释、可重跑的排查模板,超长行折叠,GBK / UTF-16 编码支持。" />
   <meta name="keywords" content="VSCode, Open Log Viewer, 大日志, log viewer, 大文件, 日志分块, 排查模板" />
   <meta property="og:title" content="Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件" />
-  <meta property="og:description" content="把服务器日志块变成可打开、可搜索、可标注、可排查的工具。" />
+  <meta property="og:description" content="把服务器日志块变成可打开、可搜索、可标注、可排查的工具,超长行折叠,GBK / UTF-16 编码支持。" />
   <meta property="og:type" content="website" />
   <link rel="icon" href="images/icon.png" />
   <link rel="stylesheet" href="styles.css" />
@@ -19,7 +19,7 @@
       <a href="#top" class="brand">
         <span class="brand-mark"></span>
         <span class="brand-name">Open Log Viewer</span>
-        <span class="brand-ver">v1.3.5</span>
+        <span class="brand-ver js-ver">v1.5.0</span>
       </a>
       <nav class="topnav">
         <a href="#why">为什么</a>
@@ -41,7 +41,7 @@
         <div class="hero-text">
           <div class="eyebrow">
             <span class="dot"></span>
-            VSCode Extension · MIT · v1.3.5
+            VSCode Extension · MIT · <span class="js-ver">v1.5.0</span>
           </div>
           <h1 class="display"><span>Open Log Viewer</span></h1>
           <p class="lede">
@@ -188,6 +188,7 @@
           </p>
           <ul class="feat-bullets">
             <li>多文件同时打开,各占独立面板,状态互不干扰</li>
+            <li>GBK / UTF-16 编码自动识别,「编码」下拉可按面板手动切换</li>
             <li>加载失败 / 编码异常时给出明确错误</li>
           </ul>
         </div>
@@ -225,6 +226,8 @@
           </p>
           <ul class="feat-bullets">
             <li>全局搜索历史 50 条,聚焦搜索框一键重搜</li>
+            <li>行号范围限定:右键任意行设起点 / 终点,浏览、搜索、筛选只在范围内进行</li>
+            <li>筛选条件芯片式展示,点芯片上的 × 单独取消那一条</li>
             <li>折叠重复日志时,徽标显示当前搜索的命中数</li>
           </ul>
         </div>
@@ -300,12 +303,13 @@
           <h3>排查模板</h3>
           <p>
             固定排查流程存成模板,自动重跑,换个订单号或 traceId 就能复用。
-            四种动作自由编排:查询日志、筛选、打书签、加注释,
+            五种动作自由编排:查询日志、筛选、限定范围、打书签、加注释,
             动作间自动传上下文(比如从命中行提取线程名接着筛)。
           </p>
           <ul class="feat-bullets">
             <li>命中多条时可配置「让我选择 / 保留全部 / 自动选第一条」</li>
             <li>零命中时可配置终止或跳过继续</li>
+            <li>「限定范围」把命中行设为范围起点 / 终点,自动圈出单次执行</li>
             <li>可视化与 JSON 双形式编辑,导入导出走剪贴板或文件</li>
           </ul>
         </div>
@@ -403,6 +407,35 @@
           </div>
         </figure>
       </article>
+
+      <!-- 06 · FOLD — 折叠长行 -->
+      <article class="feat feat-reverse">
+        <div class="feat-text">
+          <div class="feat-tag">06 · FOLD</div>
+          <h3>折叠长行</h3>
+          <p>
+            一行几千字符的超长 JSON,换行后能把一页撑成几百屏,滚轮滚不到头。
+            折叠长行默认开启:真正放不下的行只显示前 3 行,切口处有醒目的「⋯ 展开」按钮,
+            点击展开全文、再点「收起」折回 —— 滚轮几格就掠过一页,扫线索只看每条开头就够了。
+          </p>
+          <ul class="feat-bullets">
+            <li>只折叠真正被裁掉的行,没有「点了没反应」的假折叠</li>
+            <li>双击加书签不受影响;跳转(定位 / 书签 / 时间线)到长行自动展开</li>
+            <li>折叠重复日志模式下超长行同样折叠;保留行数 1 – 50 可调</li>
+          </ul>
+        </div>
+        <figure class="feat-shot">
+          <div class="fm-fold" role="img" aria-label="折叠长行示意:超长 JSON 行钳制在 3 行内,切口有展开按钮">
+            <div class="fm-fold-lines">
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,827</span><span class="fm-io-time">12:34:55</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Cache hit ratio: 0.94</span></div>
+              <div class="fm-fold-line fm-fold-line-clamped"><span class="fm-io-line-num">3,246,828</span><span class="fm-io-time">12:34:56</span><span class="fm-io-level fm-io-error">ERROR</span><span class="fm-io-msg">publish event: {"collaboration_scope_id":"2a80ec96…","publish_to_coll_scope":true,"publish_obj_list":[{"id":"a2d56a08b184","obj_type":"变电站","params":{"cap_unit":"系统一","cap_role":"管理员","status":1<span class="fm-fold-btn">⋯ 展开</span></span></div>
+              <div class="fm-fold-line"><span class="fm-io-line-num">3,246,829</span><span class="fm-io-time">12:34:57</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">cache invalidated, size 0<span class="fm-fold-chip">收起</span></span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,830</span><span class="fm-io-time">12:34:58</span><span class="fm-io-level fm-io-warn">WARN</span><span class="fm-io-msg">Slow query: 1.2s on /users/123</span></div>
+            </div>
+            <div class="fm-fold-note">超长行钳制在前 3 行 · 点击整行展开 · 行尾「收起」折回</div>
+          </div>
+        </figure>
+      </article>
     </div>
   </section>
 
@@ -449,6 +482,8 @@
         识别不到时间戳只影响时间范围过滤、时间线、按时间裁剪这三类功能,打开、搜索、级别过滤、书签、注释全部照常可用。
         级别简写 <code>E</code> / <code>W</code> / <code>I</code> / <code>D</code>、<code>ERR</code> / <code>WRN</code> / <code>INF</code> / <code>DBG</code> / <code>TRC</code> 默认就能识别;
         如果你们的日志用了别的缩写,在设置里配级别别名即可。
+        编码同样自动识别:GBK(含 GB2312,按 GB18030 解码)与 UTF-16 LE / BE
+        (常见于 PowerShell 重定向产物)直接打开不乱码,也可在「编码」下拉手动切换。
       </p>
     </div>
   </section>
@@ -623,7 +658,7 @@ $ npm run package</code></pre>
       <div class="foot-brand">
         <span class="brand-mark"></span>
         <span class="brand-name">Open Log Viewer</span>
-        <span class="foot-meta">v1.3.5 · MIT · © <a href="https://github.com/uwakeme" target="_blank" rel="noopener">@uwakeme</a></span>
+        <span class="foot-meta"><span class="js-ver">v1.5.0</span> · MIT · © <a href="https://github.com/uwakeme" target="_blank" rel="noopener">@uwakeme</a></span>
       </div>
       <nav class="foot-links">
         <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener">仓库</a>
@@ -648,6 +683,23 @@ $ npm run package</code></pre>
         }
       });
     });
+  </script>
+
+  <script>
+    // 版本号动态填充:向 GitHub API 取 releases/latest 的 tag(发布 Release 后线上自动更新,
+    // 无需重新部署主页);拉取失败时保留 HTML 里的写死兜底值
+    (function () {
+      var nodes = document.querySelectorAll('.js-ver');
+      if (!nodes.length) return;
+      fetch('https://api.github.com/repos/uwakeme/large_log_check/releases/latest', { headers: { 'Accept': 'application/vnd.github+json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || !data.tag_name) return;
+          var tag = data.tag_name.replace(/^v/, '');
+          nodes.forEach(function (n) { n.textContent = 'v' + tag; });
+        })
+        .catch(function () { /* 保持兜底值 */ });
+    })();
   </script>
 </body>
 </html>

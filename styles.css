@@ -1191,3 +1191,56 @@ code {
   .fm-step-body { grid-column: 1; }
   .fm-step-policy { grid-column: 1; }
 }
+
+/* ========== 折叠长行示意(fm-fold,v1.5.0) ========== */
+.fm-fold-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.fm-fold-line .fm-io-msg {
+  flex: 1;
+  min-width: 0;
+}
+.fm-fold-line.fm-fold-line-clamped .fm-io-msg {
+  white-space: normal;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  position: relative;
+  line-height: 1.5;
+}
+.fm-fold-btn {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-style: normal;
+}
+.fm-fold-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 1.6;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-style: normal;
+}
+.fm-fold-note {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: center;
+}
