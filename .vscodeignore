@@ -13,3 +13,8 @@ node_modules/**/.bin/**
 docs/**
 test/**
 .zcode/**
+.harness/**
+.claude/**
+.screenshots/**
+AGENTS.md
+CLAUDE.md
