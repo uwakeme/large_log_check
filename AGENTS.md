@@ -119,6 +119,12 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 
 项目主页 URL：**https://uwakeme.github.io/large_log_check/**（已设置到 repo 的 Website 字段）
 
+### 主页内容同步约定（2026-11-09 起）
+
+- **每次发版，或新增/修改用户可见功能时，检查 gh-pages 主页是否需要同步**。以用户可感知为准判断：新功能进「核心能力」卡片（重磅功能独立成卡，小改进并入现有卡片的 bullets）、格式/编码支持进「支持的日志格式」、纯内部修复不动主页
+- 同步时把 `index.html` 三处写死的兜底版本号（页顶 brand-ver / eyebrow / 页脚 foot-meta，都带 `js-ver` class）改成新版本号；线上页面会向 GitHub API 取 `releases/latest` 动态覆盖——**发布 GitHub Release 后主页显示自动更新，无需重新部署**，兜底值仅在 API 拉取失败时展示
+- 同步操作走下面的 worktree 工作流；推送 gh-pages 后用浏览器过一遍新卡片渲染与动态版本号是否正常
+
 ### 站点内容只放 `gh-pages` 分支,`main` 不要有 `site/` / `docs/` 站点目录
 
 - `gh-pages` 分支根目录直接是站点:`index.html`、`styles.css`、`images/`（README 配图等）
