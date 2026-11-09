@@ -161,6 +161,11 @@ button .codicon {
 .log-container {
     flex: 1;
     overflow-y: auto;
+    /* 关闭 Chromium 滚动锚定:书签切换等操作会整页重建 DOM,锚点节点全部销毁后
+       Chrome 重新选锚并做补偿 —— 非 100% 缩放下每行高度是小数像素,补偿会出现
+       ±1~3px 的偶发偏移(表现为加/移书签后页面随机滚动一点)。重建是确定性的,
+       滚动位置本就不会变,锚定在这里只引入抖动不提供价值。 */
+    overflow-anchor: none;
     background-color: var(--vscode-editor-background);
     border: 1px solid var(--vscode-panel-border);
     border-radius: 5px;
