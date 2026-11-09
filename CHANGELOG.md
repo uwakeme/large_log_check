@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.5.0] - 2026-11-09
 ### Added
 - **支持行号范围限定** — 右键任意日志行可设为范围起点/终点（也可通过「设置行号范围」精确输入行号），设置后浏览、翻页、搜索、筛选都只在范围内进行，线程、级别、关键词等所有筛选方式都在范围内叠加；分页区旁常驻显示当前范围、可单独清除，跳转到范围外的行也会明确提示
 - **排查模板新增「限定范围」动作** — 可把某次查询命中的行设为范围起点/终点，实现「找开始标记 → 找结束标记 → 只在这次执行范围内继续排查」的固定流程，定时任务日志查单次执行不再混入其他轮次
