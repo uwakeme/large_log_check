@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.5.1] - 2026-11-10
 ### Fixed
 - **「折叠重复日志」模式下超长行无法展开** — 此前明细行的「⋯ 展开」按钮点不动、组头的按钮实际展开的是整组而非本行，文案与行为不符；现在明细行可正常展开/收起，组头按钮文案改为「展开本组 N 条」/「收起本组」，与实际行为一致
 - **「收起」按钮改到正文开头** — 以小徽章形式插在行号之后、正文最前面，展开即见、不遮挡任何内容；此前挂在行尾，几千字符的长行「行尾」在几屏之外基本够不着
