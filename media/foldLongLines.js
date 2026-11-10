@@ -71,7 +71,7 @@ function resolveLongLineClickMode(target) {
     const NONE = 'none';
     if (!target || typeof target.closest !== 'function') { return 'delayed'; }
     if (target.closest('.json-tree, .xml-tree, .log-comment')) { return NONE; }
-    if (target.closest('.fold-toggle, .fold-expand-btn')) { return 'immediate'; }
+    if (target.closest('.fold-expand-btn, .fold-collapse-btn')) { return 'immediate'; }
     return 'delayed';
 }
 

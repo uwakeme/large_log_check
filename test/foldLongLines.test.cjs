@@ -125,7 +125,7 @@ test('resolveLongLineClickMode: 注释块内的点击不触发整行折叠', () 
 });
 
 test('resolveLongLineClickMode: 点「⋯ 展开」/「收起」按钮 → 立即执行', () => {
-    assert.equal(resolveLongLineClickMode(fakeTarget({ '.fold-toggle, .fold-expand-btn': {} })), 'immediate');
+    assert.equal(resolveLongLineClickMode(fakeTarget({ '.fold-expand-btn, .fold-collapse-btn': {} })), 'immediate');
 });
 
 test('resolveLongLineClickMode: 正文区域 → 延迟判定(给双击书签取消的窗口)', () => {
@@ -138,7 +138,7 @@ test('resolveLongLineClickMode: 按钮优先于其它归属', () => {
     // 两个 closest 都命中时(按钮不会出现在解析树里,防御性断言优先级)
     const both = fakeTarget({
         '.json-tree, .xml-tree, .log-comment': {},
-        '.fold-toggle, .fold-expand-btn': {}
+        '.fold-expand-btn, .fold-collapse-btn': {}
     });
     assert.equal(resolveLongLineClickMode(both), 'none');
 });

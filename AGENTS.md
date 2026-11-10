@@ -53,7 +53,7 @@ The author's real driver: people around them inspect log files with **记事本 
 ## Testing instructions
 
 - Unit tests use the built-in `node:test` runner: `npm test` (= compile + `node --test test/*.test.cjs`)
-- `test/` 现有七个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`encoding.test.cjs`（GBK/UTF-16 编码识别）、`templateImport.test.cjs`（排查模板导入校验 / 限定范围动作）、`clipboard.test.cjs`（日志选区复制）、`searchShortcut.test.cjs`（选中日志 Ctrl+F 搜索）、`lineRange.test.cjs`（行号范围解析 / 校验 / 芯片文案）、`foldLongLines.test.cjs`（长行折叠判定 / 点击归属 / 命中裁切 / 行数钳制），共 119 个用例
+- `test/` 现有七个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`encoding.test.cjs`（GBK/UTF-16 编码识别）、`templateImport.test.cjs`（排查模板导入校验 / 限定范围动作）、`clipboard.test.cjs`（日志选区复制）、`searchShortcut.test.cjs`（选中日志 Ctrl+F 搜索）、`lineRange.test.cjs`（行号范围解析 / 校验 / 芯片文案）、`foldLongLines.test.cjs`（长行折叠判定 / 点击归属 / 命中裁切 / 行数钳制），共 121 个用例
 - 新增测试放 `test/*.test.cjs`；webview 侧模块要打桩浏览器全局（`localStorage` / `document` / `window.getSelection` 等）再用 `vm` 加载，写法参考 `test/clipboard.test.cjs`
 - `node --test` 的 glob 模式需要 Node 21+；更早版本改用 `node --test test/` 跑整个目录
 - Manual test path: `npm run watch` → `F5` in VSCode → exercise the feature in the Extension Development Host

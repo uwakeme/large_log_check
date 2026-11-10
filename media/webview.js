@@ -48,6 +48,9 @@ const expandedLongLines = new Set(); // 已展开的长行(会话级,新数据�
 const searchAutoExpanded = new Set();
 // searchAutoExpanded 对应的搜索词 —— 变了就说明这批自动展开作废
 let searchAutoExpandedKeyword = null;
+// 用户手动收起的行(压过搜索自动展开):没有它,手动收起后任意一次重渲染
+// 都会把命中仍被裁掉的行又自动弹开,用户没有稳定的「保持收起」手段
+const userCollapsedLines = new Set();
 // 正文单击延迟判定的待执行切换 Map<行号, timer>:
 // 双击加书签会先收到一次 click,延迟窗口内取消才不会「先展开再书签」
 const pendingLongLineToggles = new Map();
@@ -750,6 +753,7 @@ function handleFileLoaded(data) {
     expandedLongLines.clear(); // 新数据集行号重新对位,长行展开记录作废
     searchAutoExpanded.clear(); // 同上:搜索命中的自动展开也作废
     searchAutoExpandedKeyword = null;
+    userCollapsedLines.clear(); // 同上:「保持收起」也随新数据集作废
     cancelAllPendingLongLineToggles(); // 残留的延迟切换会误切新数据集里碰巧同号的行
 
     // 清除筛选状态
@@ -1053,6 +1057,19 @@ function renderLines() {
     const container = document.getElementById('logContainer');
     // 搜索条件变了 → 上一次「命中被藏而自动展开」的记录作废(渲染前判定)
     syncSearchAutoExpanded();
+    // 快照滚动位置:整页 DOM 销毁重建后 Chrome 会重新选锚点并补偿,非 100% 缩放下
+    // 行高是小数像素,补偿带 ±1~3px 偶发偏移。防御 = 双保险(审查 N1):
+    // 1) 重建期间 overflow-anchor:none —— 布局在关闭状态下发生,锚定无从补偿;
+    //    不能用 setTimeout 恢复:0ms 定时器可能抢在浏览器首次布局前执行,
+    //    无长行候选的页面(没有 measure 强制布局)抖动会复发
+    // 2) 重建后强制布局并钉回 scrollTop(见函数尾部 setRenderDone)
+    const prevScrollTop = container.scrollTop;
+    const setRenderDone = () => {
+        void container.offsetHeight; // 强制布局:确保这次布局跑在锚定关闭状态下
+        if (container.scrollTop !== prevScrollTop) { container.scrollTop = prevScrollTop; }
+        container.style.overflowAnchor = ''; // 恢复锚定:此后视口上方的行高变化仍受保护
+    };
+    container.style.overflowAnchor = 'none';
     // 不要在这里读 container.innerHTML — 序列化整棵子树是纯调试开销,渲染热路径上很贵
     container.innerHTML = '';
 
@@ -1060,6 +1077,7 @@ function renderLines() {
         container.innerHTML = '<div class="loading">没有日志数据</div>';
         document.getElementById('pagination').style.display = 'none';
         document.getElementById('loadedLines').textContent = '0';
+        setRenderDone();
         console.log('渲染结果: 显示"没有日志数据"');
         return;
     }
@@ -1173,6 +1191,7 @@ function renderLines() {
     document.getElementById('loadedLines').textContent = allLines.length;
     document.getElementById('pagination').style.display = 'flex';
 
+    setRenderDone();
     console.log(`渲染完成！实际显示 ${pageLines.length} 条（原始 ${endIndex - startIndex} 行）`);
 }
 
@@ -1478,9 +1497,18 @@ function renderCollapsedGroup(container, group) {
 
     const firstLineNumber = group.firstLine.lineNumber || group.lines[0].lineNumber;
 
+    // 组头也可能是被书签的行(书签打在首行行号上):视觉与标准行一致
+    if (bookmarks.has(firstLineNumber)) {
+        lineDiv.classList.add('bookmarked');
+    }
+
     const lineNumber = document.createElement('span');
     lineNumber.className = 'log-line-number';
-    lineNumber.textContent = firstLineNumber.toString();
+    if (bookmarks.has(firstLineNumber)) {
+        lineNumber.innerHTML = '<i class="codicon codicon-bookmark bookmark-icon"></i> ' + firstLineNumber.toString();
+    } else {
+        lineNumber.textContent = firstLineNumber.toString();
+    }
     lineNumber.dataset.line = firstLineNumber.toString();
 
     const lineContent = document.createElement('span');
@@ -1546,7 +1574,7 @@ function renderCollapsedGroup(container, group) {
         toggleGroup(group.groupId);
     };
 
-    // 组头正文参与长行钳制(纯视觉,点击语义仍是展开组)。
+    // 组头正文参与长行钳制(纯视觉,点击语义仍是展开/收起组)。
     // 重复的 JSON 请求体是最典型的超长场景 —— 组头不钳制的话,这一模式下
     // 页面照样被撑成几百屏,长行折叠等于没开。
     const groupContent = group.firstLine.content || group.firstLine;
@@ -1564,6 +1592,12 @@ function renderCollapsedGroup(container, group) {
 
         lineDiv.classList.add('long-line-candidate');
         lineDiv.dataset.foldLine = String(firstLineNumber);
+
+        // 组头自己的「⋯ 展开」按钮(渲染时即挂,measure 同名幂等不覆盖)。
+        // 文案必须诚实:组头的点击语义是展开/收起整组,不是展开本行 ——
+        // 若复用通用的「⋯ 展开」,按钮行为与文案相反(审查 P2)。
+        // 想看组头首行的完整内容,展开本组后第 1 条明细就是它。
+        appendFoldExpandBtn(main, group.isExpanded ? '⋯ 收起本组' : `⋯ 展开本组 ${group.repeatCount} 条`);
     } else {
         lineContent.innerHTML = highlightedContent + badgeHtml;
         lineDiv.appendChild(lineNumber);
@@ -1590,7 +1624,14 @@ function renderCollapsedGroup(container, group) {
 
             const expandedLineNumber = document.createElement('span');
             expandedLineNumber.className = 'log-line-number';
-            expandedLineNumber.textContent = actualLineNumber.toString();
+            // 明细行书签视觉(审查 N5-2):此前明细行渲染缺 bookmarks 判断,
+            // 双击明细行加书签后没有任何视觉反馈
+            if (bookmarks.has(actualLineNumber)) {
+                expandedLineDiv.classList.add('bookmarked');
+                expandedLineNumber.innerHTML = '<i class="codicon codicon-bookmark bookmark-icon"></i> ' + actualLineNumber.toString();
+            } else {
+                expandedLineNumber.textContent = actualLineNumber.toString();
+            }
             expandedLineNumber.dataset.line = actualLineNumber.toString();
 
             const expandedLineContent = document.createElement('span');
@@ -1598,20 +1639,16 @@ function renderCollapsedGroup(container, group) {
             const expandedContent = line.content || line;
             expandedLineContent.innerHTML = highlightKeywords(expandedContent, currentSearchKeyword);
 
-            // 展开明细同样参与长行钳制(纯视觉)。明细行没有自己的点击语义,
-            // 点击冒泡到组头 = 展开组,不会被长行折叠的处理器抢走。
-            if (foldLongLinesEnabled && isLongLine(expandedContent)) {
-                const expandedMain = document.createElement('span');
-                expandedMain.className = 'log-line-main';
-                expandedMain.appendChild(expandedLineNumber);
-                expandedMain.appendChild(expandedLineContent);
-                expandedLineDiv.appendChild(expandedMain);
-                expandedLineDiv.classList.add('long-line-candidate');
-                expandedLineDiv.dataset.foldLine = String(actualLineNumber);
-            } else {
-                expandedLineDiv.appendChild(expandedLineNumber);
-                expandedLineDiv.appendChild(expandedLineContent);
-            }
+            expandedLineDiv.appendChild(expandedLineNumber);
+            expandedLineDiv.appendChild(expandedLineContent);
+
+            // 展开明细与标准行走同一套长行折叠交互(applyLongLineFold):
+            // 包钳制 wrapper + 挂完整交互(延迟单击切换/双击书签/解析树豁免)。
+            // 注意明细行是 container 的直接子节点、与组头是兄弟而非子孙 ——
+            // 点击不会冒泡到组头,此前「靠冒泡触发展开组」的注释是错的(审查 P1),
+            // 明细行必须自己挂交互,否则「⋯ 展开」就是死按钮、长行永久截断。
+            applyLongLineFold(expandedLineDiv, expandedLineContent, expandedContent, actualLineNumber);
+            attachBookmarkDblClick(expandedLineDiv, actualLineNumber);
             container.appendChild(expandedLineDiv);
         });
     }
@@ -1668,33 +1705,7 @@ const lineNumber = document.createElement('span');
         showContextMenu(e, content, actualLineNumber);
     };
 
-    // 添加双击书签功能（只有在没有选中文本时才触发）
-    lineDiv.ondblclick = (e) => {
-        // 双击 = 书签意图。先处理长行单击延迟判定的收尾:
-        // - 还在窗口期内 → 取消,单击切换不会执行;
-        // - 窗口已过、切换已执行(慢双击) → 把刚发生的展开/收起退回去,
-        //   否则用户双击加书签时行已经被单击展开跳了一下。
-        const hadPending = pendingLongLineToggles.has(actualLineNumber);
-        cancelPendingLongLineToggle(actualLineNumber);
-        if (!hadPending && lastDelayedToggle && lastDelayedToggle.lineNumber === actualLineNumber &&
-            Date.now() - lastDelayedToggle.time <= 600) {
-            toggleLongLineExpanded(actualLineNumber); // 回退刚执行的切换
-        }
-        lastDelayedToggle = null;
-
-        // 检查是否有文本被选中
-        const selection = window.getSelection();
-        const selectedText = selection.toString();
-
-        // 如果有文本被选中，说明用户想复制，不触发书签
-        if (selectedText && selectedText.trim().length > 0) {
-            console.log('📋 用户选中了文本，不触发书签');
-            return;
-        }
-
-        e.stopPropagation();
-        toggleBookmark(actualLineNumber);
-    };
+    attachBookmarkDblClick(lineDiv, actualLineNumber);
 
     // 先添加行号和内容
     lineDiv.appendChild(lineNumber);
@@ -1774,33 +1785,36 @@ function toggleFoldLongLines() {
     if (!foldLongLinesEnabled) {
         expandedLongLines.clear();
         searchAutoExpanded.clear();
+        userCollapsedLines.clear();
     }
     cancelAllPendingLongLineToggles(); // 开关切换后残留 timer 不该再动行状态
     renderLines();
 }
 
-// 展开态行尾挂「收起」chip(折叠态的「⋯」由 CSS ::after 画)
-function appendFoldToggleChip(contentEl) {
-    if (!contentEl.querySelector('.fold-toggle')) {
-        const chip = document.createElement('span');
-        chip.className = 'fold-toggle';
-        chip.textContent = '收起';
-        contentEl.appendChild(chip);
+// 展开态的「收起」小徽章:内联在正文最前面(行号之后、正文第一个字符之前)。
+// 不用浮层盖在文字上(会挡住正文),也不放行尾(几千字符的长行「行尾」在几屏外);
+// user-select:none 保证框选复制时不会把「收起」两个字带进剪贴板。
+function appendFoldCollapseBtn(contentEl) {
+    if (!contentEl.querySelector('.fold-collapse-btn')) {
+        const btn = document.createElement('span');
+        btn.className = 'fold-collapse-btn';
+        btn.textContent = '收起';
+        contentEl.insertBefore(btn, contentEl.firstChild);
     }
 }
 
-// 移除「收起」chip
-function removeFoldToggleChip(contentEl) {
-    const chip = contentEl.querySelector('.fold-toggle');
-    if (chip) { chip.remove(); }
+function removeFoldCollapseBtn(contentEl) {
+    const btn = contentEl.querySelector('.fold-collapse-btn');
+    if (btn) { btn.remove(); }
 }
 
-// 折叠切口处的「⋯ 展开」按钮(真实元素,点击可判定 → 走立即生效分支)
-function appendFoldExpandBtn(mainEl) {
+// 折叠切口处的「⋯ 展开」按钮(真实元素,点击可判定 → 走立即生效分支)。
+// label 可定制:折叠重复日志模式的组头复用同一按钮,但语义是「展开本组」。
+function appendFoldExpandBtn(mainEl, label) {
     if (!mainEl.querySelector('.fold-expand-btn')) {
         const btn = document.createElement('span');
         btn.className = 'fold-expand-btn';
-        btn.textContent = '⋯ 展开';
+        btn.textContent = label || '⋯ 展开';
         mainEl.appendChild(btn);
     }
 }
@@ -1816,8 +1830,15 @@ function removeFoldExpandBtn(mainEl) {
  * 浏览器夹紧 scrollTop 造成的视口位移。
  */
 function updateLongLineFoldState(lineNumber, expand) {
-    const numberSpan = document.querySelector(`.log-line [data-line="${lineNumber}"]`);
-    const lineDiv = numberSpan ? numberSpan.closest('.log-line') : null;
+    // 折叠重复日志模式下组头与首条明细共享行号,querySelector 会先命中组头 ——
+    // 跳过组头(.collapsed),优先更新明细行;没有明细时(如跳转场景)回落到第一个匹配
+    const numberSpans = document.querySelectorAll(`.log-line [data-line="${lineNumber}"]`);
+    let lineDiv = null;
+    for (const span of numberSpans) {
+        const owner = span.closest('.log-line');
+        if (owner && !owner.classList.contains('collapsed')) { lineDiv = owner; break; }
+    }
+    if (!lineDiv && numberSpans.length > 0) { lineDiv = numberSpans[0].closest('.log-line'); }
     if (!lineDiv) { return false; }
     const contentEl = lineDiv.querySelector('.log-line-content');
     const mainEl = lineDiv.querySelector('.log-line-main');
@@ -1827,14 +1848,41 @@ function updateLongLineFoldState(lineNumber, expand) {
         lineDiv.classList.remove('folded-long');
         lineDiv.title = longLineToggleTitle(false);
         removeFoldExpandBtn(mainEl);
-        appendFoldToggleChip(contentEl);
+        appendFoldCollapseBtn(contentEl);
     } else {
         lineDiv.classList.add('folded-long');
         lineDiv.title = longLineToggleTitle(true);
-        removeFoldToggleChip(contentEl);
+        removeFoldCollapseBtn(contentEl);
         appendFoldExpandBtn(mainEl);
     }
     return true;
+}
+
+/**
+ * 双击加书签(标准行与折叠重复日志模式的明细行共用)。
+ * 双击 = 书签意图,先处理长行单击延迟判定的收尾:
+ * - 还在窗口期内 → 取消,单击切换不会执行;
+ * - 窗口已过、切换已执行(慢双击) → 把刚发生的展开/收起退回去,
+ *   否则用户双击加书签时行已经被单击展开跳了一下。
+ * 有选中文本时不触发(用户在复制)。
+ */
+function attachBookmarkDblClick(lineDiv, actualLineNumber) {
+    lineDiv.ondblclick = (e) => {
+        const hadPending = pendingLongLineToggles.has(actualLineNumber);
+        cancelPendingLongLineToggle(actualLineNumber);
+        if (!hadPending && lastDelayedToggle && lastDelayedToggle.lineNumber === actualLineNumber &&
+            Date.now() - lastDelayedToggle.time <= 600) {
+            toggleLongLineExpanded(actualLineNumber); // 回退刚执行的切换
+        }
+        lastDelayedToggle = null;
+
+        const selection = window.getSelection();
+        const selectedText = selection ? selection.toString() : '';
+        if (selectedText && selectedText.trim().length > 0) { return; }
+
+        e.stopPropagation();
+        toggleBookmark(actualLineNumber);
+    };
 }
 
 // 点击长行切换展开/折叠(就地更新,不整页重渲染)
@@ -1842,11 +1890,13 @@ function toggleLongLineExpanded(lineNumber) {
     const willExpand = !expandedLongLines.has(lineNumber) && !searchAutoExpanded.has(lineNumber);
     if (willExpand) {
         expandedLongLines.add(lineNumber);
+        userCollapsedLines.delete(lineNumber); // 手动展开解除「保持收起」
     } else {
         expandedLongLines.delete(lineNumber);
-        // 用户手动收起 → 也要撤掉「搜索命中自动展开」的标记,
-        // 否则下一轮渲染会把它当已展开,又展开回去
+        // 用户手动收起 → 也要撤掉「搜索命中自动展开」的标记,并记入「保持收起」:
+        // 否则下一轮渲染 autoExpandSearchHits 会因命中仍被裁掉又把它弹开
         searchAutoExpanded.delete(lineNumber);
+        userCollapsedLines.add(lineNumber);
     }
     if (!updateLongLineFoldState(lineNumber, willExpand)) {
         // 兜底:DOM 里找不到这行(理论上不该发生),退回整页重渲染
@@ -1883,8 +1933,10 @@ function scheduleLongLineToggle(lineNumber) {
 
 // 渲染单条日志时应用长行折叠:把「跳转按钮/行号/正文」包进 .log-line-main
 // 作为钳制对象,JSON/XML 解析树、注释块留在 wrapper 外 —— 折叠状态下也始终可见。
-// 只在标准渲染路径(renderSingleLine)调用;折叠重复日志模式的组头有自己的
-// 点击语义(展开组),不参与长行折叠。
+// 标准渲染路径(renderSingleLine)与折叠重复日志模式的展开明细行共用:
+// 把「跳转按钮/行号/正文」包进 .log-line-main 作为钳制对象,挂上完整的长行交互
+// (延迟单击切换 + 双击书签取消 + 解析树豁免)。折叠重复日志模式的组头不经过这里
+// —— 组头的点击语义是「展开组」,按钮文案由 renderCollapsedGroup 自己定制。
 function applyLongLineFold(lineDiv, contentSpan, content, actualLineNumber) {
     // 手动展开 + 搜索命中自动展开都算「已展开」
     const isExpanded = expandedLongLines.has(actualLineNumber) || searchAutoExpanded.has(actualLineNumber);
@@ -1907,14 +1959,14 @@ function applyLongLineFold(lineDiv, contentSpan, content, actualLineNumber) {
         // 已在展开集合里(跳转到长行等):保持展开
         lineDiv.classList.remove('folded-long');
         lineDiv.title = longLineToggleTitle(false);
-        appendFoldToggleChip(contentSpan);
+        appendFoldCollapseBtn(contentSpan);
     }
 
     // 单击切换展开/折叠,与双击加书签的冲突处理(三道守卫 + 延迟判定):
     // - 解析树等自带交互的元素点击不触发(否则点解析树看到的是整行展开)
     // - 有选区时不触发(用户在选文字)
     // - 双击的第二次 click(detail>1)不触发
-    // - 正文单击延迟 250ms 执行,双击书签在窗口期内取消它 —— 双击只加书签,
+    // - 正文单击延迟 200ms 执行,双击书签在窗口期内取消它 —— 双击只加书签,
     //   行不再先展开跳一下;「⋯ 展开」/「收起」按钮是显式操作,立即生效
     lineDiv.onclick = (e) => {
         const mode = resolveLongLineClickMode(e.target);
@@ -1962,10 +2014,15 @@ function measureLongLineFolds() {
         if (!main) { return; }
         const contentEl = lineDiv.querySelector('.log-line-content');
         const lineNumber = parseInt(lineDiv.dataset.foldLine, 10);
-        // 只有标准渲染路径的行由长行折叠接管点击(折叠重复日志模式不接管)
+        // 组头(折叠重复日志模式):点击语义是展开/收起整组,不由长行折叠接管;
+        // 明细行与标准行走同一套交互,由 data-fold-toggle 标记
+        const isGroupHeader = lineDiv.classList.contains('collapsed');
         const ownsToggle = lineDiv.hasAttribute('data-fold-toggle');
-        // 已展开的行不再参与折叠判定(手动展开 + 搜索命中自动展开都算)
-        if (expandedLongLines.has(lineNumber) || searchAutoExpanded.has(lineNumber)) {
+        // 明细/标准行:已展开的不参与折叠判定(手动展开 + 搜索自动展开都算)。
+        // 组头与首条明细共享行号,不能查同一组集合 —— 否则展开明细 30 会连带
+        // 把组头 30 也放开,组头的「⋯ 展开本组」还会因缺 .folded-long 退化成
+        // 无样式纯文本(审查 N3)。组头永远按截断判定钳制,展开组 = 点组头。
+        if (!isGroupHeader && (expandedLongLines.has(lineNumber) || searchAutoExpanded.has(lineNumber))) {
             measurements.push({ lineDiv, contentEl, lineNumber, truncated: false, expanded: true, ownsToggle });
             return;
         }
@@ -1976,7 +2033,8 @@ function measureLongLineFolds() {
             lineNumber,
             truncated: isActuallyTruncated(main.scrollHeight, allowedHeight),
             expanded: false,
-            ownsToggle
+            ownsToggle,
+            isGroupHeader
         });
     });
 
@@ -1985,8 +2043,8 @@ function measureLongLineFolds() {
         if (m.expanded) { return; }
         if (m.truncated) {
             m.lineDiv.classList.add('folded-long');
-            // 只有标准渲染路径的行才由长行折叠接管点击;折叠重复日志模式的
-            // 组头/明细点击语义是「展开组」,不能抢
+            // ownsToggle 的行挂「点击展开完整内容」提示;组头点击语义是展开组,
+            // 不挂长行提示,按钮文案由 renderCollapsedGroup 定制(「展开本组 N 条」)
             if (m.ownsToggle) {
                 m.lineDiv.title = longLineToggleTitle(true);
             }
@@ -1997,7 +2055,7 @@ function measureLongLineFolds() {
             m.lineDiv.removeAttribute('title');
             if (m.ownsToggle) {
                 m.lineDiv.onclick = null;
-                if (m.contentEl) { removeFoldToggleChip(m.contentEl); }
+                if (m.contentEl) { removeFoldCollapseBtn(m.contentEl); }
             }
             if (m.mainEl) { removeFoldExpandBtn(m.mainEl); }
         }
@@ -2005,13 +2063,15 @@ function measureLongLineFolds() {
 }
 
 /**
- * 搜索词变更同步:搜索条件变了 → 上一次的自动展开作废。
+ * 搜索词变更同步:搜索条件变了 → 上一次的自动展开与「保持收起」都作废
+ * (换了个搜索词就是一次全新的查看,旧的收起意图不再适用)。
  * 必须在渲染前调用 —— 否则这一轮仍按旧的自动展开状态渲染,清空搜索后行还展开着。
  */
 function syncSearchAutoExpanded() {
     const keyword = currentSearchKeyword || '';
     if (searchAutoExpandedKeyword !== keyword) {
         searchAutoExpanded.clear();
+        userCollapsedLines.clear();
         searchAutoExpandedKeyword = keyword;
     }
 }
@@ -2037,17 +2097,28 @@ function autoExpandSearchHits() {
     candidates.forEach((lineDiv) => {
         const lineNumber = parseInt(lineDiv.dataset.foldLine, 10);
         if (!Number.isFinite(lineNumber)) { return; }
+        // 组头不参与命中自动展开:给组头挂「收起」会误导(点击实际是展开组),
+        // 还会抹掉「⋯ 展开本组」按钮(审查 N2)。命中在组头裁切区里时,
+        // 用户点「⋯ 展开本组」即可看到全文
+        if (lineDiv.classList.contains('collapsed')) { return; }
+        // 用户手动收起的行尊重用户意图,不自动弹开(审查 P5)
+        if (userCollapsedLines.has(lineNumber)) { return; }
         const main = lineDiv.querySelector('.log-line-main');
         if (!main) { return; }
 
-        // 找该行里第一个高亮块,看它是不是落在可见区之外
-        const highlight = main.querySelector('.highlight');
-        if (!highlight) { return; }
+        // 遍历该行全部高亮块:多关键词/正则模式一行里会有多个命中,
+        // 只看第一个的话,后面的命中被裁掉了也不会展开(审查 P4)
+        const highlights = main.querySelectorAll('.highlight');
+        if (highlights.length === 0) { return; }
 
         const visibleHeight = main.clientHeight;
-        const highlightTop = highlight.offsetTop;
-        const highlightBottom = highlightTop + highlight.offsetHeight;
-        if (!isHighlightClipped(highlightTop, highlightBottom, visibleHeight)) { return; }
+        let anyClipped = false;
+        highlights.forEach((highlight) => {
+            const highlightTop = highlight.offsetTop;
+            const highlightBottom = highlightTop + highlight.offsetHeight;
+            if (isHighlightClipped(highlightTop, highlightBottom, visibleHeight)) { anyClipped = true; }
+        });
+        if (!anyClipped) { return; }
 
         // 命中被藏 → 自动展开
         searchAutoExpanded.add(lineNumber);
@@ -2062,6 +2133,7 @@ function expandLongLineForJump(lineNumber) {
     if (!foldLongLinesEnabled || lineNumber == null) { return; }
     if (expandedLongLines.has(lineNumber)) { return; }
     expandedLongLines.add(lineNumber);
+    userCollapsedLines.delete(lineNumber); // 主动跳过去看,解除「保持收起」
 
     const numberSpan = document.querySelector(`.log-line.folded-long [data-line="${lineNumber}"]`);
     const lineDiv = numberSpan ? numberSpan.closest('.log-line') : null;
@@ -2071,7 +2143,7 @@ function expandLongLineForJump(lineNumber) {
         const mainEl = lineDiv.querySelector('.log-line-main');
         if (mainEl) { removeFoldExpandBtn(mainEl); }
         const contentEl = lineDiv.querySelector('.log-line-content');
-        if (contentEl) { appendFoldToggleChip(contentEl); }
+        if (contentEl) { appendFoldCollapseBtn(contentEl); }
     }
 }
 

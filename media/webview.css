@@ -161,11 +161,9 @@ button .codicon {
 .log-container {
     flex: 1;
     overflow-y: auto;
-    /* 关闭 Chromium 滚动锚定:书签切换等操作会整页重建 DOM,锚点节点全部销毁后
-       Chrome 重新选锚并做补偿 —— 非 100% 缩放下每行高度是小数像素,补偿会出现
-       ±1~3px 的偶发偏移(表现为加/移书签后页面随机滚动一点)。重建是确定性的,
-       滚动位置本就不会变,锚定在这里只引入抖动不提供价值。 */
-    overflow-anchor: none;
+    /* 滚动锚定(overflow-anchor)在 renderLines 里内联控制:
+       整页重建期间内联关闭(重建是确定性的,锚定只会引入缩放亚像素抖动),
+       布局完成后恢复 —— 视口上方的长行展开仍受锚定保护,视口不跳。 */
     background-color: var(--vscode-editor-background);
     border: 1px solid var(--vscode-panel-border);
     border-radius: 5px;
@@ -254,21 +252,24 @@ button .codicon {
     filter: brightness(1.2);
 }
 
-.fold-toggle {
+/* 展开态的「收起」:内联小徽章,在正文最前面(行号之后、第一个字符之前)。
+   不用浮层盖在文字上(会挡住正文),也不放行尾(长行的「行尾」在几屏外);
+   user-select:none 保证框选复制时不会把「收起」两个字带进剪贴板 */
+.fold-collapse-btn {
     display: inline-block;
-    margin-left: 6px;
-    padding: 1px 8px;
+    margin-right: 6px;
+    padding: 1px 7px;
     font-size: 11px;
     font-weight: 600;
-    line-height: 15px;
-    border-radius: 3px;
+    line-height: 14px;
     background: var(--vscode-button-secondaryBackground, var(--vscode-button-background, #0078d4));
     color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground, #ffffff));
+    border-radius: 3px;
     cursor: pointer;
     user-select: none;
 }
 
-.fold-toggle:hover {
+.fold-collapse-btn:hover {
     filter: brightness(1.2);
 }
 
