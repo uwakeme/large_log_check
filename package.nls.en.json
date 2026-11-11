@@ -29,5 +29,6 @@
   "config.file.encoding.enumDescription.1": "UTF-8 (with or without BOM)",
   "config.file.encoding.enumDescription.2": "GBK (incl. GB2312, decoded as GB18030)",
   "config.file.encoding.enumDescription.3": "UTF-16 LE (usually with BOM, e.g. PowerShell redirection)",
-  "config.file.encoding.enumDescription.4": "UTF-16 BE"
+  "config.file.encoding.enumDescription.4": "UTF-16 BE",
+  "config.load.maxFileSizeMB.description": "Maximum log file size (MB) to open. Logs are loaded fully into memory; files over this limit are rejected with a clear message instead of hanging. Defaults to 1024 (1GB); set 0 for no limit. Larger limits mean higher memory usage."
 }

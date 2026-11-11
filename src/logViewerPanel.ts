@@ -4,6 +4,7 @@ import * as path from 'path';
 import { LogProcessor } from './logProcessor';
 import { LogLine } from './logParser';
 import { FileEncoding, isFileEncoding } from './encoding';
+import { planLineChunks, SAFE_SINGLE_LINE_CHARS } from './chunkedTransfer';
 
 let cachedWebviewHtml: string | null = null;
 
@@ -34,6 +35,10 @@ export class LogViewerPanel {
     // 串行链保证同一时间只有一个全文件扫描在跑。
     private _loadSeq = 0;
     private _loadChain: Promise<void> = Promise.resolve();
+    // 分块传输代次:postMessageWithLines 每次发送自增,webview 侧按它丢弃过期块
+    private _transferSeq = 0;
+    // 导出反向分块(webview→宿主)的累积槽:null = 无在途导出传输
+    private _exportTransfer: { lines: LogLine[]; exportType?: string; expectedTotal?: number } | null = null;
     private _disposed = false;
 
     public static createOrShow(extensionUri: vscode.Uri, fileUri: vscode.Uri) {
@@ -97,6 +102,85 @@ export class LogViewerPanel {
      */
     public postMessage(message: unknown): void {
         this._panel.webview.postMessage(message);
+    }
+
+    /**
+     * 分块发送携带大行数组的消息(fileLoaded / filterResults)。
+     *
+     * 单条 postMessage 的 payload 会被整体 JSON 序列化成一个字符串,行数组的
+     * 字符总量逼近 V8 单字符串上限(2^29-24 ≈ 5.37 亿字符,约 500MB 文本)时
+     * 序列化抛 RangeError 且被静默吞掉 —— 650MB 日志「加载到 100% 卡住不动」
+     * 即由此而来。这里拆成三段:
+     *   头部(带 chunkedTransferId) → chunkTransfer × N → chunkTransferDone
+     * webview 侧(media/chunkedLoad.js)累积完成后合成原始消息分发给既有
+     * handler,对其完全透明。
+     *
+     * 每块 await:串行发送避免宿主侧堆起全量待发缓冲;面板关闭时 postMessage
+     * 返回 false 可以及时中止。
+     *
+     * @returns false = 传输被中止(面板关闭/代次过期),调用方应停止后续动作
+     */
+    private async postMessageWithLines(
+        command: string,
+        data: Record<string, unknown>,
+        lines: LogLine[],
+        options?: {
+            /** 每块发送前检查,返回 true 则中止传输 */
+            isCancelled?: () => boolean;
+            /** 每块发送后的进度回调(sent = 已发行数);单块传输收尾即回调 100%,让小文件也见「加载完成」 */
+            onProgress?: (sent: number, total: number) => void;
+        }
+    ): Promise<boolean> {
+        const loadId = ++this._transferSeq;
+        const headerSent = await this._panel.webview.postMessage({
+            command,
+            data: { ...data, chunkedTransferId: loadId }
+        });
+        if (!headerSent) {
+            return false;
+        }
+
+        const plans = planLineChunks(lines);
+        for (const plan of plans) {
+            if (this._disposed || options?.isCancelled?.()) {
+                // P1-b:中止时通知 webview 立刻清空累积槽,不等下一次头部到达 ——
+                // 否则 1GB 文件传到 90% 被打断,已累积的几百 MB 行对象要滞留到
+                // 下一次加载读完文件才释放。面板已关闭则 webview 也不在了,免发。
+                if (!this._disposed) {
+                    await this._panel.webview.postMessage({ command: 'chunkTransferAbort', loadId });
+                }
+                return false;
+            }
+            // P3-1:超长单行独占一块,但独占块仍可能超 V8 单字符串上限 → 明确报错,
+            // 不再静默卡死(调用方的 catch 会转为用户可见的错误提示)。
+            // N4:抛错前补发 abort 清掉 webview 已累积的行,与取消分支同收口。
+            if (plan.end - plan.start === 1) {
+                const content = lines[plan.start]?.content;
+                if (typeof content === 'string' && content.length > SAFE_SINGLE_LINE_CHARS) {
+                    if (!this._disposed) {
+                        await this._panel.webview.postMessage({ command: 'chunkTransferAbort', loadId });
+                    }
+                    throw new Error(`第 ${lines[plan.start]?.lineNumber ?? plan.start + 1} 行超过 ${Math.floor(SAFE_SINGLE_LINE_CHARS / 10000) / 10000} 亿字符,单条消息无法承载,已停止载入`);
+                }
+            }
+            const chunkSent = await this._panel.webview.postMessage({
+                command: 'chunkTransfer',
+                loadId,
+                lines: lines.slice(plan.start, plan.end),
+                sent: plan.end
+            });
+            if (!chunkSent) {
+                return false;
+            }
+            options?.onProgress?.(plan.end, lines.length);
+        }
+
+        const doneSent = await this._panel.webview.postMessage({
+            command: 'chunkTransferDone',
+            loadId,
+            chunkCount: plans.length
+        });
+        return doneSent;
     }
 
     /**
@@ -171,8 +255,36 @@ export class LogViewerPanel {
                     case 'sampleTimeline':
                         await this.sampleTimeline(LogViewerPanel.clampInt(message.sampleCount, 1, 10000, this._timelineSampleCount));
                         break;
-                    case 'exportLogs':
-                        await this.exportCurrentView(message.lines, message.exportType);
+                    case 'exportLogsBegin':
+                        // 导出反向分块(P1-a):webview 把当前视图/书签行按 ~8M 字符/块
+                        // 拆开发送,宿主累积完毕再走原保存对话框流程。单槽 last-begin-wins,
+                        // 重复点导出时新一轮 Begin 直接覆盖旧累积。
+                        this._exportTransfer = {
+                            lines: [],
+                            exportType: typeof message.exportType === 'string' ? message.exportType : undefined,
+                            // 完整性校验(N2):Done 时比对应收行数,丢块/中断不允许静默写出残缺文件
+                            expectedTotal: typeof message.totalLines === 'number' ? message.totalLines : undefined
+                        };
+                        break;
+                    case 'exportLogsChunk':
+                        if (this._exportTransfer && Array.isArray(message.lines)) {
+                            for (const line of message.lines) {
+                                this._exportTransfer.lines.push(line);
+                            }
+                        }
+                        break;
+                    case 'exportLogsDone':
+                        if (this._exportTransfer) {
+                            const transfer = this._exportTransfer;
+                            this._exportTransfer = null;
+                            if (transfer.expectedTotal !== undefined && transfer.lines.length !== transfer.expectedTotal) {
+                                vscode.window.showErrorMessage(
+                                    `导出数据不完整(收到 ${transfer.lines.length} / ${transfer.expectedTotal} 行),已取消导出,请重试`
+                                );
+                                break;
+                            }
+                            await this.exportCurrentView(transfer.lines, transfer.exportType);
+                        }
                         break;
                     case 'exportTemplates':
                         await this.exportTemplates(message.templates);
@@ -353,10 +465,28 @@ export class LogViewerPanel {
             const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(2);
             const fileSizeBytes = fileStats.size;
 
-            // 单一加载流程:进度 0% → 99% 在读取阶段实时推进 → 100%
-            // 进度按真实字节已读量 / 文件总大小 归一化,替换之前"行数/10万"的
-            // 行数 hack — 后者在大文件上永远卡 99%(100万行读完已经显示99%但实际只读了10%)。
-            // 字节进度是真实进度,小文件秒到 100%,大文件平滑推进,用户体验一致。
+            // 大小护栏:载入的行数组全量驻留内存(宿主 + webview 双份),无上限
+            // 地放开只会换来 OOM 或长时间假死 —— 超过上限直接明确报错并收起
+            // 加载遮罩,不再无声卡死。0 = 不限制。
+            const maxFileSizeMB = LogViewerPanel.clampInt(
+                vscode.workspace.getConfiguration('big-log-viewer').get<number>('load.maxFileSizeMB', 1024),
+                0, 32768, 1024
+            );
+            if (maxFileSizeMB > 0 && fileSizeBytes > maxFileSizeMB * 1024 * 1024) {
+                const message = `文件 ${path.basename(fileUri.fsPath)}(${fileSizeMB}MB)超过大小上限 ${maxFileSizeMB}MB,已停止加载。` +
+                    '可在设置「Open Log Viewer → Load: Max File Size Mb」调大上限(0 = 不限制),或先拆分文件后再打开';
+                vscode.window.showErrorMessage(message);
+                this._panel.webview.postMessage({
+                    command: 'fileLoadError',
+                    data: { message }
+                });
+                return;
+            }
+
+            // 单条连续进度条:读取阶段占 0–70%(按真实字节已读量/文件总大小归一化),
+            // 分块送入查看器占 70–100% —— 两段真实工作合成一条不归零的进度,
+            // 阶段文字(「正在加载日志...」→「正在载入日志数据...」)负责区分当前在干嘛。
+            // 替换之前"行数/10万"的行数 hack — 后者在大文件上永远卡着不动。
             this._panel.webview.postMessage({
                 command: 'loadingProgress',
                 data: {
@@ -369,8 +499,8 @@ export class LogViewerPanel {
                 // 字节进度优先;bytesRead 不可用时退化到行数估算
                 const bytes = bytesRead ?? 0;
                 const progress = fileSizeBytes > 0
-                    ? Math.min(99, (bytes / fileSizeBytes) * 99)
-                    : Math.min(99, (currentLine / 100_000) * 99);
+                    ? Math.min(70, (bytes / fileSizeBytes) * 70)
+                    : Math.min(70, (currentLine / 100_000) * 70);
                 this._panel.webview.postMessage({
                     command: 'loadingProgress',
                     data: {
@@ -388,25 +518,29 @@ export class LogViewerPanel {
 
             this._panel.title = `Open Log Viewer - ${path.basename(fileUri.fsPath)}`;
 
-            // 发送最终进度,随即发送 fileLoaded — 不再人为加 300ms 假延迟。
+            // 读取结束 → 进入送数据阶段:阶段文字即刻切换、进度条从 70% 起步。
+            // 之后的推进由下面每块的 onProgress 负责 —— 进度映射只在这一个文件里,
+            // webview 侧分块拦截只累积不刷进度,避免两边映射不一致的来回跳。
             this._panel.webview.postMessage({
                 command: 'loadingProgress',
                 data: {
-                    stage: '加载完成！',
-                    progress: 100,
-                    current: totalLines,
+                    stage: '正在载入日志数据...',
+                    progress: 70,
+                    current: 0,
                     total: totalLines
                 }
             });
 
-            this._panel.webview.postMessage({
-                command: 'fileLoaded',
-                data: {
+            // 分块发送:lines 数组按 ~8M 字符/块拆开发送,webview 累积完成后合成
+            // 原始 fileLoaded 消息分发 —— 单条消息发全量会超 V8 单字符串上限,
+            // 650MB 日志即卡死在这(详见 postMessageWithLines 注释)。
+            const delivered = await this.postMessageWithLines(
+                'fileLoaded',
+                {
                     fileName: path.basename(fileUri.fsPath),
                     filePath: fileUri.fsPath,
                     fileSize: fileSizeMB,
                     totalLines: totalLines,
-                    lines: lines,
                     allLoaded: true,
                     // 加载来源:'reload' = webview 的 refresh 命令(含筛选触发的整文件重载),
                     // 'load' = 打开面板/命令面板刷新/删除后重载/编码切换等其它路径。
@@ -417,8 +551,40 @@ export class LogViewerPanel {
                     // 下拉停在「自动检测(当前: XX)」还是直接选中具体编码
                     fileEncodingAuto: this._encodingOverride === null &&
                         !isFileEncoding(vscode.workspace.getConfiguration('big-log-viewer').get<string>('file.encoding', 'auto'))
+                },
+                lines,
+                {
+                    // 读取期间面板被关闭/被新加载取代 → 中止剩余块的发送
+                    isCancelled: () => seq !== this._loadSeq,
+                    // 传输进度映射到加载遮罩:接在读取段的 70% 之后走到 100%,
+                    // 与读取阶段合成同一条连续进度条(current/total 行数字段同构)。
+                    // 收尾一块把阶段文字切成「加载完成！」,小文件也能看到完成反馈
+                    onProgress: (sent, total) => {
+                        this._panel.webview.postMessage({
+                            command: 'loadingProgress',
+                            data: {
+                                stage: total > 0 && sent >= total ? '加载完成！' : '正在载入日志数据...',
+                                progress: total > 0 ? 70 + (sent / total) * 30 : 100,
+                                current: sent,
+                                total
+                            }
+                        });
+                    }
                 }
-            });
+            );
+            if (!delivered || this._disposed || seq !== this._loadSeq) {
+                // P3-2:传输失败且没有被新加载接管时,收起遮罩并提示 ——
+                // 否则加载遮罩会一直盖住工具栏,只能关面板重开。
+                // 被新加载取代(seq 过期)或面板已关闭时保持沉默,新加载自己接管 UI。
+                if (!this._disposed && seq === this._loadSeq) {
+                    vscode.window.showErrorMessage('日志数据载入查看器失败,请刷新重试');
+                    this._panel.webview.postMessage({
+                        command: 'fileLoadError',
+                        data: { message: '日志数据载入查看器失败,请刷新重试' }
+                    });
+                }
+                return;
+            }
 
             // 请求时间线采样
             this.sampleTimeline(this._timelineSampleCount);
@@ -467,10 +633,8 @@ export class LogViewerPanel {
         try {
             if (action === '仅隐藏（不修改文件）') {
                 const results = await options.computeResults();
-                this._panel.webview.postMessage({
-                    command: 'filterResults',
-                    data: { levels: [], results }
-                });
+                // 「保留某点之后/之前」在大文件上可等价全文件,同样走分块发送
+                await this.postMessageWithLines('filterResults', { levels: [] }, results);
                 vscode.window.showInformationMessage(
                     `已隐藏 ${options.mode === 'before' ? '之前' : '之后'} 的日志,显示 ${results.length} 行`
                 );
@@ -612,15 +776,12 @@ export class LogViewerPanel {
     private async filterByThreadName(threadName: string, seq?: number) {
         try {
             const results = await this._logProcessor.filterByThreadName(threadName);
-            this._panel.webview.postMessage({
-                command: 'filterResults',
-                data: {
-                    threadName: threadName,
-                    results: results,
-                    // 回传请求代次:webview 用来丢弃过期响应
-                    filterSeq: seq
-                }
-            });
+            // 匹配行占比高时可接近全文件,走分块发送
+            await this.postMessageWithLines('filterResults', {
+                threadName: threadName,
+                // 回传请求代次:webview 用来丢弃过期响应
+                filterSeq: seq
+            }, results);
         } catch (error) {
             vscode.window.showErrorMessage(`线程过滤失败: ${error}`);
         }
@@ -629,14 +790,10 @@ export class LogViewerPanel {
     private async filterByClassName(className: string, seq?: number) {
         try {
             const results = await this._logProcessor.filterByClassName(className);
-            this._panel.webview.postMessage({
-                command: 'filterResults',
-                data: {
-                    className: className,
-                    results: results,
-                    filterSeq: seq
-                }
-            });
+            await this.postMessageWithLines('filterResults', {
+                className: className,
+                filterSeq: seq
+            }, results);
         } catch (error) {
             vscode.window.showErrorMessage(`类名过滤失败: ${error}`);
         }
@@ -645,14 +802,10 @@ export class LogViewerPanel {
     private async filterByMethodName(methodName: string, seq?: number) {
         try {
             const results = await this._logProcessor.filterByMethodName(methodName);
-            this._panel.webview.postMessage({
-                command: 'filterResults',
-                data: {
-                    methodName: methodName,
-                    results: results,
-                    filterSeq: seq
-                }
-            });
+            await this.postMessageWithLines('filterResults', {
+                methodName: methodName,
+                filterSeq: seq
+            }, results);
         } catch (error) {
             vscode.window.showErrorMessage(`方法名过滤失败: ${error}`);
         }
@@ -880,6 +1033,10 @@ export class LogViewerPanel {
         const foldLongLinesScriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'foldLongLines.js')
         );
+        // 分块传输累积器纯逻辑脚本(宿主大数组分块消息的累积/合成,webview.js 消息分发调用,须先于其加载)
+        const chunkedLoadScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'chunkedLoad.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -898,6 +1055,7 @@ export class LogViewerPanel {
             .replace(/%%SEARCH_SHORTCUT_JS%%/g, searchShortcutScriptUri.toString())
             .replace(/%%LINE_RANGE_JS%%/g, lineRangeScriptUri.toString())
             .replace(/%%FOLD_LONG_LINES_JS%%/g, foldLongLinesScriptUri.toString())
+            .replace(/%%CHUNKED_LOAD_JS%%/g, chunkedLoadScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 

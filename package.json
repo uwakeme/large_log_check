@@ -128,6 +128,13 @@
           ],
           "description": "%config.file.encoding.description%"
         },
+        "big-log-viewer.load.maxFileSizeMB": {
+          "type": "number",
+          "default": 1024,
+          "minimum": 0,
+          "maximum": 32768,
+          "description": "%config.load.maxFileSizeMB.description%"
+        },
         "big-log-viewer.collapse.minRepeatCount": {
           "type": "number",
           "default": 2,

@@ -21,7 +21,7 @@ npm run publish      # vsce publish
 
 **Debug**: open the project in VSCode, press `F5` to launch the Extension Development Host, and test the extension in that window. With `npm run watch` running, edits auto-compile — manually reload the dev host to pick them up.
 
-**No test suite exists.** `pretest` is wired to `npm run compile` but there is no test runner. If you add tests, you will need to introduce a runner.
+**Tests**: `npm test` (= compile + `node --test test/*.test.cjs`, needs Node 21+ for the glob; earlier versions use `node --test test/`). Nine test files in `test/` cover the pure-logic modules (log parser, encoding, chunked transfer) and the browser-global webview scripts via `node:vm` sandboxes with stubbed DOM globals — see `test/clipboard.test.cjs` for the stubbing pattern. `npm run package` runs lint + compile + tests via the `vscode:prepublish` hook.
 
 ## Architecture (big picture)
 
@@ -64,7 +64,9 @@ The extension has three runtime layers and four source files. Knowing which laye
 
 ### Message protocol (the extension ↔ WebView contract)
 
-`LogViewerPanel`'s `onDidReceiveMessage` switch in `src/logViewerPanel.ts:84` is the canonical list of what the WebView can ask the host to do (`loadMore`, `search`, `filterByLevel`, `filterByThread`, `refresh`, delete variants, `exportLogs`, etc.). When adding a feature that needs the host (file I/O, destructive ops), add a case here. When a feature is purely visual, keep it in `media/webview.js`.
+`LogViewerPanel`'s `onDidReceiveMessage` switch in `src/logViewerPanel.ts:84` is the canonical list of what the WebView can ask the host to do (`filterByThread`/`filterByClass`/`filterByMethod`, `refresh`, delete variants, `jumpToTime`, `exportLogsBegin`/`exportLogsChunk`/`exportLogsDone`, etc.). When adding a feature that needs the host (file I/O, destructive ops), add a case here. When a feature is purely visual, keep it in `media/webview.js`.
+
+**Large line arrays never travel in a single message** (JSON-serializing ~500MB+ exceeds V8's max string length and the failure is silent). Host→WebView (`fileLoaded`, `filterResults`) goes through `postMessageWithLines`: header (`data.chunkedTransferId`) → `chunkTransfer` × N → `chunkTransferDone` (+ `chunkTransferAbort` on cancellation), reassembled in `media/chunkedLoad.js` into the original message. WebView→host exports mirror this with `exportLogsBegin`/`Chunk`/`Done`. When adding a command to the chunked protocol, register its consumer-read payload field in `CHUNK_PAYLOAD_FIELD` (`media/chunkedLoad.js`) **and** in the contract test that iterates that table (`test/chunkedLoad.test.cjs`) — there is no silent fallback for unregistered commands.
 
 ## Project-specific conventions
 

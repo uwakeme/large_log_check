@@ -536,6 +536,37 @@ window.addEventListener('message', event => {
 function dispatchWebviewMessage(message) {
     if (!message) {return;}
 
+    // ===== 分块传输拦截(宿主→webview 的大数组消息) =====
+    // 宿主把大 payload(fileLoaded / filterResults 的行数组)拆成
+    // 头部(data.chunkedTransferId) + chunkTransfer × N + chunkTransferDone 三段,
+    // 累积逻辑在 media/chunkedLoad.js 的单槽缓冲里;完成时合成原始消息重入本函数,
+    // 落进下面的正常 case,既有 handler 零改动。
+    // 注意 1:分块期间不写 allLines/fullDataCache —— requestAllData 的 500ms 轮询
+    // 一旦看到 fullDataCache 收满就会在半成品数据上提前触发过滤。
+    // 注意 2:这里只累积、不碰进度条 —— 加载进度由宿主 doLoadFile 的
+    // loadingProgress 消息统一驱动(读取 0–70% / 送数据 70–100% 的映射只在宿主
+    // 一处),两边各自刷进度会出现映射不一致的来回跳。
+    if (message.command === 'chunkTransfer') {
+        chunkedLoadAppend(message);
+        return;
+    }
+    if (message.command === 'chunkTransferAbort') {
+        // 宿主在传输被打断(刷新/新加载取代)时补发:立刻释放已累积的行对象
+        chunkedLoadAbort(message);
+        return;
+    }
+    if (message.command === 'chunkTransferDone') {
+        const r = chunkedLoadDone(message);
+        if (r.accepted && r.message) {
+            dispatchWebviewMessage(r.message); // 合成消息无 chunkedTransferId,重入后走正常 case
+        }
+        return;
+    }
+    if (message.data && typeof message.data.chunkedTransferId === 'number') {
+        chunkedLoadBegin(message);
+        return;
+    }
+
     // try/catch:一条消息抛错不能让后续消息(尤其早期消息重放)整批中断
     try {
     switch (message.command) {
@@ -2981,45 +3012,38 @@ function removeBookmark(lineNumber) {
 /**
  * 导出带书签的日志
  */
-function exportBookmarkedLogs() {
+async function exportBookmarkedLogs() {
     if (bookmarks.size === 0) {
         showToast('没有书签，无法导出');
         return;
     }
-    
+
     setButtonLoadingById('exportBookmarksBtn', true);
-    
+
     // 从完整数据缓存中获取所有带书签的日志行
     const dataSource = fullDataCache.length > 0 ? fullDataCache : allLines;
     const bookmarkedLines = dataSource.filter(line => {
         const lineNumber = line.lineNumber || 0;
         return bookmarks.has(lineNumber);
     });
-    
+
     if (bookmarkedLines.length === 0) {
         setButtonLoadingById('exportBookmarksBtn', false);
         showToast('未找到书签对应的日志行');
         return;
     }
-    
+
     // 按行号排序
     bookmarkedLines.sort((a, b) => {
         const lineNumA = a.lineNumber || 0;
         const lineNumB = b.lineNumber || 0;
         return lineNumA - lineNumB;
     });
-    
-    // 发送到后端进行导出
-    vscode.postMessage({
-        command: 'exportLogs',
-        lines: bookmarkedLines,
-        exportType: 'bookmarked'  // 标记这是书签导出
-    });
-    
-    // 导出完成后会收到 toast 通知，这里延迟恢复按钮状态
-    setTimeout(() => setButtonLoadingById('exportBookmarksBtn', false), 1000);
-    
+
     showToast(`正在导出 ${bookmarkedLines.length} 条带书签的日志...`);
+    // 发送到后端进行导出(分块:书签行也可能很大),送完再恢复按钮(替代原 1s 假恢复)
+    await postExportLogsChunked(bookmarkedLines, 'bookmarked');
+    setButtonLoadingById('exportBookmarksBtn', false);
     closeBookmarksModal();
 }
 
@@ -5088,14 +5112,59 @@ function confirmDeleteByLine() {
     closeDeleteByLineModal();
 }
 
-function exportLogs() {
+async function exportLogs() {
+    const btn = document.getElementById('exportBtn');
+    const originalHtml = btn ? btn.innerHTML : null;
     setButtonLoadingById('exportBtn', true);
-    vscode.postMessage({
-        command: 'exportLogs',
-        lines: allLines
+    // 进度文案挂在按钮上(N7):大文件导出从点击到保存对话框之间不再全黑箱
+    await postExportLogsChunked(allLines, undefined, (pct) => {
+        if (btn && originalHtml) {
+            btn.innerHTML = `<i class="codicon codicon-save"></i> 导出 ${pct}%`;
+        }
     });
-    // 导出完成后会收到 toast 通知，这里延迟恢复按钮状态
-    setTimeout(() => setButtonLoadingById('exportBtn', false), 1000);
+    setButtonLoadingById('exportBtn', false);
+    if (btn && originalHtml) { btn.innerHTML = originalHtml; }
+}
+
+/**
+ * 导出反向分块(P1-a):当前视图的行数组可能高达几百 MB,单条消息推给宿主
+ * 会超单条消息体量上限而静默失败 —— 与载入方向同病。这里按 ~8M 字符/块
+ * 拆成 exportLogsBegin / exportLogsChunk × N / exportLogsDone 发送,
+ * 宿主累积完毕再走保存对话框(切块算法在 media/chunkedLoad.js)。
+ * N3:块间让出事件循环 —— 每块 8M 字符的结构化克隆是同步成本,650MB 约 80 块
+ * 连发会把主线程占满(不渲染/不滚动/不响应);让一帧再发下一块。
+ * @returns {Promise<boolean>} false = 因超长单行中止,未发送任何数据
+ */
+async function postExportLogsChunked(lines, exportType, onProgress) {
+    // 单行超安全上限时独占块也装不下,明确提示而不是静默吞掉
+    for (let i = 0; i < lines.length; i++) {
+        const content = lines[i] && lines[i].content;
+        if (typeof content === 'string' && content.length > SAFE_SINGLE_LINE_CHARS) {
+            showToast(`第 ${lines[i].lineNumber} 行超过 ${(SAFE_SINGLE_LINE_CHARS / 100000000).toFixed(2)} 亿字符,无法导出`, 'error');
+            return false;
+        }
+    }
+    vscode.postMessage({
+        command: 'exportLogsBegin',
+        exportType: exportType,
+        totalLines: lines.length
+    });
+    const plans = planLineChunkRanges(lines);
+    for (let i = 0; i < plans.length; i++) {
+        vscode.postMessage({
+            command: 'exportLogsChunk',
+            lines: lines.slice(plans[i].start, plans[i].end)
+        });
+        if (plans.length > 1) {
+            if (typeof onProgress === 'function') {
+                onProgress(Math.round(((i + 1) / plans.length) * 100));
+            }
+            // N3:让出事件循环,主线程得以渲染/响应输入
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+    }
+    vscode.postMessage({ command: 'exportLogsDone' });
+    return true;
 }
 
 function refresh() {

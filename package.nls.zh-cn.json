@@ -29,5 +29,6 @@
   "config.file.encoding.enumDescription.1": "UTF-8（含 BOM 与无 BOM）",
   "config.file.encoding.enumDescription.2": "GBK（含 GB2312，按 GB18030 解码）",
   "config.file.encoding.enumDescription.3": "UTF-16 LE（通常带 BOM，如 PowerShell 重定向产物）",
-  "config.file.encoding.enumDescription.4": "UTF-16 BE"
+  "config.file.encoding.enumDescription.4": "UTF-16 BE",
+  "config.load.maxFileSizeMB.description": "打开日志文件的大小上限（MB）。日志会整块载入内存，超上限的文件不再加载并明确提示，避免长时间假死。默认 1024（1GB）；设为 0 表示不限制。更大的上限意味着更高的内存占用，请量力调整。"
 }
