@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-11-11
 ### Added
 - **新增文件大小上限设置** — 默认 1GB，超过上限的文件不再加载并明确提示先拆分，不会再长时间无响应；可在「设置 → 扩展 → Open Log Viewer → Load: Max File Size Mb」调整，设为 0 表示不限制
 
