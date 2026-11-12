@@ -82,26 +82,29 @@ test('longLineToggleTitle: 折叠态/展开态文案', () => {
     assert.equal(longLineToggleTitle(false), '点击折叠该行');
 });
 
-// ---- isActuallyTruncated:真实截断判定(审查 P2:阈值与是否真裁掉无关) ----
+// ---- isActuallyTruncated:真实截断判定(阈值与是否真裁掉无关) ----
 
-test('isActuallyTruncated: 内容高度超过允许高度 → 真被截断', () => {
-    assert.equal(isActuallyTruncated(100, 54), true);
+test('isActuallyTruncated: 超出保留行数一整行以上 → 真被截断', () => {
+    assert.equal(isActuallyTruncated(100, 54, 18), true);  // 5.5 行 vs 3 行,省 2.5 行
+    assert.equal(isActuallyTruncated(72, 54, 18), true);   // 恰好 4 行,省 1 整行
 });
 
-test('isActuallyTruncated: 内容高度不超过允许高度 → 没被裁掉,不假装折叠', () => {
-    assert.equal(isActuallyTruncated(36, 54), false);  // 201 字符在宽面板上只有 2 行
-    assert.equal(isActuallyTruncated(54, 54), false);  // 刚好 3 行
-});
-
-test('isActuallyTruncated: 1px 容差(亚像素舍入不该误判)', () => {
-    assert.equal(isActuallyTruncated(55, 54), false);
-    assert.equal(isActuallyTruncated(56, 54), true);
+test('isActuallyTruncated: 省不满一整行的边际行不折叠(用户反馈:短行被折叠)', () => {
+    assert.equal(isActuallyTruncated(54, 54, 18), false);  // 刚好 3 行
+    assert.equal(isActuallyTruncated(58, 54, 18), false);  // 3.2 行,只省 4px
+    assert.equal(isActuallyTruncated(63, 54, 18), false);  // 3.5 行,省半行也不值得
+    assert.equal(isActuallyTruncated(71, 54, 18), false);  // 差 1px 才满一整行
 });
 
 test('isActuallyTruncated: 非有限值一律判为未截断', () => {
-    assert.equal(isActuallyTruncated(NaN, 54), false);
-    assert.equal(isActuallyTruncated(100, NaN), false);
+    assert.equal(isActuallyTruncated(NaN, 54, 18), false);
+    assert.equal(isActuallyTruncated(100, NaN, 18), false);
     assert.equal(isActuallyTruncated(undefined, undefined), false);
+});
+
+test('isActuallyTruncated: 行高参数缺失时按 18px 兜底', () => {
+    assert.equal(isActuallyTruncated(72, 54), true);
+    assert.equal(isActuallyTruncated(63, 54), false);
 });
 
 // ---- resolveLongLineClickMode:点击归属三态判定(单击/双击冲突解法) ----

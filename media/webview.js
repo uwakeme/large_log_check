@@ -2062,7 +2062,7 @@ function measureLongLineFolds() {
             contentEl,
             mainEl: main,
             lineNumber,
-            truncated: isActuallyTruncated(main.scrollHeight, allowedHeight),
+            truncated: isActuallyTruncated(main.scrollHeight, allowedHeight, lineHeight),
             expanded: false,
             ownsToggle,
             isGroupHeader

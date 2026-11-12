@@ -42,17 +42,20 @@ function longLineToggleTitle(folded) {
 /**
  * 真实截断判定(渲染后测量用)。
  * 字符数阈值与「实际有没有被裁掉」无关 —— 200 字符的行在宽面板上只有 2 个视觉行,
- * 挂上「⋯」和可点击的指针就是骗用户。真正决定要不要折叠的是:内容渲染高度
- * 是否超过了保留行数允许的高度。
+ * 挂上「⋯」和可点击的指针就是骗用户。真正决定要不要折叠的是:折叠能不能省出
+ * 一整行的空间 —— 只超出保留行数一小截的「边际行」(比如 3 行出头一点)折叠后
+ * 几乎没变化,却多了按钮和点击交互,观感就是「这么短也折叠」。
  *
  * @param {number} contentHeight  内容实际渲染高度(px)
  * @param {number} allowedHeight  保留 N 行允许的高度(px)
+ * @param {number} rowHeight      单个视觉行的高度(px)
  * @returns {boolean} true = 真的被截断,值得折叠
  */
-function isActuallyTruncated(contentHeight, allowedHeight) {
+function isActuallyTruncated(contentHeight, allowedHeight, rowHeight) {
     if (!Number.isFinite(contentHeight) || !Number.isFinite(allowedHeight)) { return false; }
-    // 留 1px 容差:亚像素舍入不该把刚好 3 行的行判成超长
-    return contentHeight > allowedHeight + 1;
+    const row = Number.isFinite(rowHeight) && rowHeight > 0 ? rowHeight : 18;
+    // 至少省出一整行才折叠;亚像素舍入的小数差一律不算数
+    return contentHeight - allowedHeight >= row;
 }
 
 /**
