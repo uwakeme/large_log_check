@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.5.3] - 2026-11-18
 ### Fixed
 - **带点号的线程名认不出来** — 此前 `http-nio-127.0.0.1-16600-exec-4` 这类线程名不会被标出来，也点不出「按此线程筛选」，看着像是没识别出线程；现在照常标出，鼠标移上去就能筛出同一线程的所有日志
 - **只是略微超出保留行数的「边际行」不再折叠** — 此前内容比 3 行多出一小截（哪怕只多几像素）也会挂上折叠按钮、裁成 3 行，看起来就像「这么短也被折叠」；现在只有内容明显放不下（折叠能省出一整行以上）的行才会折叠，略超的行直接完整显示
