@@ -635,7 +635,12 @@
         </div>
 
         <div class="install-block">
-          <div class="install-label">方式 B · 从源码打包</div>
+          <div class="install-label">方式 B · 从 Release 下载 .vsix</div>
+          <p>每个版本都附带打包好的安装包,在 <a href="https://github.com/uwakeme/large_log_check/releases/latest" target="_blank" rel="noopener">Releases 页面</a> 下载 <code>.vsix</code>,在扩展面板「⋯ → 从 VSIX 安装」里选它即可。</p>
+        </div>
+
+        <div class="install-block">
+          <div class="install-label">方式 C · 从源码打包</div>
           <pre class="install-cmd install-cmd-block"><code>$ git clone https://github.com/uwakeme/large_log_check.git
 $ cd large_log_check
 $ npm install
@@ -643,7 +648,7 @@ $ npm run package</code></pre>
           <p>打包在项目根目录生成 <code>.vsix</code>,在扩展面板「⋯ → 从 VSIX 安装」里选它即可。</p>
         </div>
 
-        <div class="install-block install-block-wide">
+        <div class="install-block">
           <div class="install-label">第一次使用</div>
           <p>
             资源管理器里右键任意 <code>.log</code> / <code>.txt</code> 文件,选「打开大日志文件」。
