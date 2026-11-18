@@ -1037,6 +1037,10 @@ export class LogViewerPanel {
         const chunkedLoadScriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'chunkedLoad.js')
         );
+        // 线程名识别纯逻辑脚本(内置高亮规则匹配式 + 命中片段提取,webview.js 高亮链运行时调用,须先于其加载)
+        const threadNameScriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'threadName.js')
+        );
 
         // Get codicons URI
         const codiconsUri = webview.asWebviewUri(
@@ -1056,6 +1060,7 @@ export class LogViewerPanel {
             .replace(/%%LINE_RANGE_JS%%/g, lineRangeScriptUri.toString())
             .replace(/%%FOLD_LONG_LINES_JS%%/g, foldLongLinesScriptUri.toString())
             .replace(/%%CHUNKED_LOAD_JS%%/g, chunkedLoadScriptUri.toString())
+            .replace(/%%THREAD_NAME_JS%%/g, threadNameScriptUri.toString())
             .replace(/%%CODICONS_CSS%%/g, codiconsUri.toString());
     }
 

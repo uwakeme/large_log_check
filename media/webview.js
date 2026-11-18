@@ -2230,8 +2230,9 @@ function highlightKeywords(content, keyword) {
                 // 动态参数一律走 jsArg(JSON+属性转义):线程/类/方法名提取自日志内容,
                 // 单引号包裹 + HTML 实体转义在属性解码后可被断言逃逸(恶意日志 XSS)
                 if (rule.name === '线程名') {
-                    const threadNameMatch = matchText.match(/\[([a-zA-Z][a-zA-Z0-9-_]*)\]/);
-                    const threadName = threadNameMatch ? threadNameMatch[1] : '';
+                    // 提取规则与内置规则的匹配式同源(threadName.js),
+                    // 否则这里会把 http-nio-127.0.0.1-16600-exec-4 这类带点号的线程名判成无效
+                    const threadName = extractThreadNameFromHighlight(matchText);
                     if (!threadName) continue; // 跳过无效的线程名
                     html = `<span class="custom-highlight" style="${style}">${escapeHtml(matchText)}<span class="filter-icon" onclick="event.stopPropagation(); filterByThreadName(${jsArg(threadName)})" title="点击筛选线程: ${escapeAttr(threadName)}"><i class="codicon codicon-filter" style="font-size: 10px;"></i></span></span>`;
                 } else if (rule.name === '类名') {
@@ -3063,7 +3064,7 @@ function initDefaultHighlightRules() {
         { id: 3, name: '日志级别 - INFO', type: 'regex', pattern: '\\b(INFO)\\b', bgColor: '#4fc1ff', textColor: '#000000', enabled: true, builtin: true },
         { id: 4, name: '日志级别 - DEBUG', type: 'regex', pattern: '\\b(DEBUG|TRACE|VERBOSE)\\b', bgColor: '#b267e6', textColor: '#ffffff', enabled: true, builtin: true },
         { id: 5, name: '时间戳', type: 'regex', pattern: '\\d{4}[-/]\\d{2}[-/]\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?', bgColor: '#b267e6', textColor: '#ffffff', enabled: true, builtin: true },
-        { id: 6, name: '线程名', type: 'regex', pattern: '\\[(?!ERROR|FATAL|SEVERE|WARN|WARNING|INFO|INFORMATION|DEBUG|TRACE|VERBOSE\\])([a-zA-Z][a-zA-Z0-9-_]*)\\]', bgColor: '#06b6d4', textColor: '#ffffff', enabled: true, builtin: true },
+        { id: 6, name: '线程名', type: 'regex', pattern: THREAD_HIGHLIGHT_PATTERN, bgColor: '#06b6d4', textColor: '#ffffff', enabled: true, builtin: true },
         { id: 7, name: '类名', type: 'regex', pattern: '\\b([a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*\\.[A-Z][a-zA-Z0-9_]*)\\b', bgColor: '#10b981', textColor: '#ffffff', enabled: true, builtin: true },
         { id: 8, name: '方法名', type: 'regex', pattern: '\\[([a-zA-Z_][a-zA-Z0-9_]*):\\d+\\]', bgColor: '#f59e0b', textColor: '#ffffff', enabled: true, builtin: true }
     ];
