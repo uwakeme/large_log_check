@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件</title>
+  <meta name="description" content="Open Log Viewer 是 VSCode 扩展,把服务器日志块变成可打开、可搜索、可标注、可排查的工具。整块载入带真实进度、多关键词搜索、时间线导航、书签注释、可重跑的排查模板,超长行折叠,GBK / UTF-16 编码支持。" />
+  <meta name="keywords" content="VSCode, Open Log Viewer, 大日志, log viewer, 大文件, 日志分块, 排查模板" />
+  <meta property="og:title" content="Open Log Viewer — VSCode 扩展,用于打开和排查大日志文件" />
+  <meta property="og:description" content="把服务器日志块变成可打开、可搜索、可标注、可排查的工具,超长行折叠,GBK / UTF-16 编码支持。" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="images/icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a href="#top" class="brand">
+        <span class="brand-mark"></span>
+        <span class="brand-name">Open Log Viewer</span>
+        <span class="brand-ver js-ver">v1.5.3</span>
+      </a>
+      <nav class="topnav">
+        <a href="#why">为什么</a>
+        <a href="#features">功能</a>
+        <a href="#formats">格式</a>
+        <a href="#themes">主题</a>
+        <a href="#install">安装</a>
+        <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener" class="ext">
+          GitHub
+          <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M11.7 9.3 11 2.99 4.7 2.99 4.7 1.99 12.3 1.99 13.3 9.3 11.7 9.3ZM2.7 14 9.99 6.71 10.7 7.42 3.41 14.71 2 14 2 5.42 3 4.42 3 14Z"/></svg>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" id="top">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div class="hero-text">
+          <div class="eyebrow">
+            <span class="dot"></span>
+            VSCode Extension · MIT · <span class="js-ver">v1.5.3</span>
+          </div>
+          <h1 class="display"><span>Open Log Viewer</span></h1>
+          <p class="lede">
+            VSCode 扩展。把服务器日志块从「打不开」变成「可排查」 —
+            整块载入带真实进度,关键词 / 线程 / 类 / 级别叠加过滤即时响应,
+            时间线导航,书签注释,可一键重跑的排查模板。
+          </p>
+          <div class="install">
+            <div class="install-prompt">
+              <span class="prompt-sigil">$</span>
+              <code>code --install-extension wake.big-log-viewer</code>
+            </div>
+            <div class="install-actions">
+              <a href="https://marketplace.visualstudio.com/items?itemName=wake.big-log-viewer" target="_blank" rel="noopener">Marketplace →</a>
+              <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener">源代码 →</a>
+              <a href="#install">从源码打包 →</a>
+            </div>
+          </div>
+        </div>
+
+        <figure class="hero-shot">
+          <div class="hero-mock">
+            <div class="hero-mock-bar">
+              <span class="hero-mock-dot"></span><span class="hero-mock-dot"></span><span class="hero-mock-dot"></span>
+              <span class="hero-mock-title">server.log</span>
+              <span class="hero-mock-meta">486 MB · 3,712,540 行</span>
+            </div>
+            <div class="hero-mock-search">
+              <span class="hero-mock-icon">⌕</span>
+              <span class="hero-mock-query">error timeout</span>
+              <span class="hero-mock-flags">正则 · 当前页</span>
+            </div>
+            <div class="hero-mock-timeline">
+              <span style="--h:14%"></span><span style="--h:22%"></span><span style="--h:31%"></span>
+              <span style="--h:28%"></span><span style="--h:35%"></span><span style="--h:45%"></span>
+              <span style="--h:52%"></span><span style="--h:60%"></span><span style="--h:58%"></span>
+              <span style="--h:65%"></span><span style="--h:72%"></span><span style="--h:80%"></span>
+              <span style="--h:88%"></span><span style="--h:95%"></span><span style="--h:90%"></span>
+              <span style="--h:50%"></span><span style="--h:55%"></span><span style="--h:60%"></span>
+              <span style="--h:65%"></span><span style="--h:70%"></span><span style="--h:78%"></span>
+              <span style="--h:85%"></span><span style="--h:92%"></span><span style="--h:88%"></span>
+              <span style="--h:80%"></span><span style="--h:70%"></span><span style="--h:60%"></span>
+              <span style="--h:55%"></span><span style="--h:48%"></span><span style="--h:45%"></span>
+              <span class="hero-mock-cursor"></span>
+            </div>
+            <div class="hero-mock-lines">
+              <div class="hero-mock-line"><span class="hero-mock-time">12:34:56</span><span class="hero-mock-level hero-mock-info">INFO</span>Cache hit ratio: 0.94</div>
+              <div class="hero-mock-line hero-mock-error-line"><span class="hero-mock-time">12:34:57</span><span class="hero-mock-level hero-mock-error">ERROR</span>Database <em>connection timeout</em></div>
+              <div class="hero-mock-line"><span class="hero-mock-time">12:34:58</span><span class="hero-mock-level hero-mock-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="hero-mock-line"><span class="hero-mock-time">12:34:59</span><span class="hero-mock-level hero-mock-warn">WARN</span>Slow query: 1.2s</div>
+            </div>
+          </div>
+          <figcaption>主界面 · 时间线 + 搜索栏 + 书签行,真实样貌</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="why" id="why">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="section-num">01</span>
+        <h2>为什么需要它</h2>
+      </header>
+      <div class="why-grid">
+        <div class="why-text">
+          <p>
+            线上问题排查要翻的服务器日志,经常几百 MB 起步,而且通常按大小或日期自动分块。
+            VSCode 直接打开这类文件就废 — 打开慢、滚动卡顿、搜索要等几分钟,跳不到想去的行。
+          </p>
+          <p>
+            Open Log Viewer 接管这件事:按「单块日志」设计,一块一块看正好是排查的自然节奏。
+            打开时整块载入并显示真实进度,载入完成后搜索 / 过滤 / 翻页都在内存里即时完成;
+            跳转到行 / 时间走流式定位,只读目标行附近的上下文,不用重新载入。
+            排查要用的工具它也配齐了 — 多关键词搜索、级别 / 线程 / 时间过滤、时间线、书签 / 注释,还有把固定流程存成一键重跑的排查模板。
+          </p>
+          <p class="quiet">
+            标注数据存在用户级存储,排查模板分享走剪贴板或 JSON,全程不依赖工作区。
+          </p>
+        </div>
+        <div class="why-mock">
+          <div class="why-mock-bar">
+            <span class="why-mock-dot"></span><span class="why-mock-dot"></span><span class="why-mock-dot"></span>
+            <span class="why-mock-title">vscode 默认打开大文件</span>
+          </div>
+          <div class="why-mock-issue">
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>几百 MB 的文件打开就卡,更大直接拒绝</span>
+            </div>
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>全量渲染,内存占用高、界面易无响应</span>
+            </div>
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>全文件搜索要等几分钟</span>
+            </div>
+            <div class="why-mock-issue-line">
+              <span class="why-mock-x">×</span>
+              <span>无法分页,无法快速跳转</span>
+            </div>
+          </div>
+          <div class="why-mock-arrow">↓</div>
+          <div class="why-mock-solve">
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>打开带真实进度,载入后搜索 / 翻页即时响应</span>
+            </div>
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>跳转到行 / 时间流式定位,只读附近上下文</span>
+            </div>
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>多关键词搜索 / 正则 / 高级查询</span>
+            </div>
+            <div class="why-mock-solve-line">
+              <span class="why-mock-check">✓</span>
+              <span>时间线、书签、排查模板一键到位</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="section-num">02</span>
+        <h2>核心能力</h2>
+      </header>
+
+      <!-- 01 · I/O — 整块载入 + 分页浏览 -->
+      <article class="feat">
+        <div class="feat-text">
+          <div class="feat-tag">01 · I/O</div>
+          <h3>整块载入与分页浏览</h3>
+          <p>
+            打开时整块载入,磁盘读取全程流式,进度按真实字节推进(百分比、已读行数),不是转圈假动画。
+            载入后分页浏览,每页只渲染当前页的行(50 到 1000 行可调),百万行日志翻页也不卡;
+            跳转到行 / 时间走流式定位,只读取目标行附近 ±500 行上下文。
+          </p>
+          <ul class="feat-bullets">
+            <li>多文件同时打开,各占独立面板,状态互不干扰</li>
+            <li>GBK / UTF-16 编码自动识别,「编码」下拉可按面板手动切换</li>
+            <li>几百 MB 到 1GB 的超大文件也能正常打开,导出同样分批进行并显示进度;超过大小上限(默认 1GB,可调)会明确提示而不是卡死</li>
+            <li>加载失败 / 编码异常时给出明确错误</li>
+          </ul>
+        </div>
+        <figure class="feat-shot">
+          <div class="fm-io" role="img" aria-label="加载进度 87%,书签行高亮,分页浏览示意">
+            <div class="fm-io-progress">
+              <span class="fm-io-progress-label">加载中</span>
+              <div class="fm-io-bar"><div class="fm-io-bar-fill"></div></div>
+              <span class="fm-io-progress-pct">87<small>%</small></span>
+              <span class="fm-io-progress-meta">3,246,802 / 3,712,540 行</span>
+            </div>
+            <div class="fm-io-lines">
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,827</span><span class="fm-io-time">12:34:55</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Cache hit ratio: 0.94</span></div>
+              <div class="fm-io-line fm-io-line-bookmarked"><span class="fm-io-line-num">3,246,828</span><span class="fm-io-time">12:34:56</span><span class="fm-io-level fm-io-error">ERROR</span><span class="fm-io-msg">Database connection refused</span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,829</span><span class="fm-io-time">12:34:57</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Retry attempt 1 of 3</span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,830</span><span class="fm-io-time">12:34:58</span><span class="fm-io-level fm-io-warn">WARN</span><span class="fm-io-msg">Slow query: 1.2s on /users/123</span></div>
+            </div>
+          </div>
+        </figure>
+      </article>
+
+      <!-- 02 · SEARCH — 多关键词 AND 命中 -->
+      <article class="feat feat-reverse">
+        <div class="feat-text">
+          <div class="feat-tag">02 · SEARCH</div>
+          <h3>多关键词搜索 + 高级搜索</h3>
+          <p>
+            搜索框支持多关键词,空格分隔即 AND 匹配,比如 <code>error timeout</code> 只命中两个词同时出现的行。
+            勾选「正则」切正则模式,勾「当前页」只在当前显示的页内定位。
+          </p>
+          <p>
+            高级搜索是查询构建器:每行一个条件(关键词 / 线程名 / 类名 / 方法名 / 级别 / 时间范围),
+            行间「且/或」芯片切换整体逻辑,底部实时预览这次查询会做什么。
+            所有条件叠加,「取消筛选」一键清空。
+          </p>
+          <ul class="feat-bullets">
+            <li>全局搜索历史 50 条,聚焦搜索框一键重搜</li>
+            <li>行号范围限定:右键任意行设起点 / 终点,浏览、搜索、筛选只在范围内进行</li>
+            <li>筛选条件芯片式展示,点芯片上的 × 单独取消那一条</li>
+            <li>折叠重复日志时,徽标显示当前搜索的命中数</li>
+          </ul>
+        </div>
+        <figure class="feat-shot">
+          <div class="fm-search" role="img" aria-label="多关键词搜索示意:输入 error timeout,3 条命中,关键词高亮">
+            <div class="fm-search-bar">
+              <span class="fm-search-icon">⌕</span>
+              <span class="fm-search-text">error timeout</span>
+              <span class="fm-search-flags">正则 · 当前页</span>
+            </div>
+            <div class="fm-search-results">
+              <div class="fm-r-line"><span class="fm-r-time">12:00:03</span><span class="fm-r-level fm-r-error">ERROR</span>Connection <em>timeout</em> to redis-01</div>
+              <div class="fm-r-line"><span class="fm-r-time">12:00:05</span><span class="fm-r-level fm-r-error">ERROR</span>Retry: <em>timeout</em> after 30s</div>
+              <div class="fm-r-line"><span class="fm-r-time">12:00:08</span><span class="fm-r-level fm-r-error">ERROR</span>Upstream <em>timeout</em>, checkout <em>error</em></div>
+            </div>
+            <div class="fm-search-summary">
+              <span>3 条命中</span>
+              <span>多关键词 AND · 第 1 / 1 页</span>
+            </div>
+          </div>
+        </figure>
+      </article>
+
+      <!-- 03 · NAVIGATE — 时间线 -->
+      <article class="feat">
+        <div class="feat-text">
+          <div class="feat-tag">03 · NAVIGATE</div>
+          <h3>时间线导航</h3>
+          <p>
+            把整个文件按时间采样画成分布图,点哪跳到哪,当前浏览位置高亮跟着走,
+            随时知道自己在哪个时间段。采样密度可在设置里调(默认 200,范围 20 – 1000)。
+          </p>
+          <ul class="feat-bullets">
+            <li>按时间过滤、跳转到指定时间</li>
+            <li>统计面板给出总行数、各级别数量、时间范围</li>
+          </ul>
+        </div>
+        <figure class="feat-shot">
+          <div class="fm-timeline" role="img" aria-label="时间线分布图 + 当前浏览位置 15:42:31">
+            <div class="fm-timeline-head">
+              <span class="fm-timeline-head-label">时间线 · 30 个采样点</span>
+              <span class="fm-timeline-head-meta">总跨度 4h00m · 步进 8m</span>
+            </div>
+            <div class="fm-timeline-labels">
+              <span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span>
+            </div>
+            <div class="fm-timeline-track">
+              <span style="--h:14%"></span><span style="--h:22%"></span><span style="--h:31%"></span>
+              <span style="--h:28%"></span><span style="--h:35%"></span><span style="--h:45%"></span>
+              <span style="--h:52%"></span><span style="--h:60%"></span><span style="--h:58%"></span>
+              <span style="--h:65%"></span><span style="--h:72%"></span><span style="--h:80%"></span>
+              <span style="--h:88%"></span><span style="--h:95%"></span><span style="--h:90%"></span>
+              <span style="--h:50%"></span><span style="--h:55%"></span><span style="--h:60%"></span>
+              <span style="--h:65%"></span><span style="--h:70%"></span><span style="--h:78%"></span>
+              <span style="--h:85%"></span><span style="--h:92%"></span><span style="--h:88%"></span>
+              <span style="--h:80%"></span><span style="--h:70%"></span><span style="--h:60%"></span>
+              <span style="--h:55%"></span><span style="--h:48%"></span><span style="--h:45%"></span>
+              <span class="fm-timeline-cursor"></span>
+            </div>
+            <div class="fm-timeline-current">
+              <span class="fm-timeline-current-label">当前位置</span>
+              <span class="fm-timeline-current-time">15:42:31</span>
+              <span class="fm-timeline-current-line">第 2,418,663 行 · ERROR</span>
+            </div>
+          </div>
+        </figure>
+      </article>
+
+      <!-- 04 · TEMPLATE — 排查模板动作序列 -->
+      <article class="feat feat-reverse">
+        <div class="feat-text">
+          <div class="feat-tag">04 · TEMPLATE</div>
+          <h3>排查模板</h3>
+          <p>
+            固定排查流程存成模板,自动重跑,换个订单号或 traceId 就能复用。
+            五种动作自由编排:查询日志、筛选、限定范围、打书签、加注释,
+            动作间自动传上下文(比如从命中行提取线程名接着筛)。
+          </p>
+          <ul class="feat-bullets">
+            <li>命中多条时可配置「让我选择 / 保留全部 / 自动选第一条」</li>
+            <li>零命中时可配置终止或跳过继续</li>
+            <li>「限定范围」把命中行设为范围起点 / 终点,自动圈出单次执行</li>
+            <li>可视化与 JSON 双形式编辑,导入导出走剪贴板或文件</li>
+          </ul>
+        </div>
+        <figure class="feat-shot">
+          <div class="fm-template" role="img" aria-label="排查模板:支付回调失败排查,4 步动作序列">
+            <div class="fm-template-header">
+              <span class="fm-template-name">支付回调失败排查</span>
+              <span class="fm-template-meta">4 步 · 参数 <code>orderNo</code></span>
+            </div>
+            <div class="fm-template-steps">
+              <div class="fm-step">
+                <div class="fm-step-num">01</div>
+                <div class="fm-step-type">查询日志</div>
+                <div class="fm-step-body"> <span class="fm-step-label">关键词</span> <code class="fm-step-value">"payment failed ${orderNo}"</code> </div>
+                <div class="fm-step-policy">命中多条 → <em>让我选择</em></div>
+              </div>
+              <div class="fm-step-arrow">↓</div>
+              <div class="fm-step">
+                <div class="fm-step-num">02</div>
+                <div class="fm-step-type">筛 选</div>
+                <div class="fm-step-body"> <span class="fm-step-label">线程名</span> <code class="fm-step-value">lastHit</code> </div>
+              </div>
+              <div class="fm-step-arrow">↓</div>
+              <div class="fm-step">
+                <div class="fm-step-num">03</div>
+                <div class="fm-step-type">打书签</div>
+                <div class="fm-step-body"> <span class="fm-step-label">命 名</span> <code class="fm-step-value">"${orderNo} 失败点"</code> </div>
+              </div>
+              <div class="fm-step-arrow">↓</div>
+              <div class="fm-step">
+                <div class="fm-step-num">04</div>
+                <div class="fm-step-type">加注释</div>
+                <div class="fm-step-body"> <span class="fm-step-label">内 容</span> <code class="fm-step-value">"${orderNo} 失败于 step3"</code> </div>
+              </div>
+            </div>
+          </div>
+        </figure>
+      </article>
+
+      <!-- 05 · ANNOTATE — 书签行 + 注释列表 -->
+      <article class="feat">
+        <div class="feat-text">
+          <div class="feat-tag">05 · ANNOTATE</div>
+          <h3>书签、注释、高亮规则</h3>
+          <p>
+            双击日志行加书签,右键命名(留空默认「行 N」);注释从右键菜单发起,列表集中管理。
+            内置 ERROR / WARN / INFO / DEBUG、时间戳、线程名高亮规则,也支持自定义正则规则。
+          </p>
+          <ul class="feat-bullets">
+            <li>书签行整行主题色高亮,列表可一键导出书签日志</li>
+            <li>注释可编辑、删除,方便团队协作分析</li>
+          </ul>
+        </div>
+        <figure class="feat-shot">
+          <div class="fm-annotate" role="img" aria-label="书签行 + 注释列表示意">
+            <div class="fm-annotate-lines">
+              <div class="fm-a-line fm-a-line-bookmarked">
+                <span class="fm-a-num">3,246,828</span>
+                <span class="fm-a-time">12:34:56</span>
+                <span class="fm-a-level fm-a-error">ERROR</span>
+                <span class="fm-a-msg">Database connection refused</span>
+                <span class="fm-a-tag">📌 第一次失败</span>
+              </div>
+              <div class="fm-a-line">
+                <span class="fm-a-num">3,246,829</span>
+                <span class="fm-a-time">12:34:57</span>
+                <span class="fm-a-level fm-a-info">INFO</span>
+                <span class="fm-a-msg">Retry attempt 1 of 3</span>
+              </div>
+              <div class="fm-a-line fm-a-line-bookmarked">
+                <span class="fm-a-num">3,246,926</span>
+                <span class="fm-a-time">12:35:01</span>
+                <span class="fm-a-level fm-a-error">ERROR</span>
+                <span class="fm-a-msg">Failed to acquire connection</span>
+                <span class="fm-a-tag">📌 重试后仍失败</span>
+              </div>
+              <div class="fm-a-line">
+                <span class="fm-a-num">3,246,927</span>
+                <span class="fm-a-time">12:35:02</span>
+                <span class="fm-a-level fm-a-info">INFO</span>
+                <span class="fm-a-msg">Cache invalidated, size 0</span>
+              </div>
+            </div>
+            <div class="fm-annotate-comments">
+              <div class="fm-c-title">注释 · 2 条</div>
+              <div class="fm-c-item">
+                <span class="fm-c-line">3,246,828</span>
+                <span class="fm-c-text">"首次失败 — 怀疑 redis 集群脑裂,需要看 cluster log"</span>
+              </div>
+              <div class="fm-c-item">
+                <span class="fm-c-line">3,246,926</span>
+                <span class="fm-c-text">"重试仍失败 — 上游连接池耗尽"</span>
+              </div>
+            </div>
+          </div>
+        </figure>
+      </article>
+
+      <!-- 06 · FOLD — 折叠长行 -->
+      <article class="feat feat-reverse">
+        <div class="feat-text">
+          <div class="feat-tag">06 · FOLD</div>
+          <h3>折叠长行</h3>
+          <p>
+            一行几千字符的超长 JSON,换行后能把一页撑成几百屏,滚轮滚不到头。
+            折叠长行默认开启:真正放不下的行只显示前 3 行,切口处有醒目的「⋯ 展开」按钮,
+            点击展开全文、再点「收起」折回 —— 滚轮几格就掠过一页,扫线索只看每条开头就够了。
+          </p>
+          <ul class="feat-bullets">
+            <li>只折叠真正被裁掉的行,没有「点了没反应」的假折叠</li>
+            <li>双击加书签不受影响;跳转(定位 / 书签 / 时间线)到长行自动展开</li>
+            <li>折叠重复日志模式下超长行同样折叠;保留行数 1 – 50 可调</li>
+          </ul>
+        </div>
+        <figure class="feat-shot">
+          <div class="fm-fold" role="img" aria-label="折叠长行示意:超长 JSON 行钳制在 3 行内,切口有展开按钮">
+            <div class="fm-fold-lines">
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,827</span><span class="fm-io-time">12:34:55</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">Cache hit ratio: 0.94</span></div>
+              <div class="fm-fold-line fm-fold-line-clamped"><span class="fm-io-line-num">3,246,828</span><span class="fm-io-time">12:34:56</span><span class="fm-io-level fm-io-error">ERROR</span><span class="fm-io-msg">Order sync timeout: {"event":"order_sync","orderNo":"SO-40217","warehouse":"WH-07","items":[{"sku":"SKU-8812","qty":2},{"sku":"SKU-1043","qty":1<span class="fm-fold-btn">⋯ 展开</span></span></div>
+              <div class="fm-fold-line"><span class="fm-io-line-num">3,246,829</span><span class="fm-io-time">12:34:57</span><span class="fm-io-level fm-io-info">INFO</span><span class="fm-io-msg">cache invalidated, size 0<span class="fm-fold-chip">收起</span></span></div>
+              <div class="fm-io-line"><span class="fm-io-line-num">3,246,830</span><span class="fm-io-time">12:34:58</span><span class="fm-io-level fm-io-warn">WARN</span><span class="fm-io-msg">Slow query: 1.2s on /users/123</span></div>
+            </div>
+            <div class="fm-fold-note">超长行钳制在前 3 行 · 点击整行展开 · 行尾「收起」折回</div>
+          </div>
+        </figure>
+      </article>
+    </div>
+  </section>
+
+  <section class="formats" id="formats">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="section-num">03</span>
+        <h2>支持的日志格式</h2>
+      </header>
+
+      <p class="lede lede-quiet">
+        查看器本身是通用文本查看器,任何 <code>.log</code> / <code>.txt</code> 都能打开、搜索、加书签。
+        在此基础上自动识别<strong>时间戳</strong>和<strong>日志级别</strong>
+        (归一化到 ERROR / WARN / INFO / DEBUG 四档,FATAL、SEVERE 计入 ERROR,TRACE、VERBOSE 计入 DEBUG)。
+        下表是常见日志组件默认 / 典型输出的实测情况。
+      </p>
+
+      <div class="format-table-wrap">
+        <table class="format-table">
+          <thead>
+            <tr>
+              <th class="col-name">日志组件</th>
+              <th class="col-flag">时间戳</th>
+              <th class="col-flag">级别</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Logback / Log4j / Log4j2 / SLF4J、Spring Boot 默认格式</td><td class="ok">识别</td><td class="ok">识别</td></tr>
+            <tr><td>log4net / NLog(.NET)</td><td class="ok">识别</td><td class="ok">识别</td></tr>
+            <tr><td>Python logging(<code>%(asctime)s</code> 格式)、Gunicorn</td><td class="ok">识别</td><td class="ok">识别</td></tr>
+            <tr><td>logrus、zap 控制台格式(Go)</td><td class="ok">识别</td><td class="ok">识别</td></tr>
+            <tr><td>Rails、Laravel / Monolog、winston 文本格式</td><td class="ok">识别</td><td class="ok">识别</td></tr>
+            <tr><td>Go 标准库 log、IIS W3C、syslog RFC5424</td><td class="ok">识别</td><td>—</td></tr>
+            <tr><td>Docker json-file、bunyan(JSON 内含 ISO 时间字段)</td><td class="ok">识别</td><td>—</td></tr>
+            <tr><td>Tomcat catalina(JUL)、JBoss / WildFly 默认 pattern</td><td>—</td><td class="ok">识别</td></tr>
+            <tr><td>Serilog Console 默认、Apache error log</td><td>—</td><td class="ok">识别</td></tr>
+            <tr><td>Python logging 默认格式、uvicorn(<code>INFO:</code> 前缀)</td><td>—</td><td class="ok">识别</td></tr>
+            <tr><td>nginx / Apache access log(<code>01/Jan/2024</code> 英文月份日期)</td><td>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note">
+        识别不到时间戳只影响时间范围过滤、时间线、按时间裁剪这三类功能,打开、搜索、级别过滤、书签、注释全部照常可用。
+        级别简写 <code>E</code> / <code>W</code> / <code>I</code> / <code>D</code>、<code>ERR</code> / <code>WRN</code> / <code>INF</code> / <code>DBG</code> / <code>TRC</code> 默认就能识别;
+        如果你们的日志用了别的缩写,在设置里配级别别名即可。
+        编码同样自动识别:GBK(含 GB2312,按 GB18030 解码)与 UTF-16 LE / BE
+        (常见于 PowerShell 重定向产物)直接打开不乱码,也可在「编码」下拉手动切换。
+      </p>
+    </div>
+  </section>
+
+  <section class="themes" id="themes">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="section-num">04</span>
+        <h2>四套主题</h2>
+      </header>
+
+      <p class="lede lede-quiet">
+        在「⋯ 更多 → 设置」面板里切换,立即生效,选择会写入 VSCode 用户配置。
+      </p>
+
+      <div class="theme-grid">
+        <figure class="theme">
+          <div class="theme-mock mock-default">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">486 MB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
+          </div>
+          <figcaption>
+            <div class="theme-name">默认</div>
+            <div class="theme-desc">跟随 VSCode 当前编辑器主题</div>
+          </figcaption>
+        </figure>
+
+        <figure class="theme">
+          <div class="theme-mock mock-neon">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">486 MB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
+          </div>
+          <figcaption>
+            <div class="theme-name">NEON.CYBER</div>
+            <div class="theme-desc">纯黑底 + 霓虹青 / 品红 / 琥珀 + 扫描线</div>
+          </figcaption>
+        </figure>
+
+        <figure class="theme">
+          <div class="theme-mock mock-aurora">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">486 MB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
+          </div>
+          <figcaption>
+            <div class="theme-name">AURORA.GLASS</div>
+            <div class="theme-desc">深蓝紫渐变 + 毛玻璃 + 极光动效</div>
+          </figcaption>
+        </figure>
+
+        <figure class="theme">
+          <div class="theme-mock mock-holo">
+            <div class="mock-bar">
+              <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+              <span class="mock-title">server.log</span>
+              <span class="mock-meta">486 MB</span>
+            </div>
+            <div class="mock-search">⌕ query timeout</div>
+            <div class="mock-lines">
+              <div class="mock-line"><span class="mock-time">12:00:01</span><span class="mock-level mock-level-info">INFO</span>Application started on port 3000</div>
+              <div class="mock-line"><span class="mock-time">12:00:02</span><span class="mock-level mock-level-warn">WARN</span>Slow query: 1.2s on /users/123</div>
+              <div class="mock-line"><span class="mock-time">12:00:03</span><span class="mock-level mock-level-error">ERROR</span>Connection refused to redis-01</div>
+              <div class="mock-line"><span class="mock-time">12:00:04</span><span class="mock-level mock-level-info">INFO</span>Retry attempt 1 of 3</div>
+              <div class="mock-line"><span class="mock-time">12:00:05</span><span class="mock-level mock-level-debug">DEBUG</span>Cache hit ratio 0.94</div>
+            </div>
+          </div>
+          <figcaption>
+            <div class="theme-name">HOLO.PRISM</div>
+            <div class="theme-desc">炭灰底 + 全息渐变描边 + 仪表盘质感</div>
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="commands" id="commands">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="section-num">05</span>
+        <h2>命令面板</h2>
+      </header>
+      <p class="lede lede-quiet">所有功能都可从 VSCode 命令面板(<code>Ctrl+Shift+P</code>)调用。</p>
+
+      <dl class="cmd-list">
+        <div class="cmd-row"><dt><code>Open Log Viewer: 打开大日志文件</code></dt><dd>选择一个日志文件在查看器中打开</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 高级搜索</code></dt><dd>打开查询构建器</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 排查模板</code></dt><dd>打开排查模板管理</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 书签管理</code></dt><dd>查看 / 编辑 / 导出书签</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 注释管理</code></dt><dd>查看 / 编辑 / 删除注释</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 跳转到行号</code></dt><dd>输入行号直接跳转</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 显示日志统计</code></dt><dd>总行数、级别分布、时间范围</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 刷新日志文件</code></dt><dd>文件被外部更新后重新读取</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 按时间删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
+        <div class="cmd-row"><dt><code>Open Log Viewer: 按行数删除日志</code></dt><dd>直接修改原文件,慎用</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="install" id="install">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="section-num">06</span>
+        <h2>安装</h2>
+      </header>
+
+      <p class="lede lede-quiet">要求:VSCode 1.75 或更高版本。</p>
+
+      <div class="install-grid">
+        <div class="install-block">
+          <div class="install-label">方式 A · 扩展市场(推荐)</div>
+          <p>在扩展面板搜索「Open Log Viewer」或「Open Log Viewer」,或直接执行:</p>
+          <div class="install-cmd">
+            <span class="prompt-sigil">$</span>
+            <code>code --install-extension wake.big-log-viewer</code>
+          </div>
+        </div>
+
+        <div class="install-block">
+          <div class="install-label">方式 B · 从源码打包</div>
+          <pre class="install-cmd install-cmd-block"><code>$ git clone https://github.com/uwakeme/large_log_check.git
+$ cd large_log_check
+$ npm install
+$ npm run package</code></pre>
+          <p>打包在项目根目录生成 <code>.vsix</code>,在扩展面板「⋯ → 从 VSIX 安装」里选它即可。</p>
+        </div>
+
+        <div class="install-block install-block-wide">
+          <div class="install-label">第一次使用</div>
+          <p>
+            资源管理器里右键任意 <code>.log</code> / <code>.txt</code> 文件,选「打开大日志文件」。
+            进度条走完就是完整日志。每个文件在独立面板中打开,书签、注释、搜索状态都按面板隔离,关闭面板即释放资源。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <div class="foot-brand">
+        <span class="brand-mark"></span>
+        <span class="brand-name">Open Log Viewer</span>
+        <span class="foot-meta"><span class="js-ver">v1.5.3</span> · MIT · © <a href="https://github.com/uwakeme" target="_blank" rel="noopener">@uwakeme</a></span>
+      </div>
+      <nav class="foot-links">
+        <a href="https://github.com/uwakeme/large_log_check" target="_blank" rel="noopener">仓库</a>
+        <a href="https://github.com/uwakeme/large_log_check/issues" target="_blank" rel="noopener">问题反馈</a>
+        <a href="https://github.com/uwakeme/large_log_check/blob/main/CHANGELOG.md" target="_blank" rel="noopener">更新日志</a>
+        <a href="https://marketplace.visualstudio.com/items?itemName=wake.big-log-viewer" target="_blank" rel="noopener">Marketplace</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.install-cmd').forEach(function (box) {
+      box.addEventListener('click', function () {
+        var code = box.querySelector('code');
+        if (!code) return;
+        var text = code.textContent.trim().replace(/^\$\s*/, '');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            box.classList.add('copied');
+            setTimeout(function () { box.classList.remove('copied'); }, 1200);
+          });
+        }
+      });
+    });
+  </script>
+
+  <script>
+    // 版本号动态填充:向 GitHub API 取 releases/latest 的 tag(发布 Release 后线上自动更新,
+    // 无需重新部署主页);拉取失败时保留 HTML 里的写死兜底值
+    (function () {
+      var nodes = document.querySelectorAll('.js-ver');
+      if (!nodes.length) return;
+      fetch('https://api.github.com/repos/uwakeme/large_log_check/releases/latest', { headers: { 'Accept': 'application/vnd.github+json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || !data.tag_name) return;
+          var tag = data.tag_name.replace(/^v/, '');
+          nodes.forEach(function (n) { n.textContent = 'v' + tag; });
+        })
+        .catch(function () { /* 保持兜底值 */ });
+    })();
+  </script>
+</body>
+</html>

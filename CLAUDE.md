@@ -111,4 +111,5 @@ From `AGENTS.md` → "PR & commit conventions" (always applied):
 | Add a new user setting                          | `package.json` `contributes.configuration.properties`     |
 | Document a user-facing feature                  | `README.md` (usage) + `CHANGELOG.md` (Unreleased)         |
 | Change the release flow or Release format      | `.github/workflows/release.yml` + `scripts/release-prep.cjs` — match the **existing published releases**: read `https://api.github.com/repos/uwakeme/large_log_check/releases/tags/<tag>` first, don't trust the format written in the docs |
+| Update the GitHub Pages project homepage       | `docs/index.html` + `docs/styles.css` on `main` (the site lives in `docs/`, published from branch `main` + `/docs`; there is no `gh-pages` branch) — see the homepage section in `AGENTS.md` |
 | Coding style, interface shapes, async patterns  | `AGENTS.md`                                               |

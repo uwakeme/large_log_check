@@ -128,34 +128,33 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 
 项目主页 URL：**https://uwakeme.github.io/large_log_check/**（已设置到 repo 的 Website 字段）
 
+### 站点源文件在 `main` 分支的 `docs/` 目录（2026-11-18 起）
+
+- `docs/index.html`、`docs/styles.css`、`docs/images/`（README 配图等）就是站点本体
+- GitHub Pages 的 Source 设为 **Deploy from a branch → `main` / `/docs`**，`docs/` 里的内容即站点根目录，URL 不变
+- **不再维护 `gh-pages` 分支**（2026-11-18 已删除）；改主页 = 改 `docs/` → commit → push `main`，Pages 自动重新构建发布
+- `docs/` 是**站点目录**，只放站点文件 —— 本地设计文档 / 实施计划 / 审查报告不要放这里（会被一起发布），放别处并保持 untracked
+- `.vscodeignore` 已排除 `docs/**`，站点不会被打进 `.vsix`
+
 ### 主页内容同步约定（2026-11-09 起）
 
-- **每次发版，或新增/修改用户可见功能时，检查 gh-pages 主页是否需要同步**。以用户可感知为准判断：新功能进「核心能力」卡片（重磅功能独立成卡，小改进并入现有卡片的 bullets）、格式/编码支持进「支持的日志格式」、纯内部修复不动主页
-- 同步时把 `index.html` 三处写死的兜底版本号（页顶 brand-ver / eyebrow / 页脚 foot-meta，都带 `js-ver` class）改成新版本号；线上页面会向 GitHub API 取 `releases/latest` 动态覆盖——**发布 GitHub Release 后主页显示自动更新，无需重新部署**，兜底值仅在 API 拉取失败时展示
-- 同步操作走下面的 worktree 工作流；推送 gh-pages 后用浏览器过一遍新卡片渲染与动态版本号是否正常
-
-### 站点内容只放 `gh-pages` 分支,`main` 不要有 `site/` / `docs/` 站点目录
-
-- `gh-pages` 分支根目录直接是站点:`index.html`、`styles.css`、`images/`（README 配图等）
-- 主分支工作流:`main` 上生成/重写 `site/` 临时目录 → 用 `git worktree add -B gh-pages <tmp> origin/gh-pages` 隔离 worktree → worktree 内 `git rm -rf .` + `git clean -fdx` 清空 → `Copy-Item site\*` 复制进去 → commit → `git push -u origin gh-pages` → `git worktree remove <tmp> --force`
-- 推送后**删掉** `main` 根下的 `site/`(走 `rm -- site/`,mavis-trash 可恢复)
-- 不要把 `site/` commit 到 `main` —— 会污染源码仓库
+- **每次发版，或新增/修改用户可见功能时，检查主页是否需要同步**。以用户可感知为准判断：新功能进「核心能力」卡片（重磅功能独立成卡，小改进并入现有卡片的 bullets）、格式/编码支持进「支持的日志格式」、纯内部修复不动主页
+- 同步时把 `docs/index.html` 三处写死的兜底版本号（页顶 brand-ver / eyebrow / 页脚 foot-meta，都带 `js-ver` class）改成新版本号；线上页面会向 GitHub API 取 `releases/latest` 动态覆盖——**发布 GitHub Release 后主页显示自动更新，无需重新部署**，兜底值仅在 API 拉取失败时展示
+- 推送 `main` 后用浏览器过一遍新卡片渲染与动态版本号是否正常
 
 ### GitHub Pages 操作约束
 
-- **版本号自动同步(2026-10-27 起)**:`index.html` 三处版本号(页顶徽章 / eyebrow / 页脚)带 `js-ver` class,页面加载时向 GitHub API 取 `releases/latest` 的 tag 动态填充;**发版只需发布 GitHub Release,主页版本号无需重新部署**。写死的版本号是拉取失败时的兜底,手改主页时记得同步更新兜底值
-- **Save 按钮灰 = 当前设置已是已保存状态**,不是出错;改任意下拉(Source / Branch)才会激活 Save
+- **版本号自动同步(2026-10-27 起)**:`docs/index.html` 三处版本号(页顶徽章 / eyebrow / 页脚)带 `js-ver` class,页面加载时向 GitHub API 取 `releases/latest` 的 tag 动态填充;**发版只需发布 GitHub Release,主页版本号无需重新部署**。写死的版本号是拉取失败时的兜底,手改主页时记得同步更新兜底值
+- **Save 按钮灰 = 当前设置已是已保存状态**,不是出错;改任意下拉(Source / Branch / 目录)才会激活 Save
 - **Custom domain 不要填 `hexo.blog.uwakeme.tech`**(本机 DNS 没配 A/CNAME,填了站点能 "live" 但访问 404);留空用默认 GitHub 子域
-- **unpublish 后无法用 Save 重新启用** —— 改下拉也未必生效。最稳的方法:推空 commit 到 `gh-pages`,GitHub 自动恢复部署:
+- **当前自定义域名是 `www.uwakeme.top`**(`uwakeme.github.io/large_log_check/` 会 301 到它),DNS 已配好。改 Pages 设置时**只动 Source 下拉,别碰 Custom domain 输入框** —— 换分支或换目录都不会影响自定义域名
+- **unpublish 后无法用 Save 重新启用** —— 改下拉也未必生效。最稳的方法:推空 commit 到 `main`,Pages 会重新构建 `docs/` 并恢复部署:
   ```bash
-  git worktree add -B gh-pages <tmp> origin/gh-pages
-  cd <tmp>
   git commit --allow-empty -m "chore: trigger GitHub Pages redeploy after unpublish"
-  git push origin gh-pages
-  git worktree remove <tmp> --force
+  git push origin main
   ```
-- 仓库里已有 GitHub Pages 官方部署工作流 `pages-build-deployment`（从 `gh-pages` 分支部署站点），它**只负责部署 `gh-pages` 上的内容，不含 `main → gh-pages` 的内容同步**；后者仍走上面的 worktree 流程
-- `main → gh-pages` 若要自动化，再加一个 workflow；需要调 GitHub API 时（如设置 repo homepage）要用户提供 PAT —— 设置类操作直接在 GitHub 网页 UI 做更快（2026-11-18 已用此法设置 Actions workflow permissions）；本机靠 Git Credential Manager 推送，但没有 `gh` CLI
+- 站点走**分支构建**(Source = `main` + `/docs`),不是 Actions 工作流 —— `.github/workflows/` 下只有 `release.yml`;不需要再写 `main → gh-pages` 的同步 workflow
+- 需要调 GitHub API 时（如改 Pages source、设置 repo homepage）要用户提供 PAT —— 设置类操作直接在 GitHub 网页 UI 做更快（2026-11-18 已用此法设置 Actions workflow permissions）；本机靠 Git Credential Manager 推送，但没有 `gh` CLI
 
 ## Release process (every version)
 
