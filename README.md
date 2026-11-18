@@ -166,6 +166,8 @@ npm run package
 
 打包会在项目根目录生成一个 `.vsix` 文件，在扩展面板右上角「⋯ → 从 VSIX 安装」里选择它即可。
 
+不想自己打包也行：每个版本的 [GitHub Release](https://github.com/uwakeme/large_log_check/releases) 页面都直接附带打包好的 `.vsix`，下载后在扩展面板右上角「⋯ → 从 VSIX 安装」里选它即可。
+
 ### 第一次使用
 
 在资源管理器里右键任意 `.log` / `.txt` 文件，选择「打开大日志文件」。进度条走完就是完整日志，可以直接搜了。
@@ -391,6 +393,8 @@ npm run package
 | `npm run package` | 打包生成 `.vsix` |
 
 调试方式：VSCode 打开本项目，按 `F5` 启动扩展开发主机，在新窗口里打开一个大 `.log` 文件验证。`watch` 会自动编译，改完代码手动重载窗口即可。
+
+发版流程：改 `package.json` 的 `version`、把 CHANGELOG 的 `## [Unreleased]` 整理成版本段落 → 提交 → 打 `v1.5.3` 这样的 tag 并推送。推送 tag 后 GitHub Actions 自动打包并创建 GitHub Release（附带可安装的 `.vsix`，说明取自 CHANGELOG 对应段落）；上架 VS Code Marketplace 仍需本地执行 `vsce publish`。
 
 <details>
 <summary>项目结构</summary>

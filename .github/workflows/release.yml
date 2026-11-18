@@ -1,0 +1,84 @@
+name: Release
+
+# 打 tag 推送后自动打包并创建 GitHub Release（Release 页面附带可安装的 .vsix）
+# Marketplace 上架仍是人工步骤（vsce publish 需要 PAT，按项目约定不自动执行）
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '手动触发时使用的 tag，如 v1.5.3（留空则用最近推送的 tag）'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 打包并创建 Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: 解析发版 tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="$INPUT_TAG"
+          case "$tag" in
+            refs/tags/*) tag="${tag#refs/tags/}" ;;
+          esac
+          if [ -z "$tag" ]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          case "$tag" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "::error::没有找到可用的 tag（当前：$tag）。手动触发时请在输入框填 v1.5.3 这样的 tag。"
+              exit 1
+              ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "本次发版 tag：$tag"
+
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
+
+      - name: 准备 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 校验版本号并生成 Release 说明
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: node scripts/release-prep.cjs "$TAG" > release-notes.md
+
+      - name: 打包扩展
+        # vsce package 会自动跑 vscode:prepublish（lint + compile + test），失败即中止
+        run: npx vsce package --out "big-log-viewer-$(node -p "require('./package.json').version").vsix"
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          gh release create "$TAG" \
+            "big-log-viewer-${version}.vsix" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            --verify-tag

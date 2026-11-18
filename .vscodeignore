@@ -12,6 +12,8 @@ node_modules/**/.bin/**
 **/*.vsix
 docs/**
 test/**
+.github/**
+scripts/**
 .zcode/**
 .harness/**
 .claude/**

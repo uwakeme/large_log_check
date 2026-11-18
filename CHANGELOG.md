@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **每个版本都能直接从 GitHub Release 下载 `.vsix` 安装** — Release 页面会附带打包好的安装包，不用再自己拉源码打包；下载后在扩展面板右上角「⋯ → 从 VSIX 安装」里选它即可
 
 ## [1.5.3] - 2026-11-18
 ### Fixed

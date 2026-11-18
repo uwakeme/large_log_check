@@ -19,7 +19,7 @@ The author's real driver: people around them inspect log files with **记事本 
 - Clean:       `npm run clean`     (rimraf out)
 - Rebuild:     `npm run rebuild`   (clean + compile)
 - Package:     `npm run package`   (vsce package → .vsix)
-- Publish:     `npm run publish`   (vsce publish — NOT used in practice; releases are manual uploads, see Release process)
+- Publish:     `npm run publish`   (vsce publish — 只用于上架 Marketplace，必须人工执行；GitHub Release 由 tag 触发的 CI 自动完成，见 Release process)
 
 ## Project layout
 
@@ -39,6 +39,8 @@ The author's real driver: people around them inspect log files with **记事本 
 - `package.json`            — manifest, command registration, user settings
 - `tsconfig.json`           — TypeScript strict mode (ES2020 / CommonJS)
 - `CHANGELOG.md`            — Keep-a-Changelog format; `## [Unreleased]` lives at the top
+- `.github/workflows/release.yml` — 发版流水线：推送 `v*` tag → 打包 `.vsix` → 自动创建 GitHub Release（附 .vsix，说明取自 CHANGELOG 对应版本段落）
+- `scripts/release-prep.cjs` — 发版准备：校验 tag 版本与 `package.json` 一致、从 CHANGELOG 提取版本段落（单测在 `test/releasePrep.test.cjs`）
 
 ## Code style
 
@@ -48,12 +50,12 @@ The author's real driver: people around them inspect log files with **记事本 
 - File reads are stream-based only: `fs.createReadStream` + `readline.createInterface({ crlfDelay: Infinity })`
 - All async methods return `Promise<T>` explicitly; wrap stream events in `new Promise(...)`
 - Disposables push to `context.subscriptions` / panel's `_disposables`; clean up in `dispose()`
-- Run `npm run lint` before committing; no CI is configured locally
+- Run `npm run lint` before committing;本地没有 PR 级 CI，只有 tag 推送触发的发版流水线（`.github/workflows/release.yml`）
 
 ## Testing instructions
 
 - Unit tests use the built-in `node:test` runner: `npm test` (= compile + `node --test test/*.test.cjs`)
-- `test/` 现有七个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`encoding.test.cjs`（GBK/UTF-16 编码识别）、`templateImport.test.cjs`（排查模板导入校验 / 限定范围动作）、`clipboard.test.cjs`（日志选区复制）、`searchShortcut.test.cjs`（选中日志 Ctrl+F 搜索）、`lineRange.test.cjs`（行号范围解析 / 校验 / 芯片文案）、`foldLongLines.test.cjs`（长行折叠判定 / 点击归属 / 命中裁切 / 行数钳制），共 121 个用例
+- `test/` 现有十一个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`encoding.test.cjs`（GBK/UTF-16 编码识别）、`templateImport.test.cjs`（排查模板导入校验 / 限定范围动作）、`clipboard.test.cjs`（日志选区复制）、`searchShortcut.test.cjs`（选中日志 Ctrl+F 搜索）、`lineRange.test.cjs`（行号范围解析 / 校验 / 芯片文案）、`foldLongLines.test.cjs`（长行折叠判定 / 点击归属 / 命中裁切 / 行数钳制）、`threadName.test.cjs`（线程名提取）、`chunkedLoad.test.cjs`（WebView 侧分块传输协议）、`chunkedTransfer.test.cjs`（宿主侧分块切分）、`releasePrep.test.cjs`（发版准备：版本解析 / CHANGELOG 段落提取 / 版本一致性校验），共 172 个用例
 - 新增测试放 `test/*.test.cjs`；webview 侧模块要打桩浏览器全局（`localStorage` / `document` / `window.getSelection` 等）再用 `vm` 加载，写法参考 `test/clipboard.test.cjs`
 - `node --test` 的 glob 模式需要 Node 21+；更早版本改用 `node --test test/` 跑整个目录
 - Manual test path: `npm run watch` → `F5` in VSCode → exercise the feature in the Extension Development Host
@@ -151,14 +153,23 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 
 1. Bump `version` in `package.json`
 2. Move CHANGELOG `## [Unreleased]` entries into `## [x.y.z] - YYYY-MM-DD`; keep an empty `## [Unreleased]` at the top
-3. `npm run package` — the `vscode:prepublish` chain (lint + compile + test) must pass; artifact is `big-log-viewer-<version>.vsix`
+3. `npm run package` — the `vscode:prepublish` chain (lint + compile + test) must pass locally; artifact is `big-log-viewer-<version>.vsix`
 4. Commit as `<old> -> <new>` (e.g. `1.3.1 -> 1.3.2`), then create an annotated tag `v<x.y.z>` on that commit
 5. Push `main` and the tag together — every release MUST be tagged, because the README version badge reads the latest tag
-6. Generate the GitHub Release page content for the tag and hand it to the user; they create the release and upload the `.vsix` themselves (to GitHub and to the Marketplace — never run `vsce publish`):
-   - Title: `Open Log Viewer v<x.y.z>`
-   - Notes: condensed from the release's CHANGELOG section — one short bullet per entry under `### Added / Changed / Fixed`
+6. **GitHub Release 由 CI 自动创建**（`.github/workflows/release.yml`，推送 `v*` tag 触发）：打包 `.vsix` → 取 CHANGELOG 对应版本段落作说明 → 创建 Release 并附上 `.vsix`。这一步无需人工操作，只需在 Actions 页面确认跑绿
+   - Title: `v<x.y.z>`（与 tag 同名，与历史 Release 保持一致）
+   - Notes: 该版本的 CHANGELOG 段落（由 `scripts/release-prep.cjs` 提取，条目标题上的 `**加粗**` 会被去掉）——`### Added / Changed / Fixed` 下每条一行
    - **No install instructions in the notes** — "how to install" lives only in `README.md`; the release body carries just the changelog summary, and the `.vsix` goes in as the attached binary
-   - Label: Latest
+   - Label: Latest（非预发布 tag 自动标记）
+7. **Marketplace 上架仍是人工步骤** —— 本地执行 `vsce publish`（需 Azure DevOps PAT），按上文 Approval gates，**永远不自动执行**
+
+### Release 自动化注意事项（2026-11-18 起）
+
+- 流水线文件：`.github/workflows/release.yml`；触发条件为推送 `v*` tag，另有 `workflow_dispatch` 手动触发（可填 tag，用于失败后重跑）
+- 流水线声明了 `permissions: contents: write`，因此仓库需在 **Settings → Actions → General → Workflow permissions 设为 "Read and write permissions"**，否则创建 Release 会 403
+- tag 版本与 `package.json` 的 `version` 不一致、或 CHANGELOG 里没有该版本段落 → 流水线直接失败，不会产出空说明的 Release。改完重新打 tag 再推即可
+- 同一个 tag 重复触发会失败（Release 已存在）——先删掉 Release，再用 `workflow_dispatch` 重跑
+- `scripts/release-prep.cjs` 同时被单测覆盖（`test/releasePrep.test.cjs`），其中一条用例会检查**仓库当前版本在 CHANGELOG 里必须有对应段落**，改版本号忘了写 CHANGELOG 会本地就报错
 
 ## Architecture (key facts)
 
