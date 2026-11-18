@@ -15,7 +15,7 @@ These are the project's coding conventions. Every agent in `.harness/reins/` lin
 - Public methods: `camelCase` (`createOrShow`, `getActivePanel`).
 - Static private fields: `_` prefix (`private static _panels: Map<...>`).
 - Interfaces: `PascalCase` (`LogLine`, `LogStats`).
-- Constants (regex patterns) in class: `camelCase` (`timePatterns`, `logLevelPatterns`).
+- Constants (regex patterns) in class: `camelCase` (`timePatterns`). Level-detection regexes are module-level lazily-built values (`getQuickMatchRegex` / `getBracketMatchRegex` / `getBareMatchRegex`) so `setLevelAliases` can swap them at runtime — keep them out of the class.
 
 ## Imports
 
@@ -99,7 +99,9 @@ switch (message.command) {
 }
 ```
 
-The canonical list of accepted messages lives in the `onDidReceiveMessage` switch in `src/logViewerPanel.ts:84`. Add a case there when a feature needs host-side work; keep purely visual logic in `media/webview.js`.
+The canonical list of accepted messages lives in the `onDidReceiveMessage` switch in `src/logViewerPanel.ts:222`. Add a case there when a feature needs host-side work; keep purely visual logic in `media/webview.js`.
+
+Commands that carry huge line arrays must also be registered in the `CHUNK_PAYLOAD_FIELD` table (`media/chunkedLoad.js`) — otherwise the payload is silently dropped instead of transferred.
 
 ## Lint
 

@@ -30,7 +30,8 @@ All of these hold:
 
 - `npm run compile` exits 0
 - `npm run lint` exits 0
+- `npm test` exits 0
 - `README.md` documents the new feature (or explains why no doc change is needed)
 - `CHANGELOG.md` has a single new entry under `## [Unreleased]` (no duplicates — see `docs/cursor-rules.md`)
-- If a new host↔WebView message was added, both `src/logViewerPanel.ts:84` switch and the matching `media/webview.js` handler are updated
+- If a new host↔WebView message was added, both the `src/logViewerPanel.ts:222` switch and the matching `media/webview.js` handler are updated
 - You post a one-line summary to the orchestrator listing the changed files and any cross-rein handoff

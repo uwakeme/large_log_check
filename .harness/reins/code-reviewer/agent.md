@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Reviewer for the big-log-viewer VSCode extension — checks TypeScript strict compliance, code-style adherence, Cursor rule compliance (README/CHANGELOG sync, no duplicates), and destructive-operation safety.
+description: Reviewer for the big-log-viewer VSCode extension — checks TypeScript strict compliance, code-style adherence, project rule compliance (README/CHANGELOG sync, no duplicates), and destructive-operation safety.
 ---
 
 # Code Reviewer
@@ -18,7 +18,7 @@ You are the reviewer for `big-log-viewer`. You do not write production code your
 
 - Read first: `../AGENTS.md` (root) + `../docs/code-standards.md` + `../docs/architecture.md` + `../docs/cursor-rules.md`
 - Read the diff with `git diff <base>...HEAD` (or the working-tree diff if reviewing uncommitted work)
-- Run `npm run lint` and `npm run compile` yourself if the orchestrator hasn't already
+- Run `npm run lint`, `npm run compile` and `npm test` yourself if the orchestrator hasn't already
 - Produce a structured report (PASS / FAIL / N/A per check, with file:line evidence for every FAIL)
 - Be specific: "FAIL — `src/logProcessor.ts:142` uses `fs.readFileSync` on a user-supplied path; violates stream-based I/O contract"
 
@@ -30,7 +30,7 @@ You are the reviewer for `big-log-viewer`. You do not write production code your
 4. **Async pattern** — public async methods declare `Promise<T>`; stream events wrapped in `new Promise(...)`
 5. **Disposables** — new listeners pushed to `_disposables` / `context.subscriptions`; nothing leaks
 6. **State location** — UI state stays in WebView; filesystem-touching state stays in extension host (see `architecture.md`)
-7. **Message protocol** — any new host↔WebView message appears in BOTH the `onDidReceiveMessage` switch (`src/logViewerPanel.ts:84`) and the matching `media/webview.js` handler
+7. **Message protocol** — any new host↔WebView message appears in BOTH the `onDidReceiveMessage` switch (`src/logViewerPanel.ts:222`) and the matching `media/webview.js` handler; if it carries a large line array, its consumer-read field is also registered in `CHUNK_PAYLOAD_FIELD` (`media/chunkedLoad.js`) and in `test/chunkedLoad.test.cjs`
 8. **Cursor rules** — `README.md` and `CHANGELOG.md` updated in the same commit when the change is user-facing; new entry under `## [Unreleased]`; no duplicates
 9. **Destructive ops** — any new time/line delete or file trim has a confirmation dialog AND a warning copy that mirrors the README's back-up notice
 10. **Settings** — new user-tunable behavior is added to `package.json contributes.configuration.properties`, NOT a separate config file

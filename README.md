@@ -381,7 +381,7 @@ npm run package
 
 ## 本地开发
 
-环境要求：Node.js 18+、VSCode 1.75+。
+环境要求：Node.js 18+、VSCode 1.75+。（`npm test` 用的 `node --test test/*.test.cjs` glob 模式需要 Node 21+，更早的版本改用 `node --test test/`）
 
 | 命令 | 作用 |
 | --- | --- |

@@ -48,6 +48,7 @@ A change is "done" only when ALL of these hold:
 
 - `npm run compile` exits 0
 - `npm run lint` exits 0
+- `npm test` exits 0
 - `README.md` and `CHANGELOG.md` are updated if the change is user-facing (see `docs/cursor-rules.md`)
 - The relevant reins' stop conditions are met
 - You, the orchestrator, have read the diff and the diff is what you asked for
@@ -57,7 +58,8 @@ A change is "done" only when ALL of these hold:
 - Do not write the reins' `agent.md` files for them — they own their own bodies
 - Do not modify code in `src/` or `media/` yourself when the work is more than a one-liner; delegate
 - Do not commit without the user explicitly asking (project rule: ask first)
-- Do not push to `master` directly; never
+- Do not push to `main` directly; never
+- Do not create GitHub Releases by hand and never run `npm run publish` — the Release is produced by `.github/workflows/release.yml` on a `v*` tag, Marketplace publishing needs explicit user approval
 - Do not load the whole file for search/indexing work — that breaks the GB-scale contract
 
 ## Stop when

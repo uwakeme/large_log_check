@@ -20,20 +20,26 @@ The author's real driver: people around them inspect log files with **记事本 
 - Rebuild:     `npm run rebuild`   (clean + compile)
 - Package:     `npm run package`   (vsce package → .vsix)
 - Publish:     `npm run publish`   (vsce publish — 只用于上架 Marketplace，必须人工执行；GitHub Release 由 tag 触发的 CI 自动完成，见 Release process)
+- Release dry-run: `node scripts/release-prep.cjs v1.5.3` — 校验 tag 版本与 package.json 是否一致，并打印该版本的 CHANGELOG 段落（发版前本地预演，不产出任何文件）
 
 ## Project layout
 
 - `src/extension.ts`        — command palette / context-menu dispatch (entry point)
 - `src/logViewerPanel.ts`   — WebView lifecycle, per-file singleton, postMessage bridge
 - `src/logProcessor.ts`     — stream-based file I/O (fs.createReadStream + readline)
+- `src/logParser.ts`        — 纯函数解析：时间戳 / 级别 / 类名 / 方法名 / 线程名（无 I/O）
+- `src/encoding.ts`         — 文件编码识别（UTF-8 / GBK / UTF-16）
+- `src/chunkedTransfer.ts`  — 宿主侧分块切分：超大行数组按预算切块，不进单条 postMessage
 - `src/webview.html`        — WebView HTML scaffold
 - `media/webview.js`        — WebView frontend logic (search, filters, virtual scroll, timeline, bookmarks)
+- `media/chunkedLoad.js`    — WebView 侧分块传输重组（消费方字段查 `CHUNK_PAYLOAD_FIELD`，未登记的命令不写块）
 - `media/clipboard.js`      — WebView 日志选区复制（接管 Ctrl+C）+ 日志区点选时让输入框让出焦点、焦点收拢到日志容器（规避 VS Code 1.143 webview 复制前的焦点恢复劫持）
 - `media/searchShortcut.js` — 选中日志文字后 Ctrl/Cmd+F 直接搜索（复用 clipboard.js 的 getLogSelectionText，须在其后加载）
 - `media/investigationTemplates.js` — 排查模板（模板 CRUD、导入导出、运行流水线）
 - `media/searchHistory.js`  — 搜索历史存储（会话级内存，按文件面板隔离）
 - `media/lineRange.js`      — 行号范围限定纯逻辑（弹窗解析/右键单边界校验/范围文案，须在 webview.js 之前加载）
 - `media/foldLongLines.js`  — 长行折叠纯逻辑（长行粗筛/真实截断判定/点击归属判定/命中裁切判定，须在 webview.js 之前加载）
+- `media/threadName.js`     — 线程名识别与「按此线程筛选」交互
 - `media/webview.css`       — base WebView styles
 - `media/themes.css`        — 3 visual theme overlays (NEON.CYBER / AURORA.GLASS / HOLO.PRISM)
 - `package.json`            — manifest, command registration, user settings
@@ -55,7 +61,7 @@ The author's real driver: people around them inspect log files with **记事本 
 ## Testing instructions
 
 - Unit tests use the built-in `node:test` runner: `npm test` (= compile + `node --test test/*.test.cjs`)
-- `test/` 现有十一个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`encoding.test.cjs`（GBK/UTF-16 编码识别）、`templateImport.test.cjs`（排查模板导入校验 / 限定范围动作）、`clipboard.test.cjs`（日志选区复制）、`searchShortcut.test.cjs`（选中日志 Ctrl+F 搜索）、`lineRange.test.cjs`（行号范围解析 / 校验 / 芯片文案）、`foldLongLines.test.cjs`（长行折叠判定 / 点击归属 / 命中裁切 / 行数钳制）、`threadName.test.cjs`（线程名提取）、`chunkedLoad.test.cjs`（WebView 侧分块传输协议）、`chunkedTransfer.test.cjs`（宿主侧分块切分）、`releasePrep.test.cjs`（发版准备：版本解析 / CHANGELOG 段落提取 / 版本一致性校验），共 172 个用例
+- `test/` 现有十一个测试文件：`logParser.test.cjs`（级别别名 / 时间戳解析）、`encoding.test.cjs`（GBK/UTF-16 编码识别）、`templateImport.test.cjs`（排查模板导入校验 / 限定范围动作）、`clipboard.test.cjs`（日志选区复制）、`searchShortcut.test.cjs`（选中日志 Ctrl+F 搜索）、`lineRange.test.cjs`（行号范围解析 / 校验 / 芯片文案）、`foldLongLines.test.cjs`（长行折叠判定 / 点击归属 / 命中裁切 / 行数钳制）、`threadName.test.cjs`（线程名提取）、`chunkedLoad.test.cjs`（WebView 侧分块传输协议）、`chunkedTransfer.test.cjs`（宿主侧分块切分）、`releasePrep.test.cjs`（发版准备：版本解析 / CHANGELOG 段落提取 / 版本一致性校验 / Release 说明格式归一），共 176 个用例
 - 新增测试放 `test/*.test.cjs`；webview 侧模块要打桩浏览器全局（`localStorage` / `document` / `window.getSelection` 等）再用 `vm` 加载，写法参考 `test/clipboard.test.cjs`
 - `node --test` 的 glob 模式需要 Node 21+；更早版本改用 `node --test test/` 跑整个目录
 - Manual test path: `npm run watch` → `F5` in VSCode → exercise the feature in the Extension Development Host
@@ -65,8 +71,9 @@ The author's real driver: people around them inspect log files with **记事本 
 - Default branch: `main` (verify with `git symbolic-ref --short refs/remotes/origin/HEAD` or `git config init.defaultBranch`)
 - Branch from `main`; never push to it directly
 - Conventional commits, often in Chinese — see `git log --oneline -20` for the current style
-- Open the PR via `gh pr create` once `npm run lint` and `npm run compile` are green
-- **Cursor rule (always applied):** every new user-facing feature must update `README.md` and `CHANGELOG.md` in the same commit. Unreleased features go under `## [Unreleased]` at the top of `CHANGELOG.md`. One entry per feature per release — do not duplicate.
+- 开 PR 前先跑通 `npm run lint` 与 `npm run compile`；**本机没装 `gh` CLI**（2026-11-18 核实），PR 走 GitHub 网页端，或自行安装 gh 后用 `gh pr create`
+- **文档规则（always applied）:** every new user-facing feature must update `README.md` and `CHANGELOG.md` in the same commit. Unreleased features go under `## [Unreleased]` at the top of `CHANGELOG.md`. One entry per feature per release — do not duplicate.
+  （这三条原先写在 `.cursor/rules/custom-rule.mdc`，该文件已在 `f737072 删除无用文件` 中移除、目录已不存在，规则内容以本节为准）
 
 ### CHANGELOG 风格（v1.3.3 起生效，2026-09-14）
 
@@ -147,7 +154,8 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
   git push origin gh-pages
   git worktree remove <tmp> --force
   ```
-- 主页后续如需自动部署,加 GitHub Action workflow(push main 时同步更新 `gh-pages`);本机 `git credential` 不易导出 PAT,GitHub API 调用(设置 repo homepage 等)需要用户提供 PAT
+- 仓库里已有 GitHub Pages 官方部署工作流 `pages-build-deployment`（从 `gh-pages` 分支部署站点），它**只负责部署 `gh-pages` 上的内容，不含 `main → gh-pages` 的内容同步**；后者仍走上面的 worktree 流程
+- `main → gh-pages` 若要自动化，再加一个 workflow；需要调 GitHub API 时（如设置 repo homepage）要用户提供 PAT —— 设置类操作直接在 GitHub 网页 UI 做更快（2026-11-18 已用此法设置 Actions workflow permissions）；本机靠 Git Credential Manager 推送，但没有 `gh` CLI
 
 ## Release process (every version)
 
@@ -170,14 +178,15 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 - tag 版本与 `package.json` 的 `version` 不一致、或 CHANGELOG 里没有该版本段落 → 流水线直接失败，不会产出空说明的 Release。改完重新打 tag 再推即可
 - 同一个 tag 重复触发会失败（Release 已存在）——先删掉 Release，再用 `workflow_dispatch` 重跑
 - `scripts/release-prep.cjs` 同时被单测覆盖（`test/releasePrep.test.cjs`），其中一条用例会检查**仓库当前版本在 CHANGELOG 里必须有对应段落**，改版本号忘了写 CHANGELOG 会本地就报错
+- **调整发版脚本或 Release 文案格式前，先看线上既有 release 的实际标题与正文**（`https://api.github.com/repos/uwakeme/large_log_check/releases/tags/<tag>`，本机没装 `gh` CLI 就直接读这个 API）：**以线上既有产物为准**，本文件里的格式约定可能已经过时（历史上 AGENTS.md 写的标题 `Open Log Viewer v<x.y.z>` 就与实际的 `v<x.y.z>` 不一致）
 
 ## Architecture (key facts)
 
 - **Three runtime layers:** extension host (Node/TS, strict) → WebView (sandboxed browser) via `vscode.Webview.postMessage`
-- **Per-file panel singleton** in `src/logViewerPanel.ts:8` (`_panels: Map<filePath, LogViewerPanel>`) — opening the same file reveals the existing panel
+- **Per-file panel singleton** in `src/logViewerPanel.ts:13` (`_panels: Map<string, LogViewerPanel>`) — opening the same file reveals the existing panel
 - **State location matters:** bookmarks, comments, highlight rules, paged view → WebView (`media/webview.js`); total-line counts, file reads, destructive ops (time/line delete) → extension host (`src/logProcessor.ts`)
-- **Message protocol** lives in the `onDidReceiveMessage` switch in `src/logViewerPanel.ts:84` — that is the canonical list of what the WebView can ask the host to do; add a new case there when a feature needs host-side work
-- **Log parsing is regex-based, not parser-based.** Time-format detection iterates over `timePatterns` and level detection over `logLevelPatterns` in `src/logProcessor.ts:35`
+- **Message protocol** lives in the `onDidReceiveMessage` switch in `src/logViewerPanel.ts:222` — that is the canonical list of what the WebView can ask the host to do; add a new case there when a feature needs host-side work
+- **Log parsing is regex-based, not parser-based.** Time-format detection iterates over 5 patterns (`LogParser.timePatterns` in `src/logParser.ts:175`); level detection uses three module-level lazily-built regexes (`getQuickMatchRegex` / `getBracketMatchRegex` / `getBareMatchRegex`), rebuilt by `setLevelAliases` when the user changes `big-log-viewer.level.aliases` — there is **no `logLevelPatterns` constant** any more
 
 ## Security
 

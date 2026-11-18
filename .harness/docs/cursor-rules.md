@@ -1,6 +1,6 @@
-# Cursor Rules (Always Applied)
+# Project Rules (Always Applied)
 
-From `.cursor/rules/custom-rule.mdc`. These are project-wide, always-on rules — they apply to every code change, not just Cursor sessions.
+From `AGENTS.md` → "PR & commit conventions" (the original `.cursor/rules/custom-rule.mdc` was removed in commit `f737072`; the rules now live there). These are project-wide, always-on rules — they apply to every code change, not just Cursor sessions.
 
 ## Rule 1 — Update `README.md` and `CHANGELOG.md` immediately
 
@@ -16,6 +16,12 @@ When you add or modify a user-facing feature, update both files **in the same co
 ## Rule 3 — One entry per feature per version
 
 Do NOT list the same feature in multiple bullets under the same version. If a feature is delivered together with related sub-changes, write ONE bullet that names the feature and lists the sub-changes inline.
+
+## Rule 4 — The GitHub Release is produced by CI, not by hand
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which verifies the tag version against `package.json`, packages the `.vsix`, and creates the Release (title = tag, notes = that version's CHANGELOG section, `.vsix` attached). Do not create releases manually and do not edit release copy in the workflow without checking the existing published releases first (`https://api.github.com/repos/uwakeme/large_log_check/releases/tags/<tag>`).
+
+`npm run publish` (Marketplace) stays a manual, user-approved step — never run it from an agent or a script.
 
 ## How to verify
 
