@@ -147,7 +147,7 @@ CHANGELOG 是**给用户看的**，不是开发人员自己看的：
 - **版本号自动同步(2026-10-27 起)**:`docs/index.html` 三处版本号(页顶徽章 / eyebrow / 页脚)带 `js-ver` class,页面加载时向 GitHub API 取 `releases/latest` 的 tag 动态填充;**发版只需发布 GitHub Release,主页版本号无需重新部署**。写死的版本号是拉取失败时的兜底,手改主页时记得同步更新兜底值
 - **Save 按钮灰 = 当前设置已是已保存状态**,不是出错;改任意下拉(Source / Branch / 目录)才会激活 Save
 - **Custom domain 不要填 `hexo.blog.uwakeme.tech`**(本机 DNS 没配 A/CNAME,填了站点能 "live" 但访问 404);留空用默认 GitHub 子域
-- **当前自定义域名是 `www.uwakeme.top`**(`uwakeme.github.io/large_log_check/` 会 301 到它),DNS 已配好。改 Pages 设置时**只动 Source 下拉,别碰 Custom domain 输入框** —— 换分支或换目录都不会影响自定义域名
+- **仓库 Pages 站点本体是 `uwakeme.github.io/large_log_check/`**;`www.uwakeme.top/large_log_check/` 是自己服务器上的反代/跳转,**Pages 的 Custom domain 字段是空的**。改 Pages 设置时**只动 Source 下拉,别碰 Custom domain 输入框** —— 换分支或换目录都不影响那两个访问地址
 - **unpublish 后无法用 Save 重新启用** —— 改下拉也未必生效。最稳的方法:推空 commit 到 `main`,Pages 会重新构建 `docs/` 并恢复部署:
   ```bash
   git commit --allow-empty -m "chore: trigger GitHub Pages redeploy after unpublish"
