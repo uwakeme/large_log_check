@@ -1156,6 +1156,30 @@ select option {
     background-color: #7c3aed;
 }
 
+/* 树首行的「收起」「复制 JSON」按钮:同款醒目胶囊,收起/展开/复制的操作目标都在这一排 */
+.json-collapse-btn, .json-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 8px;
+    padding: 1px 8px;
+    font-size: 10px;
+    background-color: #8b5cf6;
+    color: white;
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+    vertical-align: middle;
+}
+
+.json-collapse-btn:hover, .json-copy-btn:hover {
+    background-color: #7c3aed;
+}
+
+.json-copy-btn .codicon {
+    font-size: 12px;
+}
+
 /* 行内JSON样式 */
 .json-inline {
     display: inline;

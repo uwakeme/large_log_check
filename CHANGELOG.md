@@ -6,7 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.5.4] - 2026-11-20
 ### Added
+- **JSON 解析树支持一键复制** — 解析树首行括号旁新增醒目的「复制 JSON」按钮，点击即可把该块 JSON 数据以格式化形式复制到剪贴板，不用再手动框选长串文本；展开后旁边有「收起」按钮，收起/展开/复制的操作目标在同一排，不用再找小箭头；一行里有多个 JSON 块时各块独立复制
 - **每个版本都能直接从 GitHub Release 下载 `.vsix` 安装** — Release 页面会附带打包好的安装包，不用再自己拉源码打包；下载后在扩展面板右上角「⋯ → 从 VSIX 安装」里选它即可
 
 ## [1.5.3] - 2026-11-18

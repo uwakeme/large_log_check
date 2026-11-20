@@ -1760,7 +1760,21 @@ const lineNumber = document.createElement('span');
     // 如果解析出JSON/XML结构，添加到下方
     if (parsedStructure) {
         const structDiv = document.createElement('div');
-        structDiv.innerHTML = parsedStructure;
+        structDiv.innerHTML = parsedStructure.html;
+        // 树根的「复制 JSON」按钮:点击把对应的格式化 JSON 写入剪贴板。
+        // copyTexts 与 DOM 里的 .json-tree 顺序一一对应(单块 JSON 一条,混合内容多块各配各的)
+        if (parsedStructure.copyTexts) {
+            structDiv.querySelectorAll('.json-tree').forEach((treeEl, i) => {
+                const btn = treeEl.querySelector('.json-copy-btn');
+                const copyText = parsedStructure.copyTexts[i];
+                if (!btn || typeof copyText !== 'string') { return; }
+                btn.onclick = (e) => {
+                    e.stopPropagation(); // 不冒泡给整行交互
+                    copyToClipboard(copyText);
+                };
+                btn.ondblclick = (e) => e.stopPropagation(); // 连点复制按钮不触发双击加书签
+            });
+        }
         lineDiv.appendChild(structDiv);
     }
 
@@ -5918,10 +5932,13 @@ function extractAllJSON(content) {
 }
 
 // 渲染混合内容
+// 返回 { html, copyTexts }:copyTexts 与渲染出的 .json-tree 顺序一一对应,
+// 每个树根的「复制 JSON」按钮各复制自己那一块
 function renderMixedContent(content, jsonObjects) {
     // 只渲染JSON部分，其他部分返回null让原来的渲染逻辑处理
     // 这样可以保持日志前缀的高亮样式
     let html = '';
+    const copyTexts = [];
     let lastIndex = 0;
 
     jsonObjects.forEach((item, index) => {
@@ -5939,6 +5956,7 @@ function renderMixedContent(content, jsonObjects) {
             html += '<span class="json-inline">';
             html += renderJSONTree(parsed);
             html += '</span>';
+            copyTexts.push(JSON.stringify(parsed, null, 2));
         } catch (e) {
             html += `<span class="json-error">${escapeHtml(item.json)}</span>`;
         }
@@ -5954,7 +5972,7 @@ function renderMixedContent(content, jsonObjects) {
         }
     }
 
-    return html;
+    return { html: html, copyTexts: copyTexts };
 }
 
 function detectAndParseStructuredData(content) {
@@ -5972,7 +5990,9 @@ function detectAndParseStructuredData(content) {
         if (xmlMatch) {
             try {
                 const xmlStr = xmlMatch[0];
-                return renderXMLTree(xmlStr);
+                const xmlHtml = renderXMLTree(xmlStr);
+                // XML 树没有复制按钮,copyTexts 置 null
+                return xmlHtml ? { html: xmlHtml, copyTexts: null } : null;
             } catch (e) {
                 // 不是有效的XML
             }
@@ -5986,8 +6006,7 @@ function detectAndParseStructuredData(content) {
         try {
             const parsed = JSON.parse(item.json);
             if (shouldRenderJSON(parsed)) {
-                console.log('解析单个JSON，属性数:', Object.keys(parsed).length || parsed.length);
-                return renderJSONTree(parsed);
+                return { html: renderJSONTree(parsed), copyTexts: [JSON.stringify(parsed, null, 2)] };
             }
         } catch (e) {
             console.warn('JSON解析失败:', e.message);
@@ -6050,6 +6069,12 @@ function extractJSON(str, openChar, closeChar) {
     return null; // 没有找到匹配的括号
 }
 
+// JSON/XML 解析树折叠控件的提示文案。控件自己不挂 title 的话,悬停会透出行容器的
+// 长行折叠提示(「点击展开完整内容」)—— 既说错了对象(那是整行的折叠),树展开后文案也不会变
+function treeToggleTitle(kind, collapsed) {
+    return collapsed ? `点击展开此 ${kind}` : `点击折叠此 ${kind}`;
+}
+
 function renderJSONTree(obj, depth = 0, parentCollapsed = false) {
     const id = 'json_' + Math.random().toString(36).substr(2, 9);
 
@@ -6100,13 +6125,20 @@ function renderJSONTree(obj, depth = 0, parentCollapsed = false) {
     if (isRootLevel) {
         // 根层级：添加完整的折叠控件
         html += '<div class="json-tree">';
-        html += `<span class="json-tree-toggle" onclick="event.stopPropagation(); toggleJSONNode('${id}')">${defaultCollapsed ? '\u25b6' : '\u25bc'}</span>`;
+        html += `<span class="json-tree-toggle" title="${treeToggleTitle('JSON', defaultCollapsed)}" onclick="event.stopPropagation(); toggleJSONNode('${id}')">${defaultCollapsed ? '\u25b6' : '\u25bc'}</span>`;
 
-        // 折叠按钮（折叠时显示）
-        html += `<span class="json-expand-btn" onclick="event.stopPropagation(); toggleJSONNode('${id}')" id="${id}_btn" style="display:${defaultCollapsed ? 'inline-block' : 'none'};cursor:pointer;">${isArray ? '[' : '{'} ${len} items, ~${estimatedLines} lines ${isArray ? ']' : '}'}</span>`;
+        // 折叠按钮（折叠时显示;只在折叠态可见,标题恒为「展开」）
+        html += `<span class="json-expand-btn" title="${treeToggleTitle('JSON', true)}" onclick="event.stopPropagation(); toggleJSONNode('${id}')" id="${id}_btn" style="display:${defaultCollapsed ? 'inline-block' : 'none'};cursor:pointer;">${isArray ? '[' : '{'} ${len} items, ~${estimatedLines} lines ${isArray ? ']' : '}'}</span>`;
 
         // 开始括号（展开时显示）
         html += `<span id="${id}_open" style="display:${defaultCollapsed ? 'none' : 'inline'}">${isArray ? '[' : '{'}</span>`;
+
+        // 「收起」按钮(展开时显示):收起/展开的操作目标统一成这一排胶囊,不用再瞄小箭头
+        html += `<span class="json-collapse-btn" id="${id}_collapse" title="${treeToggleTitle('JSON', false)}" onclick="event.stopPropagation(); toggleJSONNode('${id}')" ondblclick="event.stopPropagation()" style="display:${defaultCollapsed ? 'none' : 'inline-flex'}">收起</span>`;
+
+        // 「复制 JSON」按钮:挂在树首行括号旁(展开时跟在 { 后、折叠时跟在条数徽章后),
+        // 不带 onclick,renderLine 渲染时按块绑定复制文本
+        html += `<span class="json-copy-btn" title="复制该 JSON 数据（格式化）"><i class="codicon codicon-copy"></i>复制 JSON</span>`;
     } else {
         // 嵌套层级：不添加任何折叠控件，直接显示
         html += `<span>${isArray ? '[' : '{'}</span>`;
@@ -6229,7 +6261,7 @@ function renderXMLNode(node, depth = 0) {
     let html = '<div class="xml-tree">';
 
     if (hasChildren) {
-        html += `<span class="xml-tree-toggle" onclick="event.stopPropagation(); toggleXMLNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
+        html += `<span class="xml-tree-toggle" title="${treeToggleTitle('XML 节点', defaultCollapsed)}" onclick="event.stopPropagation(); toggleXMLNode('${id}')">${defaultCollapsed ? '▶' : '▼'}</span>`;
     } else {
         html += '<span style="display:inline-block;width:14px;"></span>';
     }
@@ -6283,6 +6315,7 @@ function toggleJSONNode(id) {
     }
 
     const btn = document.getElementById(id + '_btn');
+    const collapseBtn = document.getElementById(id + '_collapse');
     const openBracket = document.getElementById(id + '_open');
     const closeBracket = document.getElementById(id + '_close');
     const toggle = container.querySelector('.json-tree-toggle');
@@ -6290,15 +6323,17 @@ function toggleJSONNode(id) {
     if (contentNode.classList.contains('json-tree-collapsed')) {
         // 展开：隐藏按钮，显示大括号和内容
         contentNode.classList.remove('json-tree-collapsed');
-        if (toggle) toggle.textContent = '▼';
+        if (toggle) { toggle.textContent = '▼'; toggle.title = treeToggleTitle('JSON', false); }
         if (btn) btn.style.display = 'none';
+        if (collapseBtn) collapseBtn.style.display = 'inline-flex';
         if (openBracket) openBracket.style.display = 'inline';
         if (closeBracket) closeBracket.style.display = 'inline';
     } else {
         // 折叠：显示按钮，隐藏大括号和内容
         contentNode.classList.add('json-tree-collapsed');
-        if (toggle) toggle.textContent = '▶';
+        if (toggle) { toggle.textContent = '▶'; toggle.title = treeToggleTitle('JSON', true); }
         if (btn) btn.style.display = 'inline-block';
+        if (collapseBtn) collapseBtn.style.display = 'none';
         if (openBracket) openBracket.style.display = 'none';
         if (closeBracket) closeBracket.style.display = 'none';
     }
@@ -6311,9 +6346,11 @@ function toggleXMLNode(id) {
     if (node.classList.contains('xml-tree-collapsed')) {
         node.classList.remove('xml-tree-collapsed');
         toggle.textContent = '▼';
+        toggle.title = treeToggleTitle('XML 节点', false);
     } else {
         node.classList.add('xml-tree-collapsed');
         toggle.textContent = '▶';
+        toggle.title = treeToggleTitle('XML 节点', true);
     }
 }
 
